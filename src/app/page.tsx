@@ -1,4 +1,7 @@
 import Link from "next/link";
+import TriangleDiagram from "@/components/marketing/TriangleDiagram";
+import CommunitySlideshow from "@/components/marketing/CommunitySlideshow";
+import RecapCarousel from "@/components/marketing/RecapCarousel";
 
 const VENDOR_CATEGORIES = [
   "DJs",
@@ -15,31 +18,22 @@ const VENDOR_CATEGORIES = [
   "Production Agencies",
 ];
 
-const WORKFLOW_STAGES = [
+const ORGANIZER_STEPS = [
+  { title: "Start a brief, or browse around first" },
+  { title: "Request, review, and confirm venue quotes" },
+  { title: "Find a vendor (optional)" },
   {
-    number: "01",
-    title: "Brief",
-    description:
-      "Describe your event once — type, date, guest count, and budget range.",
+    title: "Manage your event",
+    detail:
+      "Venue booking, vendor roster, documents, and messages — all from one dashboard.",
   },
-  {
-    number: "02",
-    title: "Book",
-    description:
-      "Browse approved San Francisco venues, request a booking, and confirm with a quote and required documents.",
-  },
-  {
-    number: "03",
-    title: "Staff",
-    description:
-      "Post the roles you still need — DJ, catering, security — and review proposals from vendors.",
-  },
-  {
-    number: "04",
-    title: "Manage",
-    description:
-      "Track your venue booking, vendor roster, documents, and messages from one dashboard.",
-  },
+];
+
+const VENUE_STEPS = [
+  { title: "Submit your space with photos, price estimates, and availability" },
+  { title: "Set requirements & bundle additional services" },
+  { title: "Review and confirm booking requests" },
+  { title: "Manage upcoming bookings" },
 ];
 
 export default function Home() {
@@ -62,9 +56,8 @@ export default function Home() {
             Every venue and every vendor your event needs, in one place.
           </h1>
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
-            Foundry connects event organizers with San Francisco venues and
-            the DJs, caterers, photographers, and crews who bring an event to
-            life — from first brief to confirmed booking.
+            Foundry is made to build community and connect event organizers
+            with venues and the creatives needed to bring an event to life.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -83,28 +76,33 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* Triangle pitch + community slideshow */}
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
-        <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
-          How it works
-        </h2>
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {WORKFLOW_STAGES.map((stage) => (
-            <div
-              key={stage.number}
-              className="rounded-2xl border border-line bg-paper p-6"
-            >
-              <span className="font-display text-sm text-brass-dark">
-                {stage.number}
-              </span>
-              <h3 className="mt-2 font-display text-lg font-semibold text-ink">
-                {stage.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                {stage.description}
-              </p>
+        <div className="grid gap-14 lg:grid-cols-2 lg:items-center">
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+              One platform, three sides of the room.
+            </h2>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
+              Foundry connects the people who have space, the people planning
+              the event, and the people who bring it to life.
+            </p>
+            <div className="mt-10">
+              <TriangleDiagram />
             </div>
-          ))}
+          </div>
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+              Built for community gatherings.
+            </h2>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
+              From recurring meetups to one-night pop-ups — the kind of
+              events Foundry is designed to support.
+            </p>
+            <div className="mt-6">
+              <CommunitySlideshow />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -129,21 +127,20 @@ export default function Home() {
             </p>
           </div>
           <ul className="space-y-3">
-            {[
-              "Create an event brief",
-              "Browse venues and submit booking requests",
-              "Review venue quotes and required documents",
-              "Confirm your venue booking",
-              "Post vendor needs and review proposals",
-            ].map((step, i) => (
+            {ORGANIZER_STEPS.map((step, i) => (
               <li
-                key={step}
-                className="flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
+                key={step.title}
+                className="flex items-start gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-wine/10 text-xs font-semibold text-wine">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-wine/10 text-xs font-semibold text-wine">
                   {i + 1}
                 </span>
-                {step}
+                <div>
+                  <p>{step.title}</p>
+                  {step.detail && (
+                    <p className="mt-1 text-xs text-ink-soft">{step.detail}</p>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -153,21 +150,15 @@ export default function Home() {
       <section id="venues" className="scroll-mt-16">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:px-8">
           <ul className="order-2 space-y-3 lg:order-1">
-            {[
-              "Submit your space with photos and availability",
-              "Set requirements, like a required Certificate of Insurance",
-              "Respond to booking requests with a quote",
-              "Review submitted documents before confirming",
-              "Manage upcoming bookings from your dashboard",
-            ].map((step, i) => (
+            {VENUE_STEPS.map((step, i) => (
               <li
-                key={step}
-                className="flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
+                key={step.title}
+                className="flex items-start gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brass/15 text-xs font-semibold text-brass-dark">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brass/15 text-xs font-semibold text-brass-dark">
                   {i + 1}
                 </span>
-                {step}
+                <p>{step.title}</p>
               </li>
             ))}
           </ul>
@@ -216,6 +207,19 @@ export default function Home() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Event recaps */}
+      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+            Event recaps
+          </h2>
+          <p className="mt-2 max-w-xl text-sm text-ink-soft">
+            A look at Foundry from each side of the marketplace.
+          </p>
+        </div>
+        <RecapCarousel />
       </section>
 
       {/* Final CTA */}

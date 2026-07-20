@@ -60,7 +60,13 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
   while Phase 1 (real database migrations) hasn't landed yet, even if it seems faster to
   jump ahead.
 - Placeholder/marketing copy must not claim things that aren't true yet (no fake reviews,
-  no fake activity counts, no "verified" claims on unreviewed documents).
+  no fake activity counts, no "verified" claims on unreviewed documents). **Scoped
+  exception:** the homepage "Event recaps" carousel
+  (`src/components/marketing/RecapCarousel.tsx`) uses invented names/quotes as
+  explicitly-approved dummy filler until real testimonials exist, using initials-only
+  avatars rather than real photos. Don't extend this pattern elsewhere (e.g. the community
+  slideshow deliberately avoids claiming past events were "hosted on Foundry") without the
+  same explicit approval, and replace this content with real recaps before a real launch.
 
 ## Commands
 
