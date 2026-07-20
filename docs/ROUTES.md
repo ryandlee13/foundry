@@ -12,10 +12,23 @@ placeholders; the guards described here land in the auth-implementation phase
 | `/` | Landing page — value proposition for all three audiences, CTA into sign-up |
 | `/sign-in` | Sign-in placeholder |
 | `/sign-up` | Sign-up placeholder (role selection happens post-signup, not at signup) |
-| `/venues` *(future)* | Public venue directory — approved listings only, no exact address |
-| `/venues/[id]` *(future)* | Public venue detail — approved listings only, no exact address |
+| `/spaces` | Discover Spaces — venue discovery/filtering UI over local dummy data, no backend yet (see below) |
+| `/spaces/[slug]` | Venue detail placeholder — photos, capacity, price, amenities; no booking request yet |
+| `/list-your-venue` | "Coming soon" placeholder for venue-operator onboarding |
+| `/about` | "Coming soon" placeholder |
 | `/vendors` *(future)* | Public vendor directory — approved profiles only |
 | `/vendors/[id]` *(future)* | Public vendor detail — approved profiles only |
+
+### `/spaces` — Discover Spaces
+
+Built ahead of Phase 3's real venue directory as a UI-only prototype: filtering,
+sorting, and the location/radius picker all run client-side against local dummy data in
+`src/lib/spaces/venues.ts` (see `docs/IMPLEMENTATION_PLAN.md`). No table backs this route
+yet and no network calls are made. When Phase 3 lands, `venues`/`venue_photos`/etc. will
+need additional columns (space type, amenities, rules) to back this UI with real data —
+`docs/DATABASE.md` does not yet reflect those fields. Distances and locations use
+neighborhood-level coordinates only, consistent with the `exact_address` rule in
+`docs/SECURITY.md`.
 
 ## Auth-only routes (any authenticated user, regardless of role)
 
