@@ -1,26 +1,22 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@theme {
+  /* Warm, hospitality-inspired palette: ink + ivory paper + brass + wine accents */
+  --color-ink: #211c17;
+  --color-ink-soft: #4a4238;
+  --color-paper: #faf6ee;
+  --color-paper-dim: #f1e9d8;
+  --color-line: #e5dac0;
+  --color-brass: #a97a2c;
+  --color-brass-dark: #8a621f;
+  --color-wine: #5c1a34;
+  --color-wine-soft: #7c2b4a;
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
 }

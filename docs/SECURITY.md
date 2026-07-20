@@ -1,0 +1,117 @@
+# Security Requirements
+
+These rules are mandatory for every phase of this project, not just the MVP. Any change
+that would violate one of these needs an explicit, documented exception — not a silent
+workaround.
+
+## 1. Service-role key isolation
+
+- `SUPABASE_SERVICE_ROLE_KEY` is read only in server-only files (e.g.,
+  `src/lib/supabase/admin.ts`), which import Next.js's `server-only` package so any
+  accidental import from a client component fails the build instead of leaking the key.
+- The key is never referenced in any file under a `"use client"` boundary, never sent in a
+  response body, never logged.
+- It is used only for: admin approval actions, generating short-lived signed URLs for
+  private documents, and server-side cross-row transactions that must bypass RLS
+  intentionally (with the authorization check done explicitly in code first).
+
+## 2. Server-side authorization for protected actions
+
+- Every mutation (create/update/delete) that matters happens through a Server Action or
+  Route Handler that re-derives the current user server-side (`supabase.auth.getUser()`)
+  and checks ownership/role **before** touching the database — never trusting a value
+  passed from the client (e.g., a hidden `ownerId` field in a form).
+- RLS is the backstop that makes this true even if a Server Action has a bug: a query run
+  as the authenticated user cannot return or mutate rows RLS doesn't allow, full stop.
+- Hidden buttons, disabled UI, or client-side route guards are UX only. They are never the
+  sole gate on a sensitive action.
+
+## 3. Row Level Security
+
+- RLS is **enabled on every table listed in `docs/DATABASE.md`** before that table is
+  used by any feature — a table is not shipped "temporarily open."
+- Policies are written per-operation (`select`, `insert`, `update`, `delete`), not a single
+  catch-all `using (true)`.
+- Ownership comparisons use `auth.uid()` against a column on the row directly wherever
+  possible. Where authorization depends on a relationship one hop away (e.g., message
+  thread participancy), a `security definer` helper function encapsulates that check so
+  policies stay auditable.
+- New tables added later follow the same pattern; "add the table first, RLS later" is not
+  an acceptable sequencing.
+
+## 4. Ownership boundaries
+
+- Users may only update records they own, or that they are the authorized counterparty on
+  (e.g., a venue operator may update the `status` of a `booking_request` addressed to
+  their venue, but not its `guest_count`, which the organizer owns).
+- Every table's ownership model is documented per-table in `docs/DATABASE.md` §1–18; that
+  document is the source of truth for "who can touch this row."
+
+## 5. Public listing privacy
+
+- `venues.exact_address` is never included in any query or API response reachable by an
+  anonymous or non-counterparty user. Public venue browsing surfaces `approx_location`
+  (neighborhood-level) only.
+- The exact address is revealed only after a booking reaches a state where it's
+  operationally necessary (post-confirmation), and even then only to the organizer and
+  venue owner on that specific booking — resolved server-side, not shipped in a public API
+  payload with a "just don't render it" client-side omission.
+
+## 6. Private document storage
+
+- Certificates of Insurance, IDs, contracts, permits, security plans, and any other
+  sensitive upload go into a **private** Supabase Storage bucket (`documents`), distinct
+  from the public bucket used for venue/vendor marketing photos.
+- The private bucket has no public access policy at all — every read goes through a
+  server-generated **short-lived signed URL** (minutes, not days), issued only after the
+  requesting user passes the same ownership/counterparty check enforced by the `documents`
+  table's RLS.
+- Signed URLs are never cached long-term, embedded in emails without expiry consideration,
+  or logged.
+
+## 7. Document review language
+
+- The product **never** states or implies a document has been legally verified. Allowed
+  status language: `submitted`, `under review`, `reviewed`. Never: `verified`, `approved`
+  (in a legal/compliance sense), `certified`, `confirmed valid`.
+- This applies to UI copy, status enum values (`docs/DATABASE.md` §11), notification text,
+  and any future admin tooling.
+
+## 8. Input validation
+
+- All server-side entry points (Server Actions, Route Handlers) validate their input with
+  a Zod schema before doing anything else with it — including data that also has a
+  client-side form validator. Client-side Zod validation (via React Hook Form's resolver)
+  is a UX improvement, never a substitute for server-side validation, since a client can
+  always be bypassed.
+- Validation schemas live under `src/lib/validation/` and are shared between the client
+  form and the server action where practical, so the two never silently drift apart.
+
+## 9. Admin approval gate
+
+- `venues` and `vendor_profiles` are only publicly visible when `status = 'approved'`.
+  There is no code path that renders a `pending_review` or `draft` listing on a public
+  page, even briefly, even for "preview."
+- Approval/rejection is an admin-only server-side action, gated by the `admin` role in
+  `profile_roles`, and recorded in `admin_audit_logs`.
+
+## 10. Secrets hygiene
+
+- No secret, real API key, or production credential is ever committed to source control.
+- `.env.example` documents variable **names** only, with placeholder values.
+- Real values live in `.env.local` (git-ignored) locally and in Vercel's environment
+  variable settings in deployed environments.
+- If a secret is ever accidentally committed, the fix is rotation, not just deletion from
+  the latest commit (git history retains it).
+
+## Threat model notes specific to this marketplace
+
+- **Cross-role data leakage**: because one account can hold multiple roles, authorization
+  checks must key off the specific role required for the specific action being performed,
+  never "the user is logged in and has *a* role."
+- **Address scraping**: public venue pages are a plausible scraping target for exact
+  addresses; keeping `exact_address` out of the payload entirely (not just hidden in the
+  UI) is the mitigation, not obfuscation.
+- **Document exposure via URL sharing**: signed URLs are short-lived specifically so a
+  forwarded link (e.g., pasted into an unrelated chat) stops working quickly rather than
+  becoming a permanent leak.
