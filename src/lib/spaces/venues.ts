@@ -1,5 +1,8 @@
 import type { Venue, VenueRules } from "@/lib/types/spaces";
 
+/** All seed venues were "created" at the same fixed moment — they're not real submissions. */
+const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z";
+
 function rules(overrides: Partial<VenueRules>): VenueRules {
   return {
     alcoholAllowed: false,
@@ -20,7 +23,7 @@ function rules(overrides: Partial<VenueRules>): VenueRules {
  * intentionally matches the venue name referenced by the fictional
  * testimonial in RecapCarousel.tsx.
  */
-export const VENUES: Venue[] = [
+const SEED_VENUES: Omit<Venue, "ownerId" | "createdAt">[] = [
   {
     id: "v-neon-foundry",
     slug: "neon-foundry",
@@ -565,6 +568,13 @@ export const VENUES: Venue[] = [
     badge: "new",
   },
 ];
+
+/** Seed venues are "nobody owned" — real ownership starts with user-submitted listings. */
+export const VENUES: Venue[] = SEED_VENUES.map((venue) => ({
+  ...venue,
+  ownerId: null,
+  createdAt: SEED_CREATED_AT,
+}));
 
 export function getVenueBySlug(slug: string): Venue | undefined {
   return VENUES.find((venue) => venue.slug === slug);

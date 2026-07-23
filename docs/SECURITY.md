@@ -94,6 +94,11 @@ workaround.
   page, even briefly, even for "preview."
 - Approval/rejection is an admin-only server-side action, gated by the `admin` role in
   `profile_roles`, and recorded in `admin_audit_logs`.
+- **Scoped, temporary exception:** the browser-local venue-submission prototype
+  (`src/components/spaces/VenueSubmissionForm.tsx`, see `CLAUDE.md` → "Local-prototype
+  layer") publishes immediately with no review step, since there's no real `venues` table
+  or admin action to gate against yet. This does not apply once the real database and
+  admin flow exist — this rule is still non-negotiable for the real product.
 
 ## 10. Secrets hygiene
 

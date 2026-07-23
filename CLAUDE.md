@@ -36,7 +36,12 @@ choice:
 7. Never describe an uploaded document as "verified" or "approved" in a legal sense. Use
    `submitted` / `under review` / `reviewed`.
 8. Venue listings and vendor profiles are public only when `status = 'approved'`, set only
-   by an admin action.
+   by an admin action. **Scoped exception:** venues submitted through
+   `/list-your-venue` (see `src/components/spaces/VenueSubmissionForm.tsx`) publish to
+   Discover Spaces immediately with no admin review, at explicit user direction, since
+   there's no real backend yet to review against (see "Local-prototype layer" below). This
+   must gain a real approval step before any real launch — don't extend the "skip review"
+   pattern to anything else without the same explicit approval.
 9. No secrets or real credentials in source-controlled files. `.env.example` holds names
    and placeholders only.
 
@@ -67,6 +72,29 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
   avatars rather than real photos. Don't extend this pattern elsewhere (e.g. the community
   slideshow deliberately avoids claiming past events were "hosted on Foundry") without the
   same explicit approval, and replace this content with real recaps before a real launch.
+
+## Local-prototype layer (auth, venue listings, bookings)
+
+A browser-local prototype of accounts, venue submission, and booking now exists ahead of
+the real Phase 1 (database) and Phase 2 (auth) work in `docs/IMPLEMENTATION_PLAN.md` — a
+deliberate, explicit exception to "don't build later phases before Phase 1," made because
+no Supabase project is connected in this environment and the user wanted the UX validated
+now rather than waiting.
+
+- `src/lib/auth/storage.ts` — "accounts" and the current session live in `localStorage`.
+  No password is ever persisted or checked against anything; there is no real security
+  boundary. Read the file header before touching it.
+- `src/lib/spaces/submittedVenues.ts` — venue listings submitted via `/list-your-venue`
+  live in `localStorage`, merged with the seed `VENUES` array at render time. They exist
+  only in the browser that created them.
+- `src/lib/spaces/bookings.ts` — bookings are instantly confirmed (no quote/negotiation
+  step), also `localStorage`-only.
+- None of this is real. Before a real launch, all three need: a real Supabase project,
+  the `docs/DATABASE.md` schema (extended with space type/amenities/rules columns —
+  see `docs/ROUTES.md`), RLS policies per `docs/SECURITY.md`, real Supabase Auth, and
+  Server Actions that re-validate everything server-side per rule #3 above. Do not treat
+  this layer as a starting point to "harden" incrementally — it's a UX prototype to be
+  replaced, not extended toward production.
 
 ## Commands
 

@@ -33,6 +33,8 @@ function makeVenue(overrides: Partial<VenueWithDistance>): VenueWithDistance {
       securityDepositRequired: false,
     },
     availabilityExamples: [],
+    ownerId: null,
+    createdAt: "2024-01-01T00:00:00.000Z",
     distanceMiles: 1,
     ...overrides,
   };

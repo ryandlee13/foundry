@@ -41,24 +41,24 @@ export default function CommunitySlideshow() {
   const current = COMMUNITY_EVENTS[index];
 
   return (
-    <div className="rounded-2xl border border-line bg-paper p-2">
+    <div className="rounded-3xl border border-line bg-paper p-2">
       <div
-        className="relative flex h-72 flex-col justify-end overflow-hidden rounded-xl p-6 text-paper sm:h-80"
+        className="relative flex h-[360px] flex-col justify-end overflow-hidden rounded-2xl p-8 text-paper sm:h-[460px] sm:p-12"
         style={{
           background:
             "linear-gradient(160deg, color-mix(in srgb, var(--color-wine) 80%, black), color-mix(in srgb, var(--color-brass) 55%, var(--color-wine)))",
         }}
       >
-        <span className="text-4xl" aria-hidden>
+        <span className="text-6xl sm:text-7xl" aria-hidden>
           {current.icon}
         </span>
-        <h3 className="mt-3 font-display text-2xl font-semibold">
+        <h3 className="mt-4 font-display text-3xl font-semibold sm:text-4xl">
           {current.label}
         </h3>
-        <p className="mt-1 max-w-xs text-sm text-paper/80">{current.blurb}</p>
+        <p className="mt-2 max-w-sm text-base text-paper/80">{current.blurb}</p>
       </div>
 
-      <div className="flex items-center justify-center gap-1.5 py-3">
+      <div className="flex items-center justify-center gap-1.5 py-4">
         {COMMUNITY_EVENTS.map((event, i) => (
           <button
             key={event.label}
@@ -66,7 +66,7 @@ export default function CommunitySlideshow() {
             aria-label={`Show ${event.label}`}
             onClick={() => setIndex(i)}
             className={`h-1.5 rounded-full transition-all ${
-              i === index ? "w-6 bg-wine" : "w-1.5 bg-line"
+              i === index ? "w-8 bg-wine" : "w-1.5 bg-line"
             }`}
           />
         ))}

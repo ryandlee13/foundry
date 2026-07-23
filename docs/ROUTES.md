@@ -10,14 +10,14 @@ placeholders; the guards described here land in the auth-implementation phase
 | Route | Purpose |
 |---|---|
 | `/` | Landing page — value proposition for all three audiences, CTA into sign-up |
-| `/sign-in` | Sign-in placeholder |
-| `/sign-up` | Sign-up placeholder (role selection happens post-signup, not at signup) |
-| `/spaces` | Discover Spaces — venue discovery/filtering UI over local dummy data, no backend yet (see below) |
-| `/spaces/[slug]` | Venue detail placeholder — photos, capacity, price, amenities; no booking request yet |
-| `/list-your-venue` | "Coming soon" placeholder for venue-operator onboarding |
+| `/sign-in` | Functional against the local-prototype auth layer (see `CLAUDE.md`) — not real Supabase Auth |
+| `/sign-up` | Same prototype layer; role picked at signup, more can be added to the account later |
+| `/spaces` | Discover Spaces — venue discovery/filtering UI over local + submitted venues, no backend yet (see below) |
+| `/spaces/[slug]` | Venue detail — booking is functional against the local-prototype `bookings` store (instant confirm, no quote step) |
+| `/list-your-venue` | Real (prototype) venue submission form — gated on being signed in, publishes immediately with no admin review (scoped exception, see `docs/SECURITY.md` #9) |
 | `/about` | "Coming soon" placeholder |
-| `/vendors` *(future)* | Public vendor directory — approved profiles only |
-| `/vendors/[id]` *(future)* | Public vendor detail — approved profiles only |
+| `/vendors` | "Coming soon" placeholder for the vendor marketplace (nav: "For Vendors") |
+| `/vendors/[id]` *(future)* | Public vendor detail — approved profiles only, once the real directory lands here |
 
 ### `/spaces` — Discover Spaces
 
@@ -34,9 +34,17 @@ neighborhood-level coordinates only, consistent with the `exact_address` rule in
 
 | Route | Purpose |
 |---|---|
-| `/dashboard` | Role-aware entry point. Server-side reads the user's `profile_roles` and either shows a combined view or redirects to the single-role dashboard. If the user has no roles yet, prompts role selection (future phase). |
+| `/dashboard` | Entry point. Currently shows all four role sections with the user's actual roles marked, rather than redirecting to a single one. |
 
-## Role-gated routes
+**Current state vs. target:** `src/app/(dashboard)/dashboard/layout.tsx` today performs a
+**client-side** check against the local-prototype auth context and redirects to
+`/sign-in` if signed out. Per `docs/SECURITY.md` rule #3, a client-side guard is UX only —
+this is explicitly a temporary stand-in, not the real gate, because there's no server
+session to check yet (no Supabase Auth). The target design below (server-side session +
+per-route role check) is still what Phase 2 should build; this prototype does not
+implement per-role gating on the sub-routes at all yet.
+
+## Role-gated routes (target design — not yet enforced this way)
 
 All routes under `/dashboard/*` share the protected dashboard layout
 (`src/app/(dashboard)/layout.tsx`), which performs a **server-side** session check before

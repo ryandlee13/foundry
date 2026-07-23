@@ -61,10 +61,10 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
-              href="/sign-up"
+              href="/spaces"
               className="rounded-full bg-wine px-6 py-3 text-center text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
             >
-              Start an event brief
+              Find your venue
             </Link>
             <Link
               href="/sign-up"
@@ -76,32 +76,30 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Triangle pitch + community slideshow */}
+      {/* Community gallery */}
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="grid gap-14 lg:grid-cols-2 lg:items-center">
-          <div>
+        <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+          Built for community gatherings.
+        </h2>
+        <div className="mt-8">
+          <CommunitySlideshow />
+        </div>
+      </section>
+
+      {/* Triangle pitch */}
+      <section className="border-t border-line">
+        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
+          <div className="text-center">
             <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
               One platform, three sides of the room.
             </h2>
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
+            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-soft">
               Foundry connects the people who have space, the people planning
               the event, and the people who bring it to life.
             </p>
-            <div className="mt-10">
-              <TriangleDiagram />
-            </div>
           </div>
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
-              Built for community gatherings.
-            </h2>
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
-              From recurring meetups to one-night pop-ups — the kind of
-              events Foundry is designed to support.
-            </p>
-            <div className="mt-6">
-              <CommunitySlideshow />
-            </div>
+          <div className="mt-12">
+            <TriangleDiagram />
           </div>
         </div>
       </section>
@@ -126,42 +124,34 @@ export default function Home() {
               review proposals side by side.
             </p>
           </div>
-          <ul className="space-y-3">
+          <ol className="relative space-y-7 border-l border-line pl-8">
             {ORGANIZER_STEPS.map((step, i) => (
-              <li
-                key={step.title}
-                className="flex items-start gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
-              >
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-wine/10 text-xs font-semibold text-wine">
+              <li key={step.title} className="relative">
+                <span className="absolute -left-12 top-0 flex h-8 w-8 items-center justify-center rounded-full bg-paper font-display text-sm font-semibold text-wine ring-1 ring-line">
                   {i + 1}
                 </span>
-                <div>
-                  <p>{step.title}</p>
-                  {step.detail && (
-                    <p className="mt-1 text-xs text-ink-soft">{step.detail}</p>
-                  )}
-                </div>
+                <p className="text-sm font-medium text-ink">{step.title}</p>
+                {step.detail && (
+                  <p className="mt-1 text-xs text-ink-soft">{step.detail}</p>
+                )}
               </li>
             ))}
-          </ul>
+          </ol>
         </div>
       </section>
 
       <section id="venues" className="scroll-mt-16">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:px-8">
-          <ul className="order-2 space-y-3 lg:order-1">
+          <ol className="relative order-2 space-y-7 border-l border-line pl-8 lg:order-1">
             {VENUE_STEPS.map((step, i) => (
-              <li
-                key={step.title}
-                className="flex items-start gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
-              >
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brass/15 text-xs font-semibold text-brass-dark">
+              <li key={step.title} className="relative">
+                <span className="absolute -left-12 top-0 flex h-8 w-8 items-center justify-center rounded-full bg-paper font-display text-sm font-semibold text-brass-dark ring-1 ring-line">
                   {i + 1}
                 </span>
-                <p>{step.title}</p>
+                <p className="text-sm font-medium text-ink">{step.title}</p>
               </li>
             ))}
-          </ul>
+          </ol>
           <div className="order-1 lg:order-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-brass-dark">
               For venue operators

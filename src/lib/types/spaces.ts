@@ -87,6 +87,24 @@ export interface Venue {
   rules: VenueRules;
   availabilityExamples: string[];
   badge?: VenueBadge;
+  /** Account id of the venue operator who submitted this listing, or null for the seed venues ("nobody owned"). */
+  ownerId: string | null;
+  createdAt: string;
+}
+
+export interface Booking {
+  id: string;
+  venueId: string;
+  venueName: string;
+  venueSlug: string;
+  organizerId: string;
+  organizerName: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+  attendees: number;
+  status: "confirmed";
+  createdAt: string;
 }
 
 /** A venue enriched with its computed distance from the active search center. */

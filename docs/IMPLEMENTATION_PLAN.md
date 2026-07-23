@@ -17,6 +17,19 @@ previous one is working end-to-end. Payments (Stripe) are intentionally not sche
 
 **Exit criteria:** app runs locally, builds cleanly, no real data or auth yet.
 
+## Phase 0.5 — Local-prototype detour (out of sequence, explicit exception)
+
+Before Phase 1 landed, a browser-local (localStorage-backed) prototype of accounts, venue
+submission, and instant booking was built at explicit user direction — to validate the
+Discover Spaces → list a venue → book a venue loop end-to-end before investing in a real
+Supabase project. See `CLAUDE.md` → "Local-prototype layer" for what exists
+(`src/lib/auth/`, `src/lib/spaces/submittedVenues.ts`, `src/lib/spaces/bookings.ts`) and
+its limits: no real security, no admin approval step, nothing synced across devices.
+
+This is **not** a substitute for Phases 1–4 below — it's scaffolding to be replaced, not
+hardened in place. When Phase 1 starts, this prototype layer should be removed and rebuilt
+properly against real tables, RLS, and Supabase Auth, not incrementally migrated.
+
 ## Phase 1 — Database migration + RLS
 
 - Create a Supabase project (or connect to an existing one)

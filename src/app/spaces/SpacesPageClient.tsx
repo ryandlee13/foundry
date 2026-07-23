@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSpacesFilters } from "@/hooks/useSpacesFilters";
 import { applyFilters, countActiveFilters } from "@/lib/spaces/filters";
 import { sortVenues } from "@/lib/spaces/sort";
-import { RADIUS_OPTIONS_MILES } from "@/lib/types/spaces";
+import { RADIUS_OPTIONS_MILES, type Venue } from "@/lib/types/spaces";
 import { VENUES } from "@/lib/spaces/venues";
+import { getAllVenues } from "@/lib/spaces/submittedVenues";
 import LocationSearch from "@/components/spaces/LocationSearch";
 import LocationMapModal from "@/components/spaces/LocationMapModal";
 import ResultsToolbar from "@/components/spaces/ResultsToolbar";
@@ -19,17 +20,26 @@ export default function SpacesPageClient() {
   const { filters, updateFilters, setLocation, clearAll } = useSpacesFilters();
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  // Starts as just the seed venues (matches server-rendered output) so
+  // there's no hydration mismatch; picks up locally-submitted listings
+  // right after mount, same pattern as AuthProvider's session load.
+  const [allVenues, setAllVenues] = useState<Venue[]>(VENUES);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAllVenues(getAllVenues());
+  }, []);
 
   const results = useMemo(() => {
-    const filtered = applyFilters(VENUES, filters);
+    const filtered = applyFilters(allVenues, filters);
     return sortVenues(filtered, filters.sort);
-  }, [filters]);
+  }, [allVenues, filters]);
 
   const activeFilterCount = countActiveFilters(filters);
   const maxRadius = RADIUS_OPTIONS_MILES[RADIUS_OPTIONS_MILES.length - 1];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 lg:px-10 xl:px-16">
       {/* Header */}
       <div className="max-w-2xl">
         <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">

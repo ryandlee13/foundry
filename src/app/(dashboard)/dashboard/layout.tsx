@@ -1,9 +1,10 @@
-import Link from "next/link";
+"use client";
 
-// NOTE: This layout does not yet perform a server-side session check.
-// Phase 2 in docs/IMPLEMENTATION_PLAN.md adds `supabase.auth.getUser()` here
-// (and a role check on each sub-route) before this route group is reachable
-// with unauthenticated or unauthorized requests. See docs/SECURITY.md #2–3.
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuth } from "@/components/providers/AuthProvider";
+import LoadingState from "@/components/ui/LoadingState";
 
 const DASHBOARD_NAV = [
   { href: "/dashboard", label: "Overview" },
@@ -18,6 +19,24 @@ export default function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push(`/sign-in?next=${encodeURIComponent(pathname)}`);
+    }
+  }, [isLoading, user, router, pathname]);
+
+  if (isLoading || !user) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <LoadingState label="Checking your account…" />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6 lg:flex-row lg:px-8">
       <aside className="lg:w-56 lg:shrink-0">

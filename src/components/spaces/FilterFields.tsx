@@ -1,16 +1,15 @@
 "use client";
 
-import { AMENITY_LABELS, EVENT_TYPE_LABELS, RULE_LABELS, SPACE_TYPE_LABELS } from "@/lib/spaces/labels";
+import { AMENITY_LABELS, RULE_LABELS, SPACE_TYPE_LABELS } from "@/lib/spaces/labels";
 import PriceRangeSlider from "./PriceRangeSlider";
+import DescribeEventField from "./DescribeEventField";
 import type {
   AmenityKey,
-  EventType,
   SearchFilters,
   SpaceType,
   VenueRules,
 } from "@/lib/types/spaces";
 
-const EVENT_TYPE_OPTIONS = Object.entries(EVENT_TYPE_LABELS) as [EventType, string][];
 const SPACE_TYPE_OPTIONS = Object.entries(SPACE_TYPE_LABELS) as [SpaceType, string][];
 const AMENITY_OPTIONS = Object.entries(AMENITY_LABELS) as [AmenityKey, string][];
 const RULE_OPTIONS = Object.entries(RULE_LABELS) as [keyof VenueRules, string][];
@@ -79,6 +78,13 @@ export default function FilterFields({
 
   return (
     <div>
+      <FilterSection title="Describe the event">
+        <DescribeEventField
+          selected={filters.eventTypes}
+          onChange={(next) => onChange({ eventTypes: next })}
+        />
+      </FilterSection>
+
       <FilterSection title="Event details">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
@@ -135,13 +141,6 @@ export default function FilterFields({
             />
           </div>
         </div>
-
-        <p className="mt-4 mb-2 text-xs font-medium text-ink-soft">Event type</p>
-        <CheckboxGrid
-          options={EVENT_TYPE_OPTIONS}
-          selected={filters.eventTypes}
-          onToggle={(value) => toggleInArray("eventTypes", filters.eventTypes, value)}
-        />
       </FilterSection>
 
       <FilterSection title="Pricing">
@@ -183,7 +182,7 @@ export default function FilterFields({
         />
       </FilterSection>
 
-      <FilterSection title="Amenities">
+      <FilterSection title="Amenities Included">
         <CheckboxGrid
           options={AMENITY_OPTIONS}
           selected={filters.amenities}
