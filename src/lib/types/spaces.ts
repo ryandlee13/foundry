@@ -90,7 +90,19 @@ export interface Venue {
   /** Account id of the venue operator who submitted this listing, or null for the seed venues ("nobody owned"). */
   ownerId: string | null;
   createdAt: string;
+  /**
+   * Collected at submission but never rendered on any public page or card —
+   * see docs/SECURITY.md #5. Only the derived `neighborhood` above is shown
+   * publicly.
+   */
+  exactAddress: string;
+  /** Real uploaded photo data URLs (compressed client-side). Undefined for seed venues, which use the gradient placeholder instead. Minimum 7 enforced at submission. */
+  photos?: string[];
+  /** File names only — video bytes aren't persisted in this prototype (see VenueSubmissionForm.tsx). */
+  videoNames?: string[];
 }
+
+export type BookingStatus = "pending" | "confirmed" | "declined";
 
 export interface Booking {
   id: string;
@@ -103,7 +115,11 @@ export interface Booking {
   startTime: string;
   endTime: string;
   attendees: number;
-  status: "confirmed";
+  status: BookingStatus;
+  /** Whether the organizer agreed to provide a COI, if the venue requires one. */
+  coiAgreed: boolean;
+  /** Whether the organizer agreed to the security deposit, if the venue requires one. */
+  depositAgreed: boolean;
   createdAt: string;
 }
 

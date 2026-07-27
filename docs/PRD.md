@@ -67,18 +67,40 @@ A user can be, e.g., both an Organizer and a Vendor on the same account.
 7. Manage upcoming bookings from a venue dashboard.
 
 ### 4.3 Vendor journey
-1. Submit a vendor profile (service category, service area, portfolio, base pricing).
-2. Wait for admin approval before the profile is public / eligible to see event needs.
-3. Browse posted event needs that match their service category.
-4. Submit a structured proposal (price, description, availability confirmation).
-5. Get accepted or declined by the organizer.
-6. Manage upcoming gigs from a vendor dashboard.
+
+> Built as a `localStorage` UI+logic prototype ahead of Phase 5 — see `CLAUDE.md` →
+> "Vendor marketplace (local-prototype layer)". Steps below reflect what's actually
+> implemented, not just planned.
+
+1. Add the vendor role to an existing account, or pick it at signup.
+2. Complete a profile: skills, per-skill services/pricing, portfolio links, service
+   location/radius/remote preference, notification preferences.
+3. Submit the profile for admin review; wait for approval before it's public or eligible
+   to see event needs.
+4. Browse Discover Gigs — event needs matching skill + location radius/selected cities/
+   remote preference, with a transparent (non-AI, rule-based) explanation of why each one
+   matched.
+5. Submit a structured proposal: price, pricing model, message, deliverables, equipment,
+   relevant portfolio links, availability confirmation, expiration (1/5/7 days).
+6. See an anonymized competitive-bid summary (lowest/highest/median active bid, pricing
+   models represented) after submitting — never another vendor's identity or full
+   proposal.
+7. Edit or withdraw an active proposal; renew one that expired before it was accepted.
+8. Get shortlisted, accepted, or declined by the organizer; an accepted proposal creates a
+   confirmed engagement and unlocks messaging with the organizer.
+9. Manage confirmed gigs from a vendor dashboard; the organizer marks the engagement
+   complete once the event has happened.
+10. Receive a review from the organizer; optionally post one public response.
+11. Choose whether each completed Foundry engagement shows on the public profile as event
+    history.
 
 ### 4.4 Admin journey
 1. Review pending venue listings and vendor profiles.
 2. Approve or reject with a reason.
-3. Review flagged content or documents.
-4. Audit platform activity via `admin_audit_logs`.
+3. Review flagged content (including vendor reviews flagged by the reviewed vendor) or
+   documents.
+4. Moderate published event needs (e.g. cancel one that violates policy).
+5. Audit platform activity via `admin_audit_logs`.
 
 ## 5. MVP Feature Scope
 
@@ -95,18 +117,30 @@ A user can be, e.g., both an Organizer and a Vendor on the same account.
 - Basic messaging thread per booking/proposal context
 
 **Explicitly excluded from MVP:**
-- Payments, deposits, or any money movement (Stripe integration is a later phase)
+- Payments, deposits, or any money movement (Stripe integration is a later phase). An
+  accepted vendor proposal creates a confirmed engagement and unlocks messaging;
+  payment happens outside Foundry until Phase 7.
 - Venue operator subscription billing (planned, not built this phase)
-- Real-time chat (polling-based message threads only)
-- Reviews and ratings
-- Search ranking / recommendation algorithms
+- Real-time chat (manual-refresh message threads only, no push/websocket)
+- Search ranking / recommendation algorithms — matching and "recommended" proposal
+  sorting are transparent and rule-based (skill match, service radius/remote, rating,
+  completed-event count), never an opaque or AI-driven ranking; never described to users
+  as an "algorithm" or "AI match"
 - Calendar sync (Google Calendar, iCal export)
 - Native mobile apps
-- Multi-city expansion
+- Multi-city expansion (the vendor skill catalog and location model support it, but only
+  San Francisco is seeded/promoted)
 - Automated legal verification of uploaded documents (humans review; language stays
   "submitted" / "under review" / "reviewed" — never "verified")
 - Contract e-signature workflows
-- Automated vendor-venue matching algorithms
+- SMS notifications
+- Publicly visible phone numbers or email addresses before a proposal is accepted
+
+**Now included (built as a `localStorage` prototype ahead of schedule — see §4.3):**
+reviews and ratings, vendor-organizer messaging (post-acceptance only), and rule-based
+(not AI) event/skill matching. These were listed as excluded in earlier drafts of this
+document; they are still *not* backed by a real database/RLS, so treat "included" here as
+"UX validated, not production-ready."
 
 ## 6. Success Signals for MVP (directional, not contractual)
 

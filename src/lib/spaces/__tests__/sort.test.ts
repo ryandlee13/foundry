@@ -35,6 +35,7 @@ function makeVenue(overrides: Partial<VenueWithDistance>): VenueWithDistance {
     availabilityExamples: [],
     ownerId: null,
     createdAt: "2024-01-01T00:00:00.000Z",
+    exactAddress: "123 Test St",
     distanceMiles: 1,
     ...overrides,
   };

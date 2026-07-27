@@ -23,7 +23,7 @@ function rules(overrides: Partial<VenueRules>): VenueRules {
  * intentionally matches the venue name referenced by the fictional
  * testimonial in RecapCarousel.tsx.
  */
-const SEED_VENUES: Omit<Venue, "ownerId" | "createdAt">[] = [
+const SEED_VENUES: Omit<Venue, "ownerId" | "createdAt" | "exactAddress">[] = [
   {
     id: "v-neon-foundry",
     slug: "neon-foundry",
@@ -574,6 +574,9 @@ export const VENUES: Venue[] = SEED_VENUES.map((venue) => ({
   ...venue,
   ownerId: null,
   createdAt: SEED_CREATED_AT,
+  // Never rendered publicly (see the Venue type) — there's no real address
+  // behind these fictional listings to begin with.
+  exactAddress: "Address on file",
 }));
 
 export function getVenueBySlug(slug: string): Venue | undefined {

@@ -50,6 +50,7 @@ function makeVenue(overrides: Partial<Venue>): Venue {
     availabilityExamples: [],
     ownerId: null,
     createdAt: "2024-01-01T00:00:00.000Z",
+    exactAddress: "123 Test St",
     ...overrides,
   };
 }

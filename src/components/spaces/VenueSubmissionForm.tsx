@@ -6,10 +6,11 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { SF_LOCATIONS } from "@/lib/spaces/locations";
 import { addSubmittedVenue, getAllSlugs } from "@/lib/spaces/submittedVenues";
 import { uniqueSlug } from "@/lib/spaces/slug";
-import { VENUE_VISUAL_PRESETS, getVisualPreset } from "@/lib/spaces/visualPresets";
+import { VENUE_VISUAL_PRESETS } from "@/lib/spaces/visualPresets";
+import { resolveAddress } from "@/lib/spaces/geocode";
+import { resizeImageFiles } from "@/lib/spaces/imageResize";
 import {
   AMENITY_LABELS,
   EVENT_TYPE_LABELS,
@@ -25,7 +26,7 @@ import type {
   VenueRules,
 } from "@/lib/types/spaces";
 
-const NEIGHBORHOODS = SF_LOCATIONS.filter((location) => location.kind === "neighborhood");
+const MIN_PHOTOS = 7;
 
 const SPACE_TYPE_VALUES = Object.keys(SPACE_TYPE_LABELS) as [SpaceType, ...SpaceType[]];
 const EVENT_TYPE_VALUES = Object.keys(EVENT_TYPE_LABELS) as [EventType, ...EventType[]];
@@ -36,10 +37,9 @@ const STEP_1_FIELDS = [
   "name",
   "tagline",
   "description",
-  "neighborhoodId",
+  "address",
   "spaceType",
   "eventTypes",
-  "visualPresetId",
   "maxCapacity",
   "seatedCapacity",
   "minBookingHours",
@@ -52,10 +52,9 @@ const submissionSchema = z
     name: z.string().min(2, "Enter a name for your space"),
     tagline: z.string().min(5, "Add a short one-line tagline"),
     description: z.string().min(20, "Tell organizers a bit more about the space"),
-    neighborhoodId: z.string().min(1, "Choose a neighborhood"),
+    address: z.string().min(5, "Enter the venue's street address"),
     spaceType: z.enum(SPACE_TYPE_VALUES),
     eventTypes: z.array(z.enum(EVENT_TYPE_VALUES)).min(1, "Pick at least one event type"),
-    visualPresetId: z.string(),
     maxCapacity: z.coerce.number().int().min(1, "Enter a max capacity"),
     seatedCapacity: z.coerce.number().int().min(1, "Enter a seated capacity"),
     minBookingHours: z.coerce.number().int().min(1, "Enter a minimum booking length"),
@@ -108,6 +107,11 @@ export default function VenueSubmissionForm() {
   const { user, isLoading, addRole } = useAuth();
   const [step, setStep] = useState<1 | 2>(1);
 
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
+  const [videoNames, setVideoNames] = useState<string[]>([]);
+
   const {
     register,
     control,
@@ -120,10 +124,9 @@ export default function VenueSubmissionForm() {
       name: "",
       tagline: "",
       description: "",
-      neighborhoodId: NEIGHBORHOODS[0]?.id ?? "",
+      address: "",
       spaceType: "loft",
       eventTypes: [],
-      visualPresetId: VENUE_VISUAL_PRESETS[0].id,
       maxCapacity: 50,
       seatedCapacity: 30,
       minBookingHours: 3,
@@ -147,16 +150,51 @@ export default function VenueSubmissionForm() {
 
   const currentUser = user;
 
+  async function handlePhotoFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setPhotoError(null);
+    setIsProcessingPhotos(true);
+    try {
+      const files = Array.from(fileList).filter((file) => file.size <= 20 * 1024 * 1024);
+      const resized = await resizeImageFiles(files);
+      setPhotos((prev) => [...prev, ...resized]);
+    } catch {
+      setPhotoError("Couldn't process one of those photos — try a different file.");
+    } finally {
+      setIsProcessingPhotos(false);
+    }
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleVideoFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setVideoNames((prev) => [...prev, ...Array.from(fileList).map((file) => file.name)]);
+  }
+
+  function removeVideo(index: number) {
+    setVideoNames((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleNext() {
     const valid = await trigger(STEP_1_FIELDS);
-    if (valid) setStep(2);
+    if (photos.length < MIN_PHOTOS) {
+      setPhotoError(`Add at least ${MIN_PHOTOS} photos (${photos.length} so far).`);
+    }
+    if (valid && photos.length >= MIN_PHOTOS) setStep(2);
   }
 
   function onSubmit(values: SubmissionValues) {
-    if (!currentUser) return;
+    if (photos.length < MIN_PHOTOS) {
+      setStep(1);
+      setPhotoError(`Add at least ${MIN_PHOTOS} photos (${photos.length} so far).`);
+      return;
+    }
 
-    const neighborhood = NEIGHBORHOODS.find((n) => n.id === values.neighborhoodId);
-    const preset = getVisualPreset(values.visualPresetId);
+    const resolved = resolveAddress(values.address);
+    const preset = VENUE_VISUAL_PRESETS[0];
     const slug = uniqueSlug(values.name, getAllSlugs());
 
     const rules: VenueRules = {
@@ -178,9 +216,10 @@ export default function VenueSubmissionForm() {
       name: values.name,
       tagline: values.tagline,
       description: values.description,
-      neighborhood: neighborhood?.label ?? "San Francisco",
+      neighborhood: resolved.neighborhood,
       city: "San Francisco",
-      coordinates: neighborhood?.coordinates ?? { lat: 37.7749, lng: -122.4194 },
+      coordinates: resolved.coordinates,
+      exactAddress: values.address,
       spaceType: values.spaceType,
       eventTypes: values.eventTypes,
       maxCapacity: values.maxCapacity,
@@ -188,7 +227,9 @@ export default function VenueSubmissionForm() {
       minBookingHours: values.minBookingHours,
       minHourlyRate: values.minHourlyRate,
       maxHourlyRate: values.maxHourlyRate,
-      images: ["1", "2", "3"],
+      images: photos.map((_, i) => String(i + 1)),
+      photos,
+      videoNames: videoNames.length > 0 ? videoNames : undefined,
       visualAccent: preset.accent,
       icon: preset.icon,
       amenities: values.amenities,
@@ -276,20 +317,20 @@ export default function VenueSubmissionForm() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="neighborhoodId" className="block text-sm font-medium text-ink">
-                  Neighborhood
+                <label htmlFor="address" className="block text-sm font-medium text-ink">
+                  Street address
                 </label>
-                <select
-                  id="neighborhoodId"
-                  {...register("neighborhoodId")}
-                  className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
-                >
-                  {NEIGHBORHOODS.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.label}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  id="address"
+                  type="text"
+                  placeholder="1450 Folsom St, San Francisco, CA 94103"
+                  {...register("address")}
+                  className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                />
+                {errors.address && <p className="mt-1 text-xs text-wine">{errors.address.message}</p>}
+                <p className="mt-1 text-xs text-ink-soft">
+                  Never shown publicly — organizers only see the general area.
+                </p>
               </div>
               <div>
                 <label htmlFor="spaceType" className="block text-sm font-medium text-ink">
@@ -336,35 +377,102 @@ export default function VenueSubmissionForm() {
             </div>
 
             <div>
-              <p className="text-sm font-medium text-ink">Photos</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-ink">Photos</p>
+                <span
+                  className={`text-xs font-medium ${
+                    photos.length >= MIN_PHOTOS ? "text-brass-dark" : "text-ink-soft"
+                  }`}
+                >
+                  {photos.length} / {MIN_PHOTOS} minimum
+                </span>
+              </div>
               <p className="text-xs text-ink-soft">
-                No file upload yet — choose a visual style for your listing instead.
+                Photos are resized and stored right in your browser — there&apos;s no upload
+                server behind this prototype yet.
               </p>
-              <Controller
-                control={control}
-                name="visualPresetId"
-                render={({ field }) => (
-                  <div className="mt-2 grid grid-cols-4 gap-2">
-                    {VENUE_VISUAL_PRESETS.map((preset) => (
+
+              {photos.length > 0 && (
+                <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-5">
+                  {photos.map((photo, index) => (
+                    <div key={index} className="group relative aspect-square overflow-hidden rounded-lg">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- local data URLs, not a remote image domain */}
+                      <img
+                        src={photo}
+                        alt={`Upload ${index + 1}`}
+                        className="h-full w-full object-cover"
+                      />
                       <button
-                        key={preset.id}
                         type="button"
-                        onClick={() => field.onChange(preset.id)}
-                        aria-pressed={field.value === preset.id}
-                        title={preset.label}
-                        className={`flex aspect-square items-center justify-center rounded-lg text-2xl ring-2 transition-shadow ${
-                          field.value === preset.id ? "ring-wine" : "ring-transparent"
-                        }`}
-                        style={{
-                          background: `linear-gradient(150deg, ${preset.accent[0]}, ${preset.accent[1]})`,
-                        }}
+                        onClick={() => removePhoto(index)}
+                        aria-label={`Remove photo ${index + 1}`}
+                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-paper opacity-0 transition-opacity group-hover:opacity-100"
                       >
-                        {preset.icon}
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                          <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                        </svg>
                       </button>
-                    ))}
-                  </div>
-                )}
-              />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <label className="mt-3 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-line px-4 py-3 text-sm font-medium text-ink-soft transition-colors hover:border-brass hover:text-ink">
+                {isProcessingPhotos ? "Processing…" : "Add photos"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={isProcessingPhotos}
+                  onChange={(event) => {
+                    void handlePhotoFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                  className="sr-only"
+                />
+              </label>
+              {photoError && <p className="mt-1 text-xs text-wine">{photoError}</p>}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-ink">Video (optional)</p>
+              <p className="text-xs text-ink-soft">
+                Attach a walkthrough — playback isn&apos;t available in this prototype yet, but
+                it&apos;ll show as included on your listing.
+              </p>
+              {videoNames.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {videoNames.map((name, index) => (
+                    <li
+                      key={name + index}
+                      className="flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-1 text-xs text-ink-soft"
+                    >
+                      🎥 {name}
+                      <button
+                        type="button"
+                        onClick={() => removeVideo(index)}
+                        aria-label={`Remove ${name}`}
+                        className="text-ink-soft hover:text-wine"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <label className="mt-2 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-line px-4 py-3 text-sm font-medium text-ink-soft transition-colors hover:border-brass hover:text-ink">
+                Add video
+                <input
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  onChange={(event) => {
+                    handleVideoFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                  className="sr-only"
+                />
+              </label>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

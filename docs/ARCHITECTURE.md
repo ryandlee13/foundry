@@ -85,6 +85,7 @@ src/
   components/
     layout/                      Header, Footer, shell chrome
     ui/                          LoadingState, EmptyState, SuccessState, ErrorState, etc.
+    vendor/                      vendor-marketplace prototype components (see below)
   lib/
     supabase/
       client.ts                  browser client (anon key)
@@ -92,6 +93,13 @@ src/
       admin.ts                   service-role client (server-only)
     validation/                  Zod schemas (added as features land)
     types/                       shared TypeScript types
+    auth/                        localStorage prototype accounts/session (see CLAUDE.md)
+    spaces/                      localStorage prototype venues/bookings (see CLAUDE.md)
+    vendors/                     localStorage prototype vendor marketplace — one file per
+                                  entity (profiles, eventNeeds, proposals, engagements,
+                                  messages, notifications, reviews, matching, expiration,
+                                  ...), unit-tested via extracted pure functions (see
+                                  CLAUDE.md → "Vendor marketplace (local-prototype layer)")
 docs/                            this documentation set
 ```
 

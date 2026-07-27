@@ -22,6 +22,7 @@ export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
           accent={venue.visualAccent}
           icon={venue.icon}
           imageCount={venue.images.length}
+          photoUrl={venue.photos?.[0]}
           className="aspect-[4/3] w-full"
         >
           {venue.badge && (

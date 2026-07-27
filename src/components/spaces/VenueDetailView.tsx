@@ -1,6 +1,8 @@
 import { SPACE_TYPE_LABELS, EVENT_TYPE_LABELS, RULE_LABELS } from "@/lib/spaces/labels";
 import VenueAmenityList from "@/components/spaces/VenueAmenityList";
 import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
+import VenueHostLine from "@/components/spaces/VenueHostLine";
+import VenueReviews from "@/components/spaces/VenueReviews";
 import BookingPanel from "@/components/spaces/BookingPanel";
 import type { Venue } from "@/lib/types/spaces";
 
@@ -16,6 +18,7 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
           accent={venue.visualAccent}
           icon={venue.icon}
           imageCount={venue.images.length}
+          photoUrl={venue.photos?.[0]}
           className="aspect-[16/10] rounded-2xl sm:col-span-3 sm:row-span-2 sm:aspect-auto"
         />
         {venue.images.slice(1, 3).map((image, index) => (
@@ -25,10 +28,17 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
             icon={venue.icon}
             imageCount={venue.images.length}
             currentIndex={index + 2}
+            photoUrl={venue.photos?.[index + 1]}
             className="hidden aspect-square rounded-2xl sm:flex"
           />
         ))}
       </div>
+
+      {venue.videoNames && venue.videoNames.length > 0 && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-soft">
+          🎥 Video walkthrough included
+        </p>
+      )}
 
       <div className="mt-8 grid gap-10 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -43,6 +53,7 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
           <p className="mt-1 text-sm text-ink-soft">
             {venue.neighborhood}, {venue.city} · {SPACE_TYPE_LABELS[venue.spaceType]}
           </p>
+          <VenueHostLine ownerId={venue.ownerId} />
           <p className="mt-4 text-base leading-relaxed text-ink-soft">{venue.description}</p>
 
           <div className="mt-8">
@@ -89,6 +100,8 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
               </ul>
             </div>
           )}
+
+          {venue.ownerId === null && <VenueReviews venueId={venue.id} />}
         </div>
 
         <aside className="lg:col-span-1">

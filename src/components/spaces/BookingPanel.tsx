@@ -19,8 +19,10 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [attendees, setAttendees] = useState("");
+  const [coiAgreed, setCoiAgreed] = useState(false);
+  const [depositAgreed, setDepositAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  const [requestedId, setRequestedId] = useState<string | null>(null);
 
   function handleBookClick() {
     if (!isLoading && !user) {
@@ -40,6 +42,14 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       setError(`This space holds up to ${venue.maxCapacity} guests.`);
       return;
     }
+    if (venue.rules.coiRequired && !coiAgreed) {
+      setError("This venue requires a Certificate of Insurance — check the box to agree.");
+      return;
+    }
+    if (venue.rules.securityDepositRequired && !depositAgreed) {
+      setError("This venue requires a security deposit — check the box to agree.");
+      return;
+    }
 
     const booking = addBooking({
       venueId: venue.id,
@@ -51,8 +61,10 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       startTime,
       endTime,
       attendees: Number(attendees),
+      coiAgreed: venue.rules.coiRequired ? coiAgreed : true,
+      depositAgreed: venue.rules.securityDepositRequired ? depositAgreed : true,
     });
-    setConfirmedId(booking.id);
+    setRequestedId(booking.id);
   }
 
   return (
@@ -88,11 +100,14 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       </dl>
 
       <div className="mt-5 border-t border-line pt-5">
-        {confirmedId ? (
+        {requestedId ? (
           <div className="text-center">
-            <p className="font-display text-base font-semibold text-ink">Booking confirmed</p>
+            <p className="font-display text-base font-semibold text-ink">Request sent</p>
             <p className="mt-1 text-xs text-ink-soft">
               {eventDate} · {startTime}–{endTime} · {attendees} guests
+            </p>
+            <p className="mt-2 text-xs text-ink-soft">
+              Waiting on the host to accept — you&apos;ll see it confirmed on your dashboard.
             </p>
             <Link
               href="/dashboard/organizer"
@@ -163,6 +178,34 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
               </div>
             </div>
 
+            {(venue.rules.coiRequired || venue.rules.securityDepositRequired) && (
+              <div className="space-y-2 rounded-lg bg-paper-dim px-3.5 py-3">
+                <p className="text-xs font-semibold text-ink">This venue requires:</p>
+                {venue.rules.coiRequired && (
+                  <label className="flex items-start gap-2 text-xs text-ink">
+                    <input
+                      type="checkbox"
+                      checked={coiAgreed}
+                      onChange={(event) => setCoiAgreed(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+                    />
+                    I&apos;ll provide a Certificate of Insurance
+                  </label>
+                )}
+                {venue.rules.securityDepositRequired && (
+                  <label className="flex items-start gap-2 text-xs text-ink">
+                    <input
+                      type="checkbox"
+                      checked={depositAgreed}
+                      onChange={(event) => setDepositAgreed(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+                    />
+                    I agree to pay the required security deposit
+                  </label>
+                )}
+              </div>
+            )}
+
             {error && <p className="text-xs text-wine">{error}</p>}
 
             <button
@@ -170,10 +213,10 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
               onClick={handleConfirm}
               className="w-full rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
             >
-              Confirm booking
+              Send booking request
             </button>
             <p className="text-center text-xs text-ink-soft">
-              Booking confirms instantly in this prototype — no quote step yet.
+              The host accepts or declines from their dashboard — no quote step yet.
             </p>
           </div>
         )}

@@ -345,6 +345,128 @@ One row per Supabase Auth user. This is the single identity — roles are layere
 
 ---
 
+## Vendor marketplace schema extension
+
+The vendor marketplace UX (onboarding, Discover Gigs, bidding, engagements, messaging,
+reviews, admin moderation — see `docs/PRD.md` §4.3/4.4) was prototyped end-to-end against
+`localStorage` (`src/lib/vendors/*`, see `CLAUDE.md` → "Vendor marketplace
+(local-prototype layer)") before this real schema below was migrated. This section
+extends/reconciles §12–17 above with what the prototype actually needed. When Phase 1
+lands, reconcile against this rather than the original §12–17 sketch, which predates it.
+
+- **`vendor_profiles`** (extends §12): also needs `first_name`, `last_name`,
+  `profile_photo_path`, `cover_image_path`, `website_url`, `instagram_url`,
+  `home_region`, `home_postal_code`, `latitude`, `longitude`, `radius_mode` (enum:
+  `5`|`10`|`25`|`50`|`100`|`custom`|`anywhere`), `radius_miles`, `willing_to_travel` (bool),
+  `remote_available` (bool), `cities_served` (`text[]`), `typical_availability` (text),
+  `lead_time_days`, `average_rating` (numeric, nullable), `review_count`,
+  `completed_event_count`, `rejection_reason`. `status` gains `suspended` alongside the
+  existing `draft`/`pending_review`/`approved`/`rejected`/`archived` — note the prototype
+  code calls the public-facing value `published` rather than `approved`; reconcile the
+  enum label when migrating. Notification preferences (in-app/email toggles, per-category
+  booleans, per-skill triggers, match-scope) live as a `vendor_notification_preferences`
+  join table per the original proposal — the prototype embeds them directly on the profile
+  record for simplicity, which is not appropriate once this is a real table.
+- **`vendor_skills`** (standard catalog, per original proposal): the prototype's canonical
+  list of 23 skills/slugs lives in `src/lib/vendors/skills.ts` — port this list verbatim as
+  the seed data for the real table, including each skill's `remote_eligible` flag.
+- **`vendor_services`** (extends §13): also needs `pricing_visible` (bool — false means the
+  starting price is for internal/organizer-facing context only, never rendered publicly),
+  `equipment_included` (text), `experience_level` (enum: `new`|`intermediate`|
+  `experienced`|`veteran`), `event_types_served` (`text[]`, reusing the `event_type` enum
+  from §7's `events`/`event_type`).
+- **`vendor_portfolio_links`**: per original proposal (`id`, `vendor_profile_id`, `url`,
+  `title`, `description`, `provider` enum, `display_order`). Provider is auto-detected from
+  the URL's hostname client-side (`src/lib/vendors/portfolioLinks.ts`) — no external API
+  call, so this is safe to keep as-is.
+- **`event_needs`** (extends §14): **no `events` table exists in the prototype**, so
+  `event_need.booking_id` → `bookings.id` stands in for `event_need.event_id` → `events.id`
+  until Phase 4's `events` table is real and this can be corrected. Also needs
+  `deliverables` (text), `location_type` (enum: `in_person`|`remote`), `public_location`
+  (text — never the booking's/venue's exact address), `latitude`/`longitude`,
+  `start_time`/`end_time`/`setup_time`, `estimated_attendance`, `positions_available`,
+  `positions_filled`, `preferred_pricing_model`, `equipment_requirements`,
+  `experience_preference`, `portfolio_required` (bool), `proposal_deadline`,
+  `allow_questions` (bool), `additional_notes`, `published_at`. `status` gains
+  `draft`|`paused` alongside `open`(→`published`)/`in_review`/`filled`(→`closed`)/`cancelled`
+  — reconcile naming.
+- **`proposals`** (extends §15, prototype calls this `vendor_proposals`): also needs
+  `pricing_model`, `deliverables`, `equipment_included`, `availability_confirmed` (bool),
+  `setup_requirements`, `portfolio_link_ids` (`uuid[]` or join table), `questions_for_
+  organizer`, `expires_at`. `status` gains `draft`|`shortlisted`|`expired`|`canceled`.
+  **Bid expiration is computed at read time from `expires_at`, never written by a
+  scheduled job** (`src/lib/vendors/expiration.ts`) — a `submitted`/`shortlisted` proposal
+  past `expires_at` is treated as `expired` by every read path without a status-column
+  mutation. Preserve this "no background-job infrastructure" pattern in the real
+  implementation unless a real scheduler already exists for another reason. Enforce
+  "one active proposal per vendor per event_need" as a partial unique index
+  (`vendor_profile_id, event_need_id`) where `status in ('submitted','shortlisted')`,
+  mirrored in the prototype by `findActiveProposal()`.
+- **`vendor_engagements`** (per original proposal, not yet in §12–17): `id`,
+  `event_need_id`, `booking_id` (see the `event_id`→`booking_id` note above),
+  `organizer_id`, `vendor_profile_id`, `accepted_proposal_id`, `agreed_amount`,
+  `pricing_model`, `agreed_deliverables`, `status` (enum: `confirmed`|`in_progress`|
+  `completed`|`canceled_by_organizer`|`canceled_by_vendor`|`disputed`), `completed_at`,
+  `canceled_at`. Created only via an "accept proposal" transaction that also fills one
+  `event_need` position (auto-closing it once full) and unlocks the message thread — see
+  `acceptProposal()` in `src/lib/vendors/engagements.ts` for the reference transaction
+  shape to port into a Postgres function/RPC.
+  - **RLS:** `select`: the organizer, the accepted vendor, and admins only. `insert`:
+    server-side only, as part of the accept-proposal transaction. `update`: status
+    transitions restricted server-side (only the organizer marks `completed`/
+    `canceled_by_organizer`; only the vendor sets `canceled_by_vendor`).
+- **`vendor_reviews`** (per original proposal): `id`, `engagement_id` (unique),
+  `organizer_id`, `vendor_profile_id`, `overall_rating` (1–5), five optional category
+  ratings (`quality`/`communication`/`reliability`/`professionalism`/`value`),
+  `review_text`, `would_work_with_again` (bool), `vendor_response` (nullable text, settable
+  once), `status` (enum: `published`|`hidden`|`flagged`|`removed`), `flagged_reason`.
+  - **Eligibility, enforced both server-side and by a unique constraint on
+    `engagement_id`:** the engagement must be `completed`, the requesting organizer must be
+    the one on the engagement, and no review may already exist for it — see
+    `checkReviewEligibility()` for the reference logic to port into a server-side check.
+  - **RLS:** `select`: public if `status = 'published'`; owner (organizer) and admins can
+    see all statuses; the reviewed vendor can see their own reviews at any status.
+    `insert`: organizer only, subject to the eligibility check above. `update`: the
+    organizer may never edit a review after posting; the vendor may only set
+    `vendor_response` once; only admins may change `status`.
+  - Average rating and review count on `vendor_profiles` are a materialized aggregate over
+    `published` reviews only (recomputed on every review status change) — see
+    `computeAverageRating()`.
+- **`vendor_event_portfolio`** (per original proposal): `id`, `vendor_profile_id`,
+  `engagement_id` (unique), `display_publicly` (bool, defaults `false`), `display_title`,
+  `display_description`, `event_date`, `skill_id`. Auto-created (hidden) when an engagement
+  is marked `completed`; the vendor opts in per-item to show it publicly. **This is a
+  distinct, real-completed-event mechanism — do not confuse with or extend the fake-review
+  pattern used for seed venues (`src/lib/spaces/reviews.ts`); every row here traces back to
+  a real `vendor_engagements` row.**
+  - **RLS:** `select`: public if `display_publicly = true` and the parent review isn't
+    `removed`; owner and admins otherwise. `update`: vendor owner (visibility/copy only) or
+    admin/organizer (removal of an inaccurate entry, per `docs/PRD.md`).
+- **`notifications`** (per original proposal, generic — shared by both roles): `id`,
+  `recipient_id`, `type` (enum, see `src/lib/types/vendors.ts` `NotificationType` for the
+  full list spanning both vendor- and organizer-facing events), `title`, `body`, `link`,
+  `read` (bool), `created_at`.
+  - **De-duplication:** creating a batch of notifications for the same `type` + `link`
+    skips any recipient who already has one, even across separate calls — see
+    `selectRecipientsNeedingNotification()`. Preserve this when porting to avoid notification
+    spam from repeated actions (e.g. re-publishing a paused event need).
+  - **No real email is ever sent by this prototype** — "email enabled" is a stored
+    preference only. Wiring an actual transactional-email send is real Phase 2/5 work, not
+    something to bolt onto the prototype.
+  - **RLS:** `select`/`update` (mark read): owner (`recipient_id = auth.uid()`) only.
+    `insert`: server-side only, as a side effect of the action that triggered it.
+- **`message_threads` / `messages`** (extends §16/§17): add
+  `vendor_engagement_id` → `vendor_engagements.id` as a third possible `context_type` (or,
+  simpler in the prototype's actual shape, `message_threads.engagement_id` directly, since
+  the prototype never generalized to a polymorphic `context_type`/`context_id` pair for
+  vendor threads — every vendor-related thread has exactly one `engagement_id`).
+  **A thread must not be creatable except as part of the accept-proposal transaction** —
+  see `getOrCreateThreadForEngagement()`, called only from `acceptProposal()`. This is the
+  concrete mechanism behind `docs/SECURITY.md`'s "chat cannot be accessed before
+  acceptance" requirement.
+
+---
+
 ## Status Enum Summary
 
 | Table | Enum | Values |

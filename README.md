@@ -37,9 +37,26 @@ cp .env.example .env.local
 browser, committed to source control, or referenced outside `src/lib/supabase/admin.ts`
 and other server-only files. See [`docs/SECURITY.md`](docs/SECURITY.md).
 
-No Supabase project is required to run this session's app shell — the placeholder pages
-don't call Supabase yet. A project is needed starting with the database/auth phases in
+No Supabase project is required to run this app today — accounts, venue listings,
+bookings, and the full vendor marketplace (profiles, gigs, bidding, messaging, reviews,
+admin moderation) currently run entirely against browser `localStorage`, a deliberate
+prototype layer explained in [`CLAUDE.md`](CLAUDE.md). A real Supabase project is needed
+starting with the database/auth phases in
 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+
+### Trying the vendor marketplace locally
+
+1. Sign up (`/sign-up`) as an organizer, book a seed venue from `/spaces`, then use
+   "Find vendors" on `/dashboard/organizer` to post a "Looking for a ___" request.
+2. Sign up a second account as a vendor and complete onboarding at
+   `/dashboard/vendor/onboarding`.
+3. In development only, visit `/dev/seed-vendors` and click through to populate 12
+   fictional vendor profiles and 8 published event opportunities in one click, so you
+   don't have to do the above by hand to see Discover Gigs populated. This page 404s in
+   production and never runs automatically.
+4. An admin account is required to approve vendor profiles before they're public — there's
+   no self-serve way to become one; add the `admin` role to an account's `roles` array in
+   `localStorage` (key `foundry.auth.accounts`) via devtools for local testing.
 
 ### 3. Run the dev server
 
