@@ -78,8 +78,13 @@ export const AMENITY_ICONS: Record<AmenityKey, string> = {
   photo_booth_area: "🖼️",
 };
 
+/** Amenity [key, label] pairs sorted alphabetically by label, for any UI that lists them. */
+export const AMENITY_ENTRIES_ALPHABETICAL = (
+  Object.entries(AMENITY_LABELS) as [AmenityKey, string][]
+).sort(([, a], [, b]) => a.localeCompare(b));
+
 export const RULE_LABELS: Record<keyof VenueRules, string> = {
-  alcoholAllowed: "Alcohol allowed",
+  alcoholAllowed: "Alcohol allowed (+21 only)",
   amplifiedMusicAllowed: "Amplified music allowed",
   outsideCateringAllowed: "Outside catering allowed",
   ticketedEventsAllowed: "Ticketed events allowed",

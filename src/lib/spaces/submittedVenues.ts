@@ -23,9 +23,33 @@ export function getSubmittedVenues(): Venue[] {
   }
 }
 
+/** Thrown when the browser's localStorage quota won't fit the venue being saved. */
+export class VenueStorageQuotaError extends Error {
+  constructor() {
+    super(
+      "Your browser's storage is full for this prototype (listings and photos are saved right in your browser, with no server yet). Try removing a few photos from this listing, or delete an older draft, then submit again."
+    );
+    this.name = "VenueStorageQuotaError";
+  }
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+  );
+}
+
 function saveSubmittedVenues(venues: Venue[]): void {
   if (!isBrowser()) return;
-  window.localStorage.setItem(SUBMITTED_VENUES_KEY, JSON.stringify(venues));
+  try {
+    window.localStorage.setItem(SUBMITTED_VENUES_KEY, JSON.stringify(venues));
+  } catch (error) {
+    if (isQuotaExceededError(error)) {
+      throw new VenueStorageQuotaError();
+    }
+    throw error;
+  }
 }
 
 export function addSubmittedVenue(venue: Venue): void {

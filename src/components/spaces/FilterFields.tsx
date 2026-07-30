@@ -1,17 +1,12 @@
 "use client";
 
-import { AMENITY_LABELS, RULE_LABELS, SPACE_TYPE_LABELS } from "@/lib/spaces/labels";
+import { AMENITY_ENTRIES_ALPHABETICAL, RULE_LABELS, SPACE_TYPE_LABELS } from "@/lib/spaces/labels";
 import PriceRangeSlider from "./PriceRangeSlider";
 import DescribeEventField from "./DescribeEventField";
-import type {
-  AmenityKey,
-  SearchFilters,
-  SpaceType,
-  VenueRules,
-} from "@/lib/types/spaces";
+import type { SearchFilters, SpaceType, VenueRules } from "@/lib/types/spaces";
 
 const SPACE_TYPE_OPTIONS = Object.entries(SPACE_TYPE_LABELS) as [SpaceType, string][];
-const AMENITY_OPTIONS = Object.entries(AMENITY_LABELS) as [AmenityKey, string][];
+const AMENITY_OPTIONS = AMENITY_ENTRIES_ALPHABETICAL;
 const RULE_OPTIONS = Object.entries(RULE_LABELS) as [keyof VenueRules, string][];
 const MIN_BOOKING_HOUR_OPTIONS = [1, 2, 3, 4, 6, 8];
 
