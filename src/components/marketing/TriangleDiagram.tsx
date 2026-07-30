@@ -16,8 +16,8 @@ export default function TriangleDiagram() {
         <polygon
           points={`${POINTS.organizer.x},${POINTS.organizer.y} ${POINTS.venue.x},${POINTS.venue.y} ${POINTS.vendor.x},${POINTS.vendor.y}`}
           fill="none"
-          stroke="var(--color-line)"
-          strokeWidth="0.6"
+          stroke="var(--color-brass)"
+          strokeWidth="0.7"
           strokeDasharray="2.5 2.5"
           vectorEffect="non-scaling-stroke"
         />
@@ -32,7 +32,7 @@ export default function TriangleDiagram() {
           Event Planners
         </span>
         <p className="mt-2 font-display text-lg font-semibold leading-snug text-ink">
-          All-in-one planning platform with no fees
+          One stop shop platform, no fees
         </p>
       </div>
 
@@ -52,7 +52,7 @@ export default function TriangleDiagram() {
           Vendors
         </span>
         <p className="mt-1.5 text-xs leading-snug text-ink-soft">
-          Start your next gig and build your portfolio
+          Provide services seamlessly
         </p>
       </div>
     </div>

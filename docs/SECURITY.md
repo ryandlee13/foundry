@@ -94,6 +94,21 @@ workaround.
   page, even briefly, even for "preview."
 - Approval/rejection is an admin-only server-side action, gated by the `admin` role in
   `profile_roles`, and recorded in `admin_audit_logs`.
+- **Scoped, temporary exception:** the browser-local venue-submission prototype
+  (`src/components/spaces/VenueSubmissionForm.tsx`, see `CLAUDE.md` → "Local-prototype
+  layer") publishes immediately with no review step, since there's no real `venues` table
+  or admin action to gate against yet. This does not apply once the real database and
+  admin flow exist — this rule is still non-negotiable for the real product.
+- **Vendor profiles do not use this exception.** The vendor-marketplace prototype
+  (`src/lib/vendors/profiles.ts`) implements the real gate even without a real database:
+  `submitVendorProfileForReview()` moves a profile to `pending_review`; only
+  `approveVendorProfile()`, callable only from the admin dashboard
+  (`/dashboard/admin`, gated on `user.roles.includes("admin")`), makes it `published` and
+  therefore publicly visible. `VendorProfileLookup` re-checks `status === "published"`
+  before rendering. There is currently no self-serve way for a user to grant themselves
+  the `admin` role (by design — see `docs/DATABASE.md` §2) — a dev tester needs to add it
+  manually (e.g. via browser devtools against `foundry.auth.accounts` in `localStorage`),
+  same limitation `docs/DATABASE.md` already notes for the real `admin` role.
 
 ## 10. Secrets hygiene
 
@@ -115,3 +130,35 @@ workaround.
 - **Document exposure via URL sharing**: signed URLs are short-lived specifically so a
   forwarded link (e.g., pasted into an unrelated chat) stops working quickly rather than
   becoming a permanent leak.
+
+## Vendor marketplace notes (see also `CLAUDE.md` and `docs/DATABASE.md`)
+
+- **Competitive bid privacy**: an organizer's event need may receive proposals from
+  multiple vendors, but a vendor must never see another vendor's identity, portfolio,
+  message, or exact competing offer — only an anonymized summary (lowest/highest/median
+  active bid, pricing models represented) after they've submitted their own bid. In the
+  real implementation this must be enforced by RLS or a security-definer view/RPC, never a
+  query the client could simply broaden. The prototype's `computeCompetitiveBidSummary()`
+  (`src/lib/vendors/matching.ts`) takes only `{proposedAmount, pricingModel, status}` as
+  input specifically so it cannot leak more even if misused — port that same
+  narrow-input-shape discipline into the real RPC.
+- **Chat unlock timing**: a message thread between an organizer and a vendor must not be
+  creatable, and therefore not accessible, until the vendor's proposal has been accepted.
+  This is not just a UI-hidden route — the real implementation needs this enforced at the
+  data layer (thread row simply doesn't exist, and RLS denies reads/writes to non-
+  participants regardless). The prototype models this by only ever creating a thread from
+  inside the accept-proposal transaction (`acceptProposal()` in
+  `src/lib/vendors/engagements.ts`) and RLS-equivalent gating every read through
+  `isThreadParticipant()`.
+- **Exact venue address stays private through the vendor flow too**: `EventNeed`'s
+  `public_location` is the venue's neighborhood, resolved server-side (or, in the
+  prototype, at need-creation time from the venue record) — never the booking's/venue's
+  `exact_address`. A vendor only ever sees the exact address after being accepted onto the
+  engagement (and even then, only implicitly via the venue's own detail page if they're
+  also the organizer's counterparty — no new address-exposure surface is introduced by
+  this feature).
+- **Review authenticity**: a vendor review may only be created by the organizer on a
+  `completed` engagement, exactly once, and can never be edited after posting (only
+  responded to, once, by the vendor). This prevents both fabricated reviews and after-the-
+  fact tampering. Do not add a fake-review generator for vendors — see `CLAUDE.md`'s note
+  on this.

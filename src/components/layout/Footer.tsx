@@ -14,7 +14,7 @@ const FOOTER_COLUMNS: Array<{
   {
     heading: "Venue operators",
     links: [
-      { href: "/sign-up", label: "List your space" },
+      { href: "/sign-up?role=venue_operator&next=%2Flist-your-venue", label: "List your space" },
       { href: "/sign-in", label: "Sign in" },
     ],
   },

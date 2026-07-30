@@ -17,6 +17,45 @@ previous one is working end-to-end. Payments (Stripe) are intentionally not sche
 
 **Exit criteria:** app runs locally, builds cleanly, no real data or auth yet.
 
+## Phase 0.5 — Local-prototype detour (out of sequence, explicit exception)
+
+Before Phase 1 landed, a browser-local (localStorage-backed) prototype of accounts, venue
+submission, and instant booking was built at explicit user direction — to validate the
+Discover Spaces → list a venue → book a venue loop end-to-end before investing in a real
+Supabase project. See `CLAUDE.md` → "Local-prototype layer" for what exists
+(`src/lib/auth/`, `src/lib/spaces/submittedVenues.ts`, `src/lib/spaces/bookings.ts`) and
+its limits: no real security, no admin approval step, nothing synced across devices.
+
+This is **not** a substitute for Phases 1–4 below — it's scaffolding to be replaced, not
+hardened in place. When Phase 1 starts, this prototype layer should be removed and rebuilt
+properly against real tables, RLS, and Supabase Auth, not incrementally migrated.
+
+## Phase 0.7 — Vendor marketplace local-prototype detour (out of sequence, explicit exception)
+
+Same basis as Phase 0.5, extended to the full vendor/contractor marketplace from
+`docs/PRD.md` §4.3/4.4: vendor onboarding and profiles, organizer vendor requests
+("Looking for a ___"), Discover Gigs, bidding, proposal review and acceptance, vendor
+engagements/roster, post-acceptance messaging, in-app notifications, reviews, and admin
+moderation — all built against `localStorage`, at explicit user direction, before Phase 1
+(database) and Phase 5 (vendor marketplace) land for real. See `CLAUDE.md` →
+"Vendor marketplace (local-prototype layer)" for what exists (`src/lib/vendors/*`) and its
+limits.
+
+Key adaptations forced by not having Phase 1's schema yet:
+- No `events` table exists, so a confirmed `Booking` stands in as the anchor for an
+  organizer's vendor requests (`EventNeed.bookingId`), not a separate `Event` row.
+- Vendor profile approval already follows the *real* gate (`pending_review` → admin
+  approves) rather than reusing the venue auto-publish exception — when Phase 1 lands, this
+  part of the design carries over largely unchanged, just swapped onto real tables/RLS.
+- Competitive bid-summary privacy and message-thread access control are implemented in
+  application code with test coverage, but — like the rest of this layer — are not enforced
+  by anything a motivated user with devtools couldn't bypass. RLS is not optional for this
+  data once Phase 1 lands (see `docs/SECURITY.md`).
+- No real email is sent; "email notifications" is a stored preference only.
+
+This is **not** a substitute for Phase 5 below — same "scaffolding to be replaced, not
+hardened in place" rule as Phase 0.5.
+
 ## Phase 1 — Database migration + RLS
 
 - Create a Supabase project (or connect to an existing one)
@@ -75,6 +114,13 @@ end-to-end with real data and correct authorization at every step.
 
 **Exit criteria:** the full PRD workflow (steps 1–10) works end-to-end for at least one
 vendor category.
+
+The UX for this entire phase — onboarding, matching, bidding, proposal review, engagements,
+messaging, notifications, reviews, admin moderation — was already validated end-to-end
+against `localStorage` in Phase 0.7. This phase is about rebuilding the same flows against
+real tables/RLS/Supabase Auth, not designing them from scratch; see `src/lib/vendors/*` and
+`docs/DATABASE.md`'s vendor-marketplace entities for the reference implementation and
+schema to port.
 
 ## Phase 6 — Polish and hardening
 
