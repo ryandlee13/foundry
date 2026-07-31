@@ -1,4 +1,4 @@
-# Database Design
+# Database Design aaaa
 
 This document is the schema **proposal**. No migration exists yet — this is written first,
 reviewed for internal consistency, and only then translated into SQL migrations in a later
