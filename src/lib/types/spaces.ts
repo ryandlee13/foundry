@@ -84,6 +84,8 @@ export interface Venue {
   /** Single emoji used as the placeholder art's focal icon. */
   icon: string;
   amenities: AmenityKey[];
+  /** Optional per-amenity notes from the venue owner (e.g. "2 bathrooms", "fridge only, no freezer"), shown to organizers on hover. */
+  amenityNotes?: Partial<Record<AmenityKey, string>>;
   rules: VenueRules;
   availabilityExamples: string[];
   badge?: VenueBadge;

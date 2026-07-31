@@ -67,7 +67,7 @@ export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
         <p className="mt-2 text-sm leading-snug text-ink-soft">{venue.tagline}</p>
 
         <div className="mt-3">
-          <VenueAmenityList amenities={venue.amenities} limit={4} />
+          <VenueAmenityList amenities={venue.amenities} amenityNotes={venue.amenityNotes} limit={4} />
         </div>
 
         <div className="mt-4 flex items-center justify-end border-t border-line pt-3 text-right text-xs font-medium text-ink-soft">

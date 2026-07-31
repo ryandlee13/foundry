@@ -37,6 +37,26 @@ export function resizeImageFile(file: File): Promise<string> {
   });
 }
 
-export function resizeImageFiles(files: File[]): Promise<string[]> {
-  return Promise.all(files.map(resizeImageFile));
+export interface ResizeBatchResult {
+  photos: string[];
+  /** File names that failed to process (unreadable file, unsupported format, etc). */
+  failedFileNames: string[];
+}
+
+/**
+ * Resizes a batch of files independently so one bad file (corrupt, unreadable,
+ * unsupported format) doesn't drop the rest of a multi-select upload.
+ */
+export async function resizeImageFiles(files: File[]): Promise<ResizeBatchResult> {
+  const results = await Promise.allSettled(files.map(resizeImageFile));
+  const photos: string[] = [];
+  const failedFileNames: string[] = [];
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      photos.push(result.value);
+    } else {
+      failedFileNames.push(files[index].name);
+    }
+  });
+  return { photos, failedFileNames };
 }
