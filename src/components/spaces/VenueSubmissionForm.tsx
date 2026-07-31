@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { addSubmittedVenue, getAllSlugs } from "@/lib/spaces/submittedVenues";
+import {
+  addSubmittedVenue,
+  getAllSlugs,
+  VenueStorageQuotaError,
+} from "@/lib/spaces/submittedVenues";
 import { uniqueSlug } from "@/lib/spaces/slug";
 import { VENUE_VISUAL_PRESETS } from "@/lib/spaces/visualPresets";
 import { resolveAddress } from "@/lib/spaces/geocode";
 import { resizeImageFiles } from "@/lib/spaces/imageResize";
 import {
-  AMENITY_LABELS,
+  AMENITY_ENTRIES_ALPHABETICAL,
   EVENT_TYPE_LABELS,
   RULE_LABELS,
   SPACE_TYPE_LABELS,
@@ -27,10 +31,15 @@ import type {
 } from "@/lib/types/spaces";
 
 const MIN_PHOTOS = 7;
+const MAX_PHOTOS = 20;
+const MAX_PHOTO_FILE_SIZE_MB = 20;
 
 const SPACE_TYPE_VALUES = Object.keys(SPACE_TYPE_LABELS) as [SpaceType, ...SpaceType[]];
 const EVENT_TYPE_VALUES = Object.keys(EVENT_TYPE_LABELS) as [EventType, ...EventType[]];
-const AMENITY_VALUES = Object.keys(AMENITY_LABELS) as [AmenityKey, ...AmenityKey[]];
+const AMENITY_VALUES = AMENITY_ENTRIES_ALPHABETICAL.map(([key]) => key) as [
+  AmenityKey,
+  ...AmenityKey[],
+];
 const RULE_KEYS = Object.keys(RULE_LABELS) as (keyof VenueRules)[];
 
 const STEP_1_FIELDS = [
@@ -57,11 +66,15 @@ const submissionSchema = z
     eventTypes: z.array(z.enum(EVENT_TYPE_VALUES)).min(1, "Pick at least one event type"),
     maxCapacity: z.coerce.number().int().min(1, "Enter a max capacity"),
     seatedCapacity: z.coerce.number().int().min(1, "Enter a seated capacity"),
-    minBookingHours: z.coerce.number().int().min(1, "Enter a minimum booking length"),
+    minBookingHours: z.coerce
+      .number()
+      .int()
+      .min(0, "Minimum booking length can't be negative"),
     minHourlyRate: z.coerce.number().min(0, "Enter an hourly rate"),
     maxHourlyRate: z.coerce.number().min(0, "Enter an hourly rate"),
     availabilityExamples: z.string().optional(),
     amenities: z.array(z.enum(AMENITY_VALUES)),
+    amenityNotes: z.record(z.string(), z.string()),
     rules: z.record(z.string(), z.boolean()),
   })
   .refine((data) => data.maxHourlyRate >= data.minHourlyRate, {
@@ -75,6 +88,15 @@ const submissionSchema = z
 
 type SubmissionInput = z.input<typeof submissionSchema>;
 type SubmissionValues = z.output<typeof submissionSchema>;
+
+function Required() {
+  return (
+    <span className="text-wine" aria-hidden="true">
+      {" "}
+      *
+    </span>
+  );
+}
 
 function CheckboxGrid<T extends string>({
   options,
@@ -111,12 +133,16 @@ export default function VenueSubmissionForm() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
   const [videoNames, setVideoNames] = useState<string[]>([]);
+  const [step1Error, setStep1Error] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [openNoteFor, setOpenNoteFor] = useState<AmenityKey | null>(null);
 
   const {
     register,
     control,
     handleSubmit,
     trigger,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<SubmissionInput, unknown, SubmissionValues>({
     resolver: zodResolver(submissionSchema),
@@ -134,9 +160,25 @@ export default function VenueSubmissionForm() {
       maxHourlyRate: 200,
       availabilityExamples: "",
       amenities: [],
+      amenityNotes: {},
       rules: {},
     },
   });
+
+  const selectedAmenities = useWatch({ control, name: "amenities" });
+  const amenityNotes = useWatch({ control, name: "amenityNotes" });
+
+  function toggleAmenity(value: AmenityKey) {
+    const next = selectedAmenities.includes(value)
+      ? selectedAmenities.filter((v) => v !== value)
+      : [...selectedAmenities, value];
+    setValue("amenities", next);
+    if (!next.includes(value) && openNoteFor === value) setOpenNoteFor(null);
+  }
+
+  function setAmenityNote(value: AmenityKey, note: string) {
+    setValue("amenityNotes", { ...amenityNotes, [value]: note });
+  }
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -155,11 +197,43 @@ export default function VenueSubmissionForm() {
     setPhotoError(null);
     setIsProcessingPhotos(true);
     try {
-      const files = Array.from(fileList).filter((file) => file.size <= 20 * 1024 * 1024);
-      const resized = await resizeImageFiles(files);
+      const incoming = Array.from(fileList);
+      const remainingSlots = Math.max(0, MAX_PHOTOS - photos.length);
+      const withinCountLimit = incoming.slice(0, remainingSlots);
+      const droppedForCount = incoming.length - withinCountLimit.length;
+
+      const oversized = withinCountLimit.filter(
+        (file) => file.size > MAX_PHOTO_FILE_SIZE_MB * 1024 * 1024
+      );
+      const withinSizeLimit = withinCountLimit.filter(
+        (file) => file.size <= MAX_PHOTO_FILE_SIZE_MB * 1024 * 1024
+      );
+
+      const { photos: resized, failedFileNames } = await resizeImageFiles(withinSizeLimit);
       setPhotos((prev) => [...prev, ...resized]);
+
+      const messages: string[] = [];
+      if (oversized.length > 0) {
+        messages.push(
+          `${oversized.length} photo${oversized.length === 1 ? "" : "s"} skipped — ` +
+            `this prototype can only accommodate photos up to ${MAX_PHOTO_FILE_SIZE_MB}MB each ` +
+            `(${oversized.map((file) => file.name).join(", ")}).`
+        );
+      }
+      if (failedFileNames.length > 0) {
+        messages.push(
+          `Couldn't process ${failedFileNames.length === 1 ? "1 photo" : `${failedFileNames.length} photos`} ` +
+            `(${failedFileNames.join(", ")}) — try a different file.`
+        );
+      }
+      if (droppedForCount > 0) {
+        messages.push(
+          `Only added ${incoming.length - droppedForCount} — a listing can have up to ${MAX_PHOTOS} photos.`
+        );
+      }
+      setPhotoError(messages.length > 0 ? messages.join(" ") : null);
     } catch {
-      setPhotoError("Couldn't process one of those photos — try a different file.");
+      setPhotoError("Couldn't process those photos — try again.");
     } finally {
       setIsProcessingPhotos(false);
     }
@@ -180,13 +254,22 @@ export default function VenueSubmissionForm() {
 
   async function handleNext() {
     const valid = await trigger(STEP_1_FIELDS);
-    if (photos.length < MIN_PHOTOS) {
+    const hasEnoughPhotos = photos.length >= MIN_PHOTOS;
+    if (!hasEnoughPhotos) {
       setPhotoError(`Add at least ${MIN_PHOTOS} photos (${photos.length} so far).`);
     }
-    if (valid && photos.length >= MIN_PHOTOS) setStep(2);
+    if (valid && hasEnoughPhotos) {
+      setStep1Error(null);
+      setStep(2);
+      return;
+    }
+    setStep1Error(
+      "Please fix the highlighted field(s) below before continuing — details are under each one."
+    );
   }
 
   function onSubmit(values: SubmissionValues) {
+    setSubmitError(null);
     if (photos.length < MIN_PHOTOS) {
       setStep(1);
       setPhotoError(`Add at least ${MIN_PHOTOS} photos (${photos.length} so far).`);
@@ -233,6 +316,11 @@ export default function VenueSubmissionForm() {
       visualAccent: preset.accent,
       icon: preset.icon,
       amenities: values.amenities,
+      amenityNotes: Object.fromEntries(
+        values.amenities
+          .map((key) => [key, values.amenityNotes[key]?.trim()] as const)
+          .filter(([, note]) => Boolean(note))
+      ),
       rules,
       availabilityExamples: (values.availabilityExamples ?? "")
         .split("\n")
@@ -243,7 +331,16 @@ export default function VenueSubmissionForm() {
       createdAt: new Date().toISOString(),
     };
 
-    addSubmittedVenue(venue);
+    try {
+      addSubmittedVenue(venue);
+    } catch (error) {
+      setSubmitError(
+        error instanceof VenueStorageQuotaError
+          ? error.message
+          : "Something went wrong saving your listing — try again."
+      );
+      return;
+    }
     addRole("venue_operator");
     router.push(`/spaces/${slug}`);
   }
@@ -262,6 +359,9 @@ export default function VenueSubmissionForm() {
             ? "Photos, price estimates, and availability."
             : "What organizers need to know before booking, and what's included."}
         </p>
+        <p className="mt-2 text-xs text-ink-soft">
+          <span className="text-wine">*</span> Required
+        </p>
       </div>
 
       <form
@@ -271,9 +371,13 @@ export default function VenueSubmissionForm() {
       >
         {step === 1 && (
           <div className="space-y-5">
+            {step1Error && (
+              <p className="rounded-lg bg-wine/10 px-3.5 py-2.5 text-sm text-wine">{step1Error}</p>
+            )}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-ink">
                 Space name
+                <Required />
               </label>
               <input
                 id="name"
@@ -288,6 +392,7 @@ export default function VenueSubmissionForm() {
             <div>
               <label htmlFor="tagline" className="block text-sm font-medium text-ink">
                 Tagline
+                <Required />
               </label>
               <input
                 id="tagline"
@@ -302,6 +407,7 @@ export default function VenueSubmissionForm() {
             <div>
               <label htmlFor="description" className="block text-sm font-medium text-ink">
                 Description
+                <Required />
               </label>
               <textarea
                 id="description"
@@ -319,6 +425,7 @@ export default function VenueSubmissionForm() {
               <div>
                 <label htmlFor="address" className="block text-sm font-medium text-ink">
                   Street address
+                  <Required />
                 </label>
                 <input
                   id="address"
@@ -335,6 +442,7 @@ export default function VenueSubmissionForm() {
               <div>
                 <label htmlFor="spaceType" className="block text-sm font-medium text-ink">
                   Space type
+                  <Required />
                 </label>
                 <select
                   id="spaceType"
@@ -351,7 +459,10 @@ export default function VenueSubmissionForm() {
             </div>
 
             <div>
-              <p className="text-sm font-medium text-ink">Event types this space supports</p>
+              <p className="text-sm font-medium text-ink">
+                Event types this space supports
+                <Required />
+              </p>
               <div className="mt-2">
                 <Controller
                   control={control}
@@ -378,7 +489,10 @@ export default function VenueSubmissionForm() {
 
             <div>
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-ink">Photos</p>
+                <p className="text-sm font-medium text-ink">
+                  Photos
+                  <Required />
+                </p>
                 <span
                   className={`text-xs font-medium ${
                     photos.length >= MIN_PHOTOS ? "text-brass-dark" : "text-ink-soft"
@@ -479,6 +593,7 @@ export default function VenueSubmissionForm() {
               <div>
                 <label htmlFor="maxCapacity" className="block text-sm font-medium text-ink">
                   Max capacity
+                  <Required />
                 </label>
                 <input
                   id="maxCapacity"
@@ -494,6 +609,7 @@ export default function VenueSubmissionForm() {
               <div>
                 <label htmlFor="seatedCapacity" className="block text-sm font-medium text-ink">
                   Seated capacity
+                  <Required />
                 </label>
                 <input
                   id="seatedCapacity"
@@ -512,18 +628,23 @@ export default function VenueSubmissionForm() {
               <div>
                 <label htmlFor="minBookingHours" className="block text-sm font-medium text-ink">
                   Min booking (hrs)
+                  <Required />
                 </label>
                 <input
                   id="minBookingHours"
                   type="number"
-                  min={1}
+                  min={0}
                   {...register("minBookingHours")}
                   className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
                 />
+                {errors.minBookingHours && (
+                  <p className="mt-1 text-xs text-wine">{errors.minBookingHours.message}</p>
+                )}
               </div>
               <div>
                 <label htmlFor="minHourlyRate" className="block text-sm font-medium text-ink">
                   Min $/hr
+                  <Required />
                 </label>
                 <input
                   id="minHourlyRate"
@@ -536,6 +657,7 @@ export default function VenueSubmissionForm() {
               <div>
                 <label htmlFor="maxHourlyRate" className="block text-sm font-medium text-ink">
                   Max $/hr
+                  <Required />
                 </label>
                 <input
                   id="maxHourlyRate"
@@ -580,26 +702,70 @@ export default function VenueSubmissionForm() {
             <div>
               <p className="text-sm font-medium text-ink">Amenities included</p>
               <p className="text-xs text-ink-soft">
-                What&apos;s bundled with the space — equipment, staff, and services.
+                What&apos;s bundled with the space — equipment, staff, and services. Listed
+                alphabetically. Select one, then use the ⓘ button to add a note organizers will
+                see on hover — e.g. &quot;2 bathrooms&quot; or &quot;fridge only, no freezer&quot;
+                for Kitchen.
               </p>
-              <div className="mt-2">
-                <Controller
-                  control={control}
-                  name="amenities"
-                  render={({ field }) => (
-                    <CheckboxGrid
-                      options={Object.entries(AMENITY_LABELS) as [AmenityKey, string][]}
-                      selected={field.value}
-                      onToggle={(value) =>
-                        field.onChange(
-                          field.value.includes(value)
-                            ? field.value.filter((v) => v !== value)
-                            : [...field.value, value]
-                        )
-                      }
-                    />
-                  )}
-                />
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {AMENITY_ENTRIES_ALPHABETICAL.map(([value, label]) => {
+                  const checked = selectedAmenities.includes(value);
+                  const noteOpen = openNoteFor === value;
+                  const note = amenityNotes[value] ?? "";
+                  return (
+                    <div
+                      key={value}
+                      className={`rounded-lg border px-3 py-2 ${
+                        checked ? "border-brass/60 bg-paper-dim" : "border-line"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <label className="flex items-center gap-2.5 text-sm text-ink">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAmenity(value)}
+                            className="h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+                          />
+                          {label}
+                        </label>
+                        {checked && (
+                          <button
+                            type="button"
+                            onClick={() => setOpenNoteFor(noteOpen ? null : value)}
+                            aria-label={
+                              note ? `Edit note about ${label}` : `Add a note about ${label}`
+                            }
+                            title={note || `Add a note about ${label}`}
+                            className={`shrink-0 rounded-full px-1.5 text-xs leading-5 ${
+                              note
+                                ? "text-brass-dark"
+                                : "text-ink-soft hover:bg-paper hover:text-ink"
+                            }`}
+                          >
+                            ⓘ
+                          </button>
+                        )}
+                      </div>
+                      {checked && noteOpen && (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={note}
+                          onChange={(event) => setAmenityNote(value, event.target.value)}
+                          onBlur={() => setOpenNoteFor(null)}
+                          placeholder={`Note for organizers, e.g. "${label} details…"`}
+                          className="mt-2 w-full rounded-md border border-line bg-paper px-2.5 py-1.5 text-xs text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                        />
+                      )}
+                      {checked && !noteOpen && note && (
+                        <p className="mt-1 truncate text-xs text-ink-soft" title={note}>
+                          {note}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -623,6 +789,12 @@ export default function VenueSubmissionForm() {
               Your listing goes live on Discover Spaces immediately after you submit —
               there&apos;s no review step or fee yet in this prototype.
             </p>
+
+            {submitError && (
+              <p className="rounded-lg bg-wine/10 px-3.5 py-2.5 text-sm text-wine">
+                {submitError}
+              </p>
+            )}
 
             <div className="flex gap-3">
               <button

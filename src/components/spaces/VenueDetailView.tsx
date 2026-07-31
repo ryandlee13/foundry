@@ -73,7 +73,7 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
           <div className="mt-8">
             <h2 className="font-display text-lg font-semibold text-ink">Amenities Included</h2>
             <div className="mt-3">
-              <VenueAmenityList amenities={venue.amenities} />
+              <VenueAmenityList amenities={venue.amenities} amenityNotes={venue.amenityNotes} />
             </div>
           </div>
 
