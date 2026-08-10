@@ -39,11 +39,23 @@ export default function VenueDashboardPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-ink">Venue dashboard</h1>
-      <p className="mt-1 text-sm text-ink-soft">
-        Your listings and the bookings against them. Listings go live immediately in this
-        prototype — there&apos;s no review step yet.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-ink">Venue dashboard</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Your listings and the bookings against them. Listings go live immediately in this
+            prototype — there&apos;s no review step yet.
+          </p>
+        </div>
+        {loaded && venues.length > 0 && (
+          <Link
+            href="/list-your-venue"
+            className="shrink-0 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            List another space
+          </Link>
+        )}
+      </div>
 
       <div className="mt-8">
         {!loaded ? (

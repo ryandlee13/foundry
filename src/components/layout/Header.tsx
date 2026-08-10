@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import VenueAccountPopup from "./VenueAccountPopup";
+import ResetPrototypeDataButton from "./ResetPrototypeDataButton";
 import { useAuth } from "@/components/providers/AuthProvider";
 
 type NavLink =
@@ -89,6 +90,7 @@ export default function Header() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
+          <ResetPrototypeDataButton />
           {!isLoading && user ? (
             <>
               <Link
@@ -178,6 +180,10 @@ export default function Header() {
             })}
           </nav>
           <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
+            <ResetPrototypeDataButton
+              className="rounded-full border border-dashed border-line px-5 py-2.5 text-center text-sm font-semibold text-ink-soft"
+              onConfirmed={() => setMenuOpen(false)}
+            />
             {!isLoading && user ? (
               <>
                 <Link
