@@ -1,12 +1,14 @@
-const MAX_DIMENSION = 1280;
-const JPEG_QUALITY = 0.72;
+const MAX_DIMENSION = 960;
+const JPEG_QUALITY = 0.55;
 
 /**
  * Resizes an image file client-side (canvas) and returns a compressed JPEG
  * data URL. There's no upload backend in this prototype, so photos are
- * persisted directly as data URLs in the venue record — resizing keeps each
- * one small enough that a handful of them still fit inside localStorage's
- * per-origin quota (~5–10MB).
+ * persisted directly as data URLs in the venue record. Base64 (+33%) and
+ * localStorage's UTF-16 string storage (commonly ~2 bytes/char) mean the
+ * stored cost of a photo runs 2-3x its raw JPEG byte size, so these
+ * dimension/quality values are kept low enough that a full listing (7+
+ * photos) still fits inside localStorage's per-origin quota (~5–10MB).
  */
 export function resizeImageFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
