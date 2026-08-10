@@ -2,10 +2,14 @@ import type { ChatMessage, MessageThread } from "@/lib/types/vendors";
 import { createNotification } from "./notifications";
 
 /**
- * Browser-local message threads. A thread is only ever created by
- * `getOrCreateThreadForEngagement` below, which is called exclusively from
- * the accept-proposal flow (see engagements.ts) — so a thread cannot exist,
- * and therefore cannot be opened, until a proposal has been accepted.
+ * Browser-local message threads, anchored to a proposal (not an engagement).
+ * A thread is only ever created via `getOrCreateThreadForProposal` below,
+ * called from exactly two places: `startConversation()` (organizer opts
+ * into messaging before any commitment) and `acceptProposal()` (falls back
+ * to creating one if a conversation was never started) — see engagements.ts.
+ * A vendor can never create a thread. `engagementId` starts null and is
+ * upgraded in place by `attachEngagementToThread()` when/if that proposal is
+ * later finalized — the same thread carries through, never duplicated.
  */
 const THREADS_KEY = "foundry.messages.threads";
 const MESSAGES_KEY = "foundry.messages.messages";
@@ -52,28 +56,53 @@ export function getThreadForEngagement(engagementId: string): MessageThread | un
   return getThreadsRaw().find((thread) => thread.engagementId === engagementId);
 }
 
+export function getThreadForProposal(proposalId: string): MessageThread | undefined {
+  return getThreadsRaw().find((thread) => thread.proposalId === proposalId);
+}
+
 export function getThreadsForParticipant(accountId: string): MessageThread[] {
   return getThreadsRaw().filter((thread) => thread.organizerId === accountId || thread.vendorOwnerId === accountId);
 }
 
-/** Only ever called after a proposal is accepted — see acceptProposal() in engagements.ts. */
-export function getOrCreateThreadForEngagement(input: {
-  engagementId: string;
+/**
+ * Idempotent by proposalId — called from startConversation() (thread starts
+ * with engagementId: null) and from acceptProposal() (reuses the existing
+ * thread if one exists, or creates one if the organizer finalized without
+ * ever starting a conversation first).
+ */
+export function getOrCreateThreadForProposal(input: {
+  proposalId: string;
+  eventNeedId: string;
   organizerId: string;
   vendorOwnerId: string;
 }): MessageThread {
-  const existing = getThreadForEngagement(input.engagementId);
+  const existing = getThreadForProposal(input.proposalId);
   if (existing) return existing;
 
   const thread: MessageThread = {
     id: crypto.randomUUID(),
-    engagementId: input.engagementId,
+    proposalId: input.proposalId,
+    eventNeedId: input.eventNeedId,
+    engagementId: null,
     organizerId: input.organizerId,
     vendorOwnerId: input.vendorOwnerId,
     createdAt: new Date().toISOString(),
   };
   saveThreads([...getThreadsRaw(), thread]);
   return thread;
+}
+
+/** Upgrades an existing proposal-anchored thread in place once that proposal is finalized — never creates a new thread. */
+export function attachEngagementToThread(proposalId: string, engagementId: string): MessageThread | undefined {
+  const threads = getThreadsRaw();
+  const index = threads.findIndex((thread) => thread.proposalId === proposalId);
+  if (index === -1) return undefined;
+
+  const updated: MessageThread = { ...threads[index], engagementId };
+  const next = [...threads];
+  next[index] = updated;
+  saveThreads(next);
+  return updated;
 }
 
 export function isThreadParticipant(thread: MessageThread, accountId: string): boolean {

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getVendorProfileByOwnerId, updateVendorProfile } from "@/lib/vendors/profiles";
-import { getPublishedEventNeeds } from "@/lib/vendors/eventNeeds";
+import { getPublishedEventNeeds, formatNeedEventLabel } from "@/lib/vendors/eventNeeds";
 import { getProposalsForNeed } from "@/lib/vendors/proposals";
+import { getBookingById } from "@/lib/spaces/bookings";
 import { isMatch, getMatchReason } from "@/lib/vendors/matching";
 import { getSavedNeeds, toggleSavedNeed } from "@/lib/vendors/savedNeeds";
 import { VENDOR_SKILLS } from "@/lib/vendors/skills";
@@ -42,11 +43,18 @@ export default function VendorGigsPage() {
       setNow(nowIso);
       const withMatch: EventNeedWithMatch[] = published
         .filter((need) => isMatch(vendorProfile, need))
-        .map((need) => ({
-          ...need,
-          matchReason: getMatchReason(vendorProfile, need),
-          bidCount: getProposalsForNeed(need.id).filter((p) => p.status === "submitted" || p.status === "shortlisted" || p.status === "accepted").length,
-        }));
+        .map((need) => {
+          const booking = getBookingById(need.bookingId);
+          return {
+            ...need,
+            matchReason: getMatchReason(vendorProfile, need),
+            bidCount: getProposalsForNeed(need.id).filter(
+              (p) => p.status === "submitted" || p.status === "shortlisted" || p.status === "in_discussion" || p.status === "accepted"
+            ).length,
+            eventLabel: formatNeedEventLabel(need, booking?.eventName ?? null),
+            eventType: booking?.eventType ?? null,
+          };
+        });
       setAllMatches(withMatch);
       setSavedIds(new Set(getSavedNeeds(vendorProfile.id).map((s) => s.eventNeedId)));
     }

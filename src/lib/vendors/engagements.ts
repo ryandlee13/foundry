@@ -1,8 +1,16 @@
-import type { EngagementStatus, VendorEngagement, VendorProposal } from "@/lib/types/vendors";
+import type { EngagementStatus, MessageThread, VendorEngagement, VendorProposal } from "@/lib/types/vendors";
 import { getEventNeedById, fillOnePosition, canFillPosition } from "./eventNeeds";
-import { getProposalById, markProposalAccepted, declineProposal } from "./proposals";
+import {
+  getProposalById,
+  getProposalsForNeed,
+  markProposalAccepted,
+  markProposalInDiscussion,
+  closeProposalOpportunityFilled,
+  selectProposalsToCloseOnFill,
+  declineProposal,
+} from "./proposals";
 import { getVendorProfileById, updateVendorProfile } from "./profiles";
-import { getOrCreateThreadForEngagement } from "./messages";
+import { getOrCreateThreadForProposal, attachEngagementToThread } from "./messages";
 import { createNotification } from "./notifications";
 import { createPortfolioItem } from "./eventPortfolio";
 import { getSkillName } from "./skills";
@@ -65,20 +73,71 @@ export interface AcceptProposalResult {
   engagement: VendorEngagement;
 }
 
+export interface StartConversationResult {
+  proposal: VendorProposal;
+  thread: MessageThread;
+}
+
 /**
- * The single cross-entity "accept" transaction: marks the proposal accepted,
- * fills one position on the event need (auto-closing it once full), creates
- * the engagement, unlocks the post-acceptance message thread, and notifies
- * the vendor. Mirrors docs/ARCHITECTURE.md's "cross-row transitions go
- * through one function, not chained client writes" principle, adapted to
- * this client-only prototype (no server RPC exists to run it atomically for
- * real — see CLAUDE.md).
+ * The planner's pre-commitment "I'm interested, let's talk" action. Opens
+ * (or reuses) a message thread anchored to this proposal and moves it to
+ * "in_discussion" — deliberately does NOT create a VendorEngagement, does
+ * NOT touch competing proposals, and is idempotent (calling it again on an
+ * already-in-discussion proposal just returns the existing thread without
+ * re-notifying the vendor).
+ */
+export function startConversation(proposalId: string): StartConversationResult {
+  const proposal = getProposalById(proposalId);
+  if (!proposal) throw new Error("Proposal not found.");
+  if (proposal.status !== "submitted" && proposal.status !== "shortlisted" && proposal.status !== "in_discussion") {
+    throw new Error("Only an active proposal can start a conversation.");
+  }
+
+  const need = getEventNeedById(proposal.eventNeedId);
+  if (!need) throw new Error("Event need not found.");
+  const vendorProfile = getVendorProfileById(proposal.vendorProfileId);
+  if (!vendorProfile) throw new Error("Vendor profile not found.");
+
+  const alreadyInDiscussion = proposal.status === "in_discussion";
+  const updatedProposal = alreadyInDiscussion ? proposal : markProposalInDiscussion(proposalId);
+  if (!updatedProposal) throw new Error("Failed to update proposal.");
+
+  const thread = getOrCreateThreadForProposal({
+    proposalId: proposal.id,
+    eventNeedId: need.id,
+    organizerId: need.organizerId,
+    vendorOwnerId: vendorProfile.ownerId,
+  });
+
+  if (!alreadyInDiscussion) {
+    createNotification({
+      recipientId: vendorProfile.ownerId,
+      type: "conversation_started",
+      title: "An organizer wants to talk",
+      body: `The organizer for "${need.title}" started a conversation about your proposal. This doesn't finalize anything yet.`,
+      link: `/dashboard/messages/${thread.id}`,
+    });
+  }
+
+  return { proposal: updatedProposal, thread };
+}
+
+/**
+ * The single cross-entity "finalize" transaction: marks the proposal
+ * accepted, fills one position on the event need (auto-closing it once
+ * full), creates the engagement, upgrades (or creates) the message thread,
+ * closes out any other still-active proposals once the need is fully
+ * filled, and notifies everyone involved. Mirrors docs/ARCHITECTURE.md's
+ * "cross-row transitions go through one function, not chained client
+ * writes" principle, adapted to this client-only prototype (no server RPC
+ * exists to run it atomically for real — see CLAUDE.md and this feature's
+ * known-limitations note on cross-tab races).
  */
 export function acceptProposal(proposalId: string): AcceptProposalResult {
   const proposal = getProposalById(proposalId);
   if (!proposal) throw new Error("Proposal not found.");
-  if (proposal.status !== "submitted" && proposal.status !== "shortlisted") {
-    throw new Error("Only a submitted or shortlisted proposal can be accepted.");
+  if (proposal.status !== "submitted" && proposal.status !== "shortlisted" && proposal.status !== "in_discussion") {
+    throw new Error("Only a submitted, shortlisted, or in-discussion proposal can be finalized.");
   }
 
   const need = getEventNeedById(proposal.eventNeedId);
@@ -92,7 +151,7 @@ export function acceptProposal(proposalId: string): AcceptProposalResult {
 
   const updatedProposal = markProposalAccepted(proposalId);
   if (!updatedProposal) throw new Error("Failed to update proposal.");
-  fillOnePosition(need.id);
+  const updatedNeed = fillOnePosition(need.id);
 
   const now = new Date().toISOString();
   const engagement: VendorEngagement = {
@@ -113,19 +172,39 @@ export function acceptProposal(proposalId: string): AcceptProposalResult {
   };
   saveAll([...getAll(), engagement]);
 
-  getOrCreateThreadForEngagement({
-    engagementId: engagement.id,
+  const thread = getOrCreateThreadForProposal({
+    proposalId: proposal.id,
+    eventNeedId: need.id,
     organizerId: need.organizerId,
     vendorOwnerId: vendorProfile.ownerId,
   });
+  attachEngagementToThread(proposal.id, engagement.id);
 
   createNotification({
     recipientId: vendorProfile.ownerId,
     type: "bid_accepted",
-    title: "Your proposal was accepted",
-    body: `Your proposal for "${need.title}" was accepted. You can now message the organizer.`,
-    link: "/dashboard/vendor/confirmed",
+    title: "Deal finalized 🎉",
+    body: `Your proposal for "${need.title}" was finalized. You can now message the organizer.`,
+    link: `/dashboard/messages/${thread.id}`,
   });
+
+  if (updatedNeed?.status === "filled") {
+    const idsToClose = selectProposalsToCloseOnFill(getProposalsForNeed(need.id), proposal.id);
+    for (const id of idsToClose) {
+      closeProposalOpportunityFilled(id);
+      const losingProposal = getProposalById(id);
+      const losingVendor = losingProposal ? getVendorProfileById(losingProposal.vendorProfileId) : undefined;
+      if (losingVendor) {
+        createNotification({
+          recipientId: losingVendor.ownerId,
+          type: "opportunity_filled",
+          title: "Opportunity filled",
+          body: `The ${getSkillName(need.skillSlug)} position for "${need.title}" has been filled. Your proposal has been closed.`,
+          link: "/dashboard/vendor/bids",
+        });
+      }
+    }
+  }
 
   return { proposal: updatedProposal, engagement };
 }

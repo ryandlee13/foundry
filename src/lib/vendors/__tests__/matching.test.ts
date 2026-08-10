@@ -195,6 +195,15 @@ describe("computeCompetitiveBidSummary", () => {
     expect(summary.lowestActiveAmount).toBe(400);
   });
 
+  it("counts in_discussion proposals as active", () => {
+    const summary = computeCompetitiveBidSummary([
+      makeBid({ proposedAmount: 400, status: "in_discussion" }),
+      makeBid({ proposedAmount: 600, status: "submitted" }),
+    ]);
+    expect(summary.totalBids).toBe(2);
+    expect(summary.lowestActiveAmount).toBe(400);
+  });
+
   it("computes lowest/highest for two active bids", () => {
     const summary = computeCompetitiveBidSummary([
       makeBid({ proposedAmount: 300 }),

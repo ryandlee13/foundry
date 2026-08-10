@@ -3,21 +3,30 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { getBookingById } from "@/lib/spaces/bookings";
+import { getBookingById, formatEventLabel } from "@/lib/spaces/bookings";
 import { getVenueBySlugAnywhere } from "@/lib/spaces/submittedVenues";
-import { getEventNeedsForBooking, pauseEventNeed, resumeEventNeed, closeEventNeed, cancelEventNeed } from "@/lib/vendors/eventNeeds";
+import {
+  getEventNeedsForBooking,
+  pauseEventNeed,
+  resumeEventNeed,
+  closeEventNeed,
+  cancelEventNeed,
+  computeEventNeedPhase,
+} from "@/lib/vendors/eventNeeds";
 import { publishEventNeedAndNotifyVendors } from "@/lib/vendors/publishing";
-import { getProposalsForNeed } from "@/lib/vendors/proposals";
+import { getProposalsForNeed, ensureExpiringDiscussionNotificationsForOrganizer } from "@/lib/vendors/proposals";
 import { getEngagementsForBooking, completeEngagement, cancelEngagementByOrganizer } from "@/lib/vendors/engagements";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { getThreadForEngagement, getUnreadMessageCount } from "@/lib/vendors/messages";
 import { getSkillName } from "@/lib/vendors/skills";
-import { EVENT_NEED_STATUS_LABELS, ENGAGEMENT_STATUS_LABELS } from "@/lib/vendors/labels";
+import { formatDeadlineDate } from "@/lib/vendors/expiration";
+import { EVENT_NEED_STATUS_LABELS, ENGAGEMENT_STATUS_LABELS, EVENT_NEED_PHASE_LABELS } from "@/lib/vendors/labels";
 import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
-import VendorRequestForm from "./VendorRequestForm";
+import FindVendorsPrompt from "./FindVendorsPrompt";
+import VendorNeedsBuilder from "./VendorNeedsBuilder";
 import type { Booking } from "@/lib/types/spaces";
 import type { EngagementStatus, EventNeed, EventNeedStatus, VendorEngagement, VendorProfile } from "@/lib/types/vendors";
 
@@ -58,6 +67,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
     const found = getBookingById(bookingId);
     setBooking(found ?? null);
     if (found) {
+      ensureExpiringDiscussionNotificationsForOrganizer(user.id);
       const venue = getVenueBySlugAnywhere(found.venueSlug);
       if (venue) {
         setPublicLocation(venue.neighborhood);
@@ -138,7 +148,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Find vendors</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            {booking.venueName} · {booking.eventDate} · {booking.startTime}–{booking.endTime}
+            {formatEventLabel(booking)} · {booking.startTime}–{booking.endTime}
           </p>
         </div>
         <button
@@ -148,6 +158,10 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
         >
           Looking for a ___
         </button>
+      </div>
+
+      <div className="mt-6">
+        <FindVendorsPrompt booking={booking} onOpenBuilder={() => setFormOpen(true)} />
       </div>
 
       <div className="mt-8">
@@ -167,8 +181,11 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
                     </p>
                     <p className="mt-0.5 text-xs text-ink-soft">
                       {getSkillName(need.skillSlug)} · {need.positionsFilled}/{need.positionsAvailable} filled ·{" "}
-                      {bidCounts[need.id] ?? 0} bid{(bidCounts[need.id] ?? 0) === 1 ? "" : "s"} · Deadline{" "}
-                      {need.proposalDeadline}
+                      {bidCounts[need.id] ?? 0} bid{(bidCounts[need.id] ?? 0) === 1 ? "" : "s"} · Proposals due{" "}
+                      {formatDeadlineDate(need.proposalDeadline)}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-brass-dark">
+                      {EVENT_NEED_PHASE_LABELS[computeEventNeedPhase(need, getProposalsForNeed(need.id))]}
                     </p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[need.status]}`}>
@@ -267,15 +284,16 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
 
       <Dialog open={formOpen} onClose={() => setFormOpen(false)} labelledBy="vendor-request-form-title" panelClassName="w-full max-w-xl p-6 sm:p-8">
         <h2 id="vendor-request-form-title" className="font-display text-xl font-semibold text-ink">
-          Looking for a ___
+          Find vendors
         </h2>
         <div className="mt-4">
-          <VendorRequestForm
+          <VendorNeedsBuilder
             booking={booking}
             organizerId={user.id}
             publicLocation={publicLocation}
             coordinates={coordinates}
-            onCreated={() => {
+            eventLabel={formatEventLabel(booking)}
+            onDone={() => {
               setFormOpen(false);
               refresh();
             }}

@@ -33,7 +33,7 @@ export function useVendorDashboardData(ownerId: string | undefined) {
       const now = Date.now();
       setExpiringSoonCount(
         vendorProposals.filter((p) => {
-          if (p.status !== "submitted" && p.status !== "shortlisted") return false;
+          if (p.status !== "submitted" && p.status !== "shortlisted" && p.status !== "in_discussion") return false;
           const hoursUntil = (new Date(p.expiresAt).getTime() - now) / (60 * 60 * 1000);
           return hoursUntil > 0 && hoursUntil <= 24;
         }).length
@@ -56,7 +56,9 @@ export function useVendorDashboardData(ownerId: string | undefined) {
     refresh();
   }, [refresh]);
 
-  const activeProposals = proposals.filter((p) => p.status === "submitted" || p.status === "shortlisted");
+  const activeProposals = proposals.filter(
+    (p) => p.status === "submitted" || p.status === "shortlisted" || p.status === "in_discussion"
+  );
   const confirmedUpcoming = engagements.filter((e) => e.status === "confirmed" || e.status === "in_progress");
   const readiness = profile ? getPublishReadiness(profile) : null;
 

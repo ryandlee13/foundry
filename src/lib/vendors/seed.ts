@@ -1,6 +1,6 @@
 import * as authStorage from "@/lib/auth/storage";
 import { VENUES } from "@/lib/spaces/venues";
-import { addBooking, updateBookingStatus } from "@/lib/spaces/bookings";
+import { addBooking, updateBookingStatus, getBookingsForOrganizer } from "@/lib/spaces/bookings";
 import { SF_LOCATIONS } from "@/lib/spaces/locations";
 import {
   createDraftVendorProfile,
@@ -10,7 +10,7 @@ import {
 } from "./profiles";
 import { createDraftEventNeed, publishEventNeed, getEventNeedsForOrganizer } from "./eventNeeds";
 import { createProposal, getProposalsForVendor, declineProposal } from "./proposals";
-import { acceptProposal, completeEngagement } from "./engagements";
+import { acceptProposal, completeEngagement, startConversation } from "./engagements";
 import { createReview } from "./reviews";
 import { computeExpiresAt } from "./expiration";
 import type {
@@ -65,6 +65,13 @@ const VENDOR_SEEDS: VendorSeed[] = [
   { name: "Yuki Tanaka", email: "demo-vendor-10@example.com", skill: "sound_engineer", neighborhood: "Japantown", description: "Live sound mixing and PA setup for concerts, panels, and corporate events.", years: 6, portfolioUrl: "https://youtube.com/demo-yuki-mixes", portfolioProviderHint: "Live mixes", remote: false, pricingModel: "day_rate", price: 700, experience: "experienced" },
   { name: "Grace Whitfield", email: "demo-vendor-11@example.com", skill: "decorator", neighborhood: "Pacific Heights", description: "Event styling and installations — balloon arches, backdrops, tablescapes.", years: 4, portfolioUrl: "https://instagram.com/demo-decor-grace", portfolioProviderHint: "Recent installs", remote: false, pricingModel: "package", price: 800, experience: "intermediate" },
   { name: "Owen Baptiste", email: "demo-vendor-12@example.com", skill: "dj", neighborhood: "Castro", description: "High-energy DJ for nightlife and brand events, blends genres to keep floors full.", years: 4, portfolioUrl: "https://soundcloud.com/demo-owen-mixes", portfolioProviderHint: "Recent mix", remote: false, pricingModel: "flat_fee", price: 550, experience: "intermediate" },
+  { name: "Talia Nguyen", email: "demo-vendor-13@example.com", skill: "dj", neighborhood: "Mission District", description: "House and disco DJ, resident at several SF clubs and private parties.", years: 5, portfolioUrl: "https://mixcloud.com/demo-talia-sets", portfolioProviderHint: "Mixcloud set", remote: false, pricingModel: "flat_fee", price: 620, experience: "experienced" },
+  { name: "Dario Silva", email: "demo-vendor-14@example.com", skill: "dj", neighborhood: "SoMa", description: "Open-format DJ specializing in weddings and milestone celebrations.", years: 8, portfolioUrl: "https://soundcloud.com/demo-dario-mixes", portfolioProviderHint: "Wedding set", remote: false, pricingModel: "flat_fee", price: 700, experience: "veteran" },
+  { name: "Elena Brooks", email: "demo-vendor-15@example.com", skill: "photographer", neighborhood: "Noe Valley", description: "Editorial-style event photography with a focus on candid moments.", years: 6, portfolioUrl: "https://instagram.com/demo-photo-elena", portfolioProviderHint: "Recent shoots", remote: false, pricingModel: "hourly", price: 175, experience: "experienced" },
+  { name: "Marcus Chen", email: "demo-vendor-16@example.com", skill: "photographer", neighborhood: "Richmond District", description: "Nightlife and flash photography specialist for parties and brand events.", years: 4, portfolioUrl: "https://demo-marcuschenphoto.example.com", portfolioProviderHint: "Portfolio site", remote: false, pricingModel: "flat_fee", price: 650, experience: "intermediate" },
+  { name: "Isabelle Moreau", email: "demo-vendor-17@example.com", skill: "florist", neighborhood: "Pacific Heights", description: "Romantic, garden-style arrangements for weddings and intimate events.", years: 9, portfolioUrl: "https://instagram.com/demo-florist-isabelle", portfolioProviderHint: "Recent arrangements", remote: false, pricingModel: "package", price: 900, experience: "veteran" },
+  { name: "Rosa Delgado", email: "demo-vendor-18@example.com", skill: "florist", neighborhood: "Mission District", description: "Bold, modern floral design for parties and brand activations.", years: 5, portfolioUrl: "https://instagram.com/demo-florist-rosa", portfolioProviderHint: "Recent installs", remote: false, pricingModel: "package", price: 700, experience: "experienced" },
+  { name: "Wendy Park", email: "demo-vendor-19@example.com", skill: "florist", neighborhood: "Hayes Valley", description: "Seasonal, locally-sourced arrangements for events of every size.", years: 3, portfolioUrl: "https://demo-wendyparkflorals.example.com", portfolioProviderHint: "Portfolio site", remote: false, pricingModel: "package", price: 550, experience: "intermediate" },
 ];
 
 interface NeedSeed {
@@ -208,6 +215,170 @@ function seedEventNeed(seed: NeedSeed) {
   return { need, organizer, venue };
 }
 
+/**
+ * A single richly-populated event demonstrating the full vendor sourcing
+ * lifecycle end to end: multiple needs on one event, several proposals per
+ * need in a mix of states (submitted / in_discussion / finalized-with-
+ * auto-closed-competitors), so the demo showcases every UI state without
+ * pre-baking the DJ need's outcome — that one's left open so a reviewer can
+ * manually walk through Start Conversation → message → Finalize Deal
+ * themselves, per the product's own "test the complete flow" checklist.
+ */
+function seedFoundrySummerSocial(vendorsBySkill: Map<VendorSkillSlug, VendorProfile[]>): {
+  needsCreated: number;
+  proposalsCreated: number;
+  engagementsCompleted: number;
+} {
+  const EVENT_NAME = "Foundry Summer Social";
+  const organizer = getOrCreateAccount("Renee Park", "demo-organizer-1@example.com", "organizer");
+  authStorage.addRoleToAccount(organizer.id, "organizer");
+
+  const foundVenue = VENUES.find((v) => v.slug === "neon-foundry");
+  if (!foundVenue) throw new Error("Unknown seed venue: neon-foundry");
+  const venue = foundVenue;
+
+  let needsCreated = 0;
+  let proposalsCreated = 0;
+  let engagementsCompleted = 0;
+
+  const existingBooking = getBookingsForOrganizer(organizer.id).find((b) => b.eventName === EVENT_NAME);
+  const eventDate = new Date(Date.now() + 23 * 24 * 60 * 60 * 1000);
+  const eventDateStr = eventDate.toISOString().slice(0, 10);
+
+  const booking =
+    existingBooking ??
+    addBooking({
+      venueId: venue.id,
+      venueName: venue.name,
+      venueSlug: venue.slug,
+      organizerId: organizer.id,
+      organizerName: organizer.name,
+      eventDate: eventDateStr,
+      startTime: "19:00",
+      endTime: "01:00",
+      attendees: 150,
+      coiAgreed: true,
+      depositAgreed: true,
+      eventName: EVENT_NAME,
+      eventType: "party",
+    });
+  if (!existingBooking) updateBookingStatus(booking.id, "confirmed");
+
+  const existingNeeds = getEventNeedsForOrganizer(organizer.id).filter((n) => n.bookingId === booking.id);
+
+  function getOrCreateNeed(
+    skill: VendorSkillSlug,
+    title: string,
+    description: string,
+    deliverables: string,
+    budgetMin: number,
+    budgetMax: number
+  ) {
+    const existing = existingNeeds.find((n) => n.skillSlug === skill);
+    if (existing) return existing;
+    needsCreated += 1;
+    const need = createDraftEventNeed({
+      bookingId: booking.id,
+      organizerId: organizer.id,
+      skillSlug: skill,
+      title,
+      description,
+      deliverables,
+      locationType: "in_person",
+      publicLocation: venue.neighborhood,
+      coordinates: venue.coordinates,
+      eventDate: eventDateStr,
+      startTime: "19:00",
+      endTime: "01:00",
+      setupTime: "1 hour before start",
+      estimatedAttendance: 150,
+      positionsAvailable: 1,
+      budgetMin,
+      budgetMax,
+      preferredPricingModel: null,
+      equipmentRequirements: "",
+      experiencePreference: null,
+      portfolioRequired: false,
+      proposalDeadline: new Date(eventDate.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      allowQuestions: true,
+      additionalNotes: "",
+    });
+    publishEventNeed(need.id);
+    return need;
+  }
+
+  function seedProposal(needId: string, vendor: VendorProfile, amount: number, message: string) {
+    const already = getProposalsForVendor(vendor.id).some((p) => p.eventNeedId === needId);
+    if (already) return null;
+    const proposal = createProposal({
+      eventNeedId: needId,
+      vendorProfileId: vendor.id,
+      proposedAmount: amount,
+      pricingModel: vendor.services[0]?.pricingModel ?? "flat_fee",
+      message,
+      deliverables: "",
+      equipmentIncluded: "",
+      availabilityConfirmed: true,
+      setupRequirements: "",
+      portfolioLinkIds: vendor.portfolioLinks.map((l) => l.id),
+      questionsForOrganizer: "",
+      expiresAt: computeExpiresAt(new Date().toISOString(), 5),
+    });
+    proposalsCreated += 1;
+    return proposal;
+  }
+
+  const djs = vendorsBySkill.get("dj") ?? [];
+  const djNeed = getOrCreateNeed(
+    "dj",
+    "Looking for a DJ",
+    "A DJ who primarily plays house music and can bring their own controller for a 6-hour rooftop set.",
+    "6-hour DJ set, own controller and monitors",
+    500,
+    900
+  );
+  const djProposals = djs
+    .slice(0, 4)
+    .map((vendor, i) =>
+      seedProposal(djNeed.id, vendor, 550 + i * 60, `I'd love to play "${EVENT_NAME}" — house-heavy sets are exactly my lane.`)
+    )
+    .filter((p): p is VendorProposal => p !== null);
+  if (djProposals[0]) startConversation(djProposals[0].id);
+
+  const photographers = vendorsBySkill.get("photographer") ?? [];
+  const photoNeed = getOrCreateNeed(
+    "photographer",
+    "Looking for a Photographer",
+    "Looking for someone comfortable shooting nightlife and flash photography for a rooftop party.",
+    "200+ edited photos within 5 business days",
+    600,
+    1000
+  );
+  const photoProposals = photographers
+    .slice(0, 3)
+    .map((vendor, i) => seedProposal(photoNeed.id, vendor, 700 + i * 50, "Nightlife and flash photography is my specialty — would love to shoot this."))
+    .filter((p): p is VendorProposal => p !== null);
+  if (photoProposals[0] && photoNeed.status === "published") {
+    acceptProposal(photoProposals[0].id);
+    engagementsCompleted += 1;
+  }
+
+  const florists = vendorsBySkill.get("florist") ?? [];
+  const floristNeed = getOrCreateNeed(
+    "florist",
+    "Looking for a Florist",
+    "A florist who can create arrangements primarily using red and white roses for a summer rooftop party.",
+    "Arrangements for 10 tables plus a welcome installation",
+    400,
+    800
+  );
+  florists
+    .slice(0, 3)
+    .forEach((vendor, i) => seedProposal(floristNeed.id, vendor, 450 + i * 75, "Red and white roses are a favorite palette of mine — happy to share past work."));
+
+  return { needsCreated, proposalsCreated, engagementsCompleted };
+}
+
 function backdateProposalExpiry(proposalId: string, daysAgo: number) {
   if (typeof window === "undefined") return;
   const raw = window.localStorage.getItem(PROPOSALS_KEY);
@@ -263,7 +434,7 @@ export function seedVendorMarketplaceDemoData(): SeedResult {
       setupRequirements: "",
       portfolioLinkIds: vendor.portfolioLinks.map((l) => l.id),
       questionsForOrganizer: "",
-      expirationDays: 5,
+      expiresAt: computeExpiresAt(new Date().toISOString(), 5),
     });
     proposalsCreated += 1;
 
@@ -306,16 +477,18 @@ export function seedVendorMarketplaceDemoData(): SeedResult {
         setupRequirements: "",
         portfolioLinkIds: [],
         questionsForOrganizer: "",
-        expirationDays: 7,
+        expiresAt: computeExpiresAt(new Date().toISOString(), 7),
       });
       proposalsCreated += 1;
     }
   });
 
+  const summerSocial = seedFoundrySummerSocial(bySkill);
+
   return {
     vendorsCreated: vendors.length,
-    needsCreated: NEED_SEEDS.length,
-    proposalsCreated,
-    engagementsCompleted,
+    needsCreated: NEED_SEEDS.length + summerSocial.needsCreated,
+    proposalsCreated: proposalsCreated + summerSocial.proposalsCreated,
+    engagementsCompleted: engagementsCompleted + summerSocial.engagementsCompleted,
   };
 }

@@ -39,15 +39,24 @@ export function addBooking(input: {
   attendees: number;
   coiAgreed: boolean;
   depositAgreed: boolean;
+  eventName?: string | null;
+  eventType?: Booking["eventType"];
 }): Booking {
   const booking: Booking = {
     id: crypto.randomUUID(),
     status: "pending",
     createdAt: new Date().toISOString(),
+    eventName: null,
+    eventType: null,
     ...input,
   };
   saveBookings([...getBookings(), booking]);
   return booking;
+}
+
+/** Pure: the organizer-chosen event name, falling back to "{venue} · {date}" when unset. */
+export function formatEventLabel(booking: Pick<Booking, "eventName" | "venueName" | "eventDate">): string {
+  return booking.eventName?.trim() || `${booking.venueName} · ${booking.eventDate}`;
 }
 
 export function updateBookingStatus(

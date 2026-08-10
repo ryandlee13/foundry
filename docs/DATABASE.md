@@ -455,15 +455,18 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
     something to bolt onto the prototype.
   - **RLS:** `select`/`update` (mark read): owner (`recipient_id = auth.uid()`) only.
     `insert`: server-side only, as a side effect of the action that triggered it.
-- **`message_threads` / `messages`** (extends §16/§17): add
-  `vendor_engagement_id` → `vendor_engagements.id` as a third possible `context_type` (or,
-  simpler in the prototype's actual shape, `message_threads.engagement_id` directly, since
-  the prototype never generalized to a polymorphic `context_type`/`context_id` pair for
-  vendor threads — every vendor-related thread has exactly one `engagement_id`).
-  **A thread must not be creatable except as part of the accept-proposal transaction** —
-  see `getOrCreateThreadForEngagement()`, called only from `acceptProposal()`. This is the
-  concrete mechanism behind `docs/SECURITY.md`'s "chat cannot be accessed before
-  acceptance" requirement.
+- **`message_threads` / `messages`** (extends §16/§17): `message_threads` is anchored to
+  `proposal_id` → `vendor_proposals.id` (not `engagement_id`) plus a denormalized
+  `event_need_id` for grouping/headers. `engagement_id` is nullable — null until that
+  proposal is finalized, at which point the existing thread row is updated in place
+  (never a second thread created for the same proposal). **A thread is only creatable by
+  the organizer who owns the parent event need, for a proposal on that need** — via
+  `startConversation()` (pre-commitment: planner opts into messaging a specific vendor
+  before finalizing, proposal moves to `in_discussion`) or `acceptProposal()` (falls back
+  to creating one if the organizer finalized without ever starting a conversation first).
+  A vendor can never create a thread. This is the concrete mechanism behind
+  `docs/SECURITY.md`'s "chat unlock timing" rule — see that doc for the up-to-date
+  statement (this replaced an earlier accept-only-creation design).
 
 ---
 

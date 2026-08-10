@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeExpiresAt, isPastExpiration, getEffectiveProposalStatus, formatExpiration } from "../expiration";
+import { computeExpiresAt, isPastExpiration, getEffectiveProposalStatus, formatExpiration, formatDeadlineDate } from "../expiration";
 
 describe("computeExpiresAt", () => {
   it("adds the given number of days to the from-date", () => {
@@ -44,8 +44,13 @@ describe("getEffectiveProposalStatus", () => {
     expect(status).toBe("submitted");
   });
 
+  it("lapses an in-discussion proposal past its expiresAt into 'expired'", () => {
+    const status = getEffectiveProposalStatus({ status: "in_discussion", expiresAt: "2026-01-01T00:00:00.000Z" }, now);
+    expect(status).toBe("expired");
+  });
+
   it("does not lapse terminal statuses even if expiresAt has passed", () => {
-    for (const status of ["accepted", "declined", "withdrawn", "canceled"] as const) {
+    for (const status of ["accepted", "declined", "withdrawn", "canceled", "closed_opportunity_filled"] as const) {
       expect(getEffectiveProposalStatus({ status, expiresAt: "2026-01-01T00:00:00.000Z" }, now)).toBe(status);
     }
   });
@@ -62,5 +67,13 @@ describe("formatExpiration", () => {
 
   it("reports hours remaining when under a day out", () => {
     expect(formatExpiration("2026-01-01T05:00:00.000Z", "2026-01-01T00:00:00.000Z")).toBe("Expires in 5 hours");
+  });
+});
+
+describe("formatDeadlineDate", () => {
+  it("renders a short human date and time", () => {
+    const result = formatDeadlineDate("2026-08-18T18:00:00.000Z");
+    expect(result).toContain("Aug");
+    expect(result).toContain("18");
   });
 });

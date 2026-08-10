@@ -163,10 +163,16 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   records — the same limitation the whole prototype already has for venues/bookings, not a
   new risk introduced here. Real RLS-backed proposal privacy is a Phase 5 requirement, not
   optional polish.
-- Message threads (`src/lib/vendors/messages.ts`) can only be created by
-  `getOrCreateThreadForEngagement()`, called exclusively from `acceptProposal()` in
-  `engagements.ts` — so a thread cannot exist, and therefore cannot be opened, until a
-  proposal has been accepted. Don't add another code path that creates a thread.
+- Message threads (`src/lib/vendors/messages.ts`) are anchored to a proposal
+  (`proposalId`/`eventNeedId`), not an engagement — `engagementId` starts `null` and is
+  upgraded in place once that proposal is finalized, never duplicated into a second
+  thread. A thread can only be created via `getOrCreateThreadForProposal()`, called from
+  exactly two places in `engagements.ts`: `startConversation()` (the organizer's
+  pre-commitment "let's talk" action — moves the proposal to `in_discussion`, doesn't
+  touch competing proposals, doesn't create an engagement) and `acceptProposal()` (reuses
+  an existing thread, or creates one if the organizer finalized without ever starting a
+  conversation). A vendor can never create a thread. Don't add a third code path that
+  creates one — see `docs/SECURITY.md`'s "Chat unlock timing" for the full rule.
 - Dev-only fictional seed data lives in `src/lib/vendors/seed.ts`, triggered manually from
   `/dev/seed-vendors` (a page that 404s when `NODE_ENV === "production"`). It is never
   called automatically. Re-running it reuses existing seed accounts/profiles rather than

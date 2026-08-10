@@ -1,5 +1,6 @@
-import type { VendorProfile, VendorProfileStatus } from "@/lib/types/vendors";
+import type { PortfolioLink, VendorProfile, VendorProfileStatus } from "@/lib/types/vendors";
 import { slugify, uniqueSlug } from "@/lib/spaces/slug";
+import { buildPortfolioLink } from "./portfolioLinks";
 
 /**
  * Browser-local vendor profiles — same prototype caveat as
@@ -186,4 +187,21 @@ export function rejectVendorProfile(id: string, reason: string): VendorProfile |
 
 export function suspendVendorProfile(id: string, reason: string): VendorProfile | undefined {
   return setStatus(id, "suspended", reason);
+}
+
+/**
+ * Adds a portfolio link "just for this bid" — saved to the vendor's profile
+ * (not a bid-scoped fork) so it's reusable on future bids too, per the
+ * codebase's "every vendor entity lives in one profile" convention.
+ */
+export function addPortfolioLinkToProfile(
+  vendorProfileId: string,
+  link: Pick<PortfolioLink, "url" | "title" | "description">
+): PortfolioLink | undefined {
+  const profile = getVendorProfileById(vendorProfileId);
+  if (!profile) return undefined;
+
+  const newLink = buildPortfolioLink({ ...link, displayOrder: profile.portfolioLinks.length });
+  updateVendorProfile(vendorProfileId, { portfolioLinks: [...profile.portfolioLinks, newLink] });
+  return newLink;
 }

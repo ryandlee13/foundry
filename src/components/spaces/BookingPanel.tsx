@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { addBooking } from "@/lib/spaces/bookings";
-import type { Venue } from "@/lib/types/spaces";
+import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
+import type { EventType, Venue } from "@/lib/types/spaces";
 
 function formatPriceRange(min: number, max: number): string {
   return min === max ? `$${min}/hr` : `$${min}–$${max}/hr`;
@@ -15,6 +16,8 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const router = useRouter();
   const { user, isLoading } = useAuth();
 
+  const [eventName, setEventName] = useState("");
+  const [eventType, setEventType] = useState<EventType | "">("");
   const [eventDate, setEventDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -63,6 +66,8 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       attendees: Number(attendees),
       coiAgreed: venue.rules.coiRequired ? coiAgreed : true,
       depositAgreed: venue.rules.securityDepositRequired ? depositAgreed : true,
+      eventName: eventName.trim() || null,
+      eventType: eventType || null,
     });
     setRequestedId(booking.id);
   }
@@ -103,6 +108,7 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
         {requestedId ? (
           <div className="text-center">
             <p className="font-display text-base font-semibold text-ink">Request sent</p>
+            {eventName.trim() && <p className="mt-1 text-sm font-medium text-ink">{eventName.trim()}</p>}
             <p className="mt-1 text-xs text-ink-soft">
               {eventDate} · {startTime}–{endTime} · {attendees} guests
             </p>
@@ -127,6 +133,37 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
         ) : (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-2">
+                <label htmlFor="booking-event-name" className="block text-xs font-medium text-ink-soft">
+                  Event name (optional)
+                </label>
+                <input
+                  id="booking-event-name"
+                  type="text"
+                  value={eventName}
+                  onChange={(event) => setEventName(event.target.value)}
+                  placeholder={`${venue.name} · ${eventDate || "your date"}`}
+                  className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                />
+              </div>
+              <div className="col-span-2">
+                <label htmlFor="booking-event-type" className="block text-xs font-medium text-ink-soft">
+                  Event type (optional)
+                </label>
+                <select
+                  id="booking-event-type"
+                  value={eventType}
+                  onChange={(event) => setEventType(event.target.value as EventType | "")}
+                  className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                >
+                  <option value="">Not specified</option>
+                  {Object.entries(EVENT_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="col-span-2">
                 <label htmlFor="booking-date" className="block text-xs font-medium text-ink-soft">
                   Event date

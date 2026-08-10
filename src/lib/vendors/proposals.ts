@@ -1,6 +1,6 @@
-import type { BidExpirationDays, VendorProposal } from "@/lib/types/vendors";
-import { computeExpiresAt, getEffectiveProposalStatus, formatExpiration } from "./expiration";
-import { getEventNeedById } from "./eventNeeds";
+import type { VendorProposal } from "@/lib/types/vendors";
+import { getEffectiveProposalStatus, formatExpiration } from "./expiration";
+import { getEventNeedById, getEventNeedsForOrganizer } from "./eventNeeds";
 import { getVendorProfileById } from "./profiles";
 import { createNotification, createNotificationsForMany } from "./notifications";
 
@@ -53,11 +53,11 @@ export function findActiveProposal(
     (proposal) =>
       proposal.vendorProfileId === vendorProfileId &&
       proposal.eventNeedId === eventNeedId &&
-      (proposal.status === "submitted" || proposal.status === "shortlisted")
+      (proposal.status === "submitted" || proposal.status === "shortlisted" || proposal.status === "in_discussion")
   );
 }
 
-/** A vendor may only have one active (submitted or shortlisted) proposal per event need at a time. */
+/** A vendor may only have one active (submitted, shortlisted, or in-discussion) proposal per event need at a time. */
 export function getActiveProposal(vendorProfileId: string, eventNeedId: string): VendorProposal | undefined {
   return findActiveProposal(getProposalsForVendor(vendorProfileId), vendorProfileId, eventNeedId);
 }
@@ -74,7 +74,8 @@ export function createProposal(input: {
   setupRequirements: string;
   portfolioLinkIds: string[];
   questionsForOrganizer: string;
-  expirationDays: BidExpirationDays;
+  /** ISO timestamp, computed by the caller from a quick-select chip (via computeExpiresAt) or a custom date/time picker. */
+  expiresAt: string;
 }): VendorProposal {
   const existing = getActiveProposal(input.vendorProfileId, input.eventNeedId);
   if (existing) {
@@ -95,7 +96,7 @@ export function createProposal(input: {
     setupRequirements: input.setupRequirements,
     portfolioLinkIds: input.portfolioLinkIds,
     questionsForOrganizer: input.questionsForOrganizer,
-    expiresAt: computeExpiresAt(now, input.expirationDays),
+    expiresAt: input.expiresAt,
     status: "submitted",
     declineReason: null,
     submittedAt: now,
@@ -139,10 +140,24 @@ export function editProposal(
   >
 ): VendorProposal | undefined {
   const proposal = getProposalById(id);
-  if (!proposal || (proposal.status !== "submitted" && proposal.status !== "shortlisted")) {
+  if (
+    !proposal ||
+    (proposal.status !== "submitted" && proposal.status !== "shortlisted" && proposal.status !== "in_discussion")
+  ) {
     throw new Error("Only an active, un-accepted proposal can be edited.");
   }
-  return updateProposalRaw(id, patch);
+  const updated = updateProposalRaw(id, patch);
+  const need = getEventNeedById(proposal.eventNeedId);
+  if (updated && need) {
+    createNotification({
+      recipientId: need.organizerId,
+      type: "proposal_updated",
+      title: "A vendor updated their proposal",
+      body: `A proposal for "${need.title}" was updated.`,
+      link: `/dashboard/organizer/bookings/${need.bookingId}/vendors/${need.id}/proposals`,
+    });
+  }
+  return updated;
 }
 
 export function withdrawProposal(id: string): VendorProposal | undefined {
@@ -193,7 +208,7 @@ export function ensureExpiringBidNotifications(vendorProfileId: string): void {
 
   const expiringSoon = getProposalsForVendor(vendorProfileId).filter(
     (proposal) =>
-      (proposal.status === "submitted" || proposal.status === "shortlisted") &&
+      (proposal.status === "submitted" || proposal.status === "shortlisted" || proposal.status === "in_discussion") &&
       new Date(proposal.expiresAt) <= soonThreshold &&
       new Date(proposal.expiresAt) > now
   );
@@ -215,21 +230,84 @@ export function ensureExpiringBidNotifications(vendorProfileId: string): void {
   );
 }
 
+/**
+ * Same 24h-window lazy-check pattern as ensureExpiringBidNotifications, but
+ * for the organizer's side: proposals they've started a conversation with
+ * (in_discussion) that are about to expire.
+ */
+export function ensureExpiringDiscussionNotificationsForOrganizer(organizerId: string): void {
+  const HOURS_24_MS = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const soonThreshold = new Date(now.getTime() + HOURS_24_MS);
+
+  const needs = getEventNeedsForOrganizer(organizerId);
+  const expiringSoon = needs.flatMap((need) =>
+    getProposalsForNeed(need.id).filter(
+      (proposal) =>
+        proposal.status === "in_discussion" &&
+        new Date(proposal.expiresAt) <= soonThreshold &&
+        new Date(proposal.expiresAt) > now
+    )
+  );
+
+  if (expiringSoon.length === 0) return;
+
+  createNotificationsForMany([organizerId], {
+    type: "bid_expiring",
+    title: "A bid you're discussing is expiring soon",
+    body:
+      expiringSoon.length === 1
+        ? `A proposal you're in discussion with expires ${formatExpiration(expiringSoon[0].expiresAt).toLowerCase()}.`
+        : `${expiringSoon.length} proposals you're in discussion with are expiring within 24 hours.`,
+    link: "/dashboard/messages",
+  });
+}
+
 export function declineProposal(id: string, reason?: string): VendorProposal | undefined {
   return updateProposalRaw(id, { status: "declined", declineReason: reason?.trim() || null });
 }
 
 /** Vendors renew an expired proposal by re-submitting with a fresh expiration window. */
-export function renewProposal(id: string, expirationDays: BidExpirationDays): VendorProposal | undefined {
+export function renewProposal(id: string, expiresAt: string): VendorProposal | undefined {
   const proposal = getProposalById(id);
   if (!proposal || proposal.status !== "expired") {
     throw new Error("Only an expired proposal can be renewed.");
   }
   const now = new Date().toISOString();
-  return updateProposalRaw(id, { status: "submitted", expiresAt: computeExpiresAt(now, expirationDays), submittedAt: now });
+  return updateProposalRaw(id, { status: "submitted", expiresAt, submittedAt: now });
 }
 
 /** Internal: used by the accept-proposal orchestration in engagements.ts. */
 export function markProposalAccepted(id: string): VendorProposal | undefined {
   return updateProposalRaw(id, { status: "accepted" });
+}
+
+/** Internal: used by startConversation() in engagements.ts. */
+export function markProposalInDiscussion(id: string): VendorProposal | undefined {
+  return updateProposalRaw(id, { status: "in_discussion" });
+}
+
+/** Internal: used by acceptProposal() in engagements.ts to close out competing bids. */
+export function closeProposalOpportunityFilled(id: string): VendorProposal | undefined {
+  return updateProposalRaw(id, { status: "closed_opportunity_filled" });
+}
+
+/**
+ * Pure (no storage access): given every proposal on a need and the id of the
+ * one that just won, returns the ids of every other still-active proposal
+ * that should be closed as "opportunity filled". Only called once a need has
+ * no positions left — a need with positionsAvailable > 1 that still has open
+ * positions should NOT close its other active proposals.
+ */
+export function selectProposalsToCloseOnFill(
+  proposals: Pick<VendorProposal, "id" | "status">[],
+  winningProposalId: string
+): string[] {
+  return proposals
+    .filter(
+      (p) =>
+        p.id !== winningProposalId &&
+        (p.status === "submitted" || p.status === "shortlisted" || p.status === "in_discussion")
+    )
+    .map((p) => p.id);
 }

@@ -149,6 +149,21 @@ export type LocationType = "in_person" | "remote";
 
 export type EventNeedStatus = "draft" | "published" | "paused" | "filled" | "closed" | "canceled";
 
+/**
+ * Derived, presentation-only phase for a need — computed from its stored
+ * EventNeedStatus plus its proposals' statuses (see computeEventNeedPhase in
+ * eventNeeds.ts). Never stored; the underlying EventNeedStatus stays the
+ * source of truth.
+ */
+export type EventNeedPhase =
+  | "not_started"
+  | "accepting_proposals"
+  | "reviewing_bids"
+  | "in_discussion"
+  | "finalized"
+  | "closed"
+  | "canceled";
+
 export interface EventNeed {
   id: string;
   /** Anchors this need to a confirmed venue Booking — this prototype has no separate Event entity, see CLAUDE.md. */
@@ -183,18 +198,20 @@ export interface EventNeed {
   updatedAt: string;
 }
 
-export const BID_EXPIRATION_DAYS = [1, 5, 7] as const;
+export const BID_EXPIRATION_DAYS = [1, 3, 5, 7] as const;
 export type BidExpirationDays = (typeof BID_EXPIRATION_DAYS)[number];
 
 export type ProposalStatus =
   | "draft"
   | "submitted"
   | "shortlisted"
+  | "in_discussion"
   | "accepted"
   | "declined"
   | "withdrawn"
   | "expired"
-  | "canceled";
+  | "canceled"
+  | "closed_opportunity_filled";
 
 export interface VendorProposal {
   id: string;
@@ -298,7 +315,10 @@ export type NotificationType =
   | "vendor_withdrew"
   | "vendor_marked_complete"
   | "vendor_canceled"
-  | "vendor_responded_review";
+  | "vendor_responded_review"
+  | "conversation_started"
+  | "opportunity_filled"
+  | "proposal_updated";
 
 export interface AppNotification {
   id: string;
@@ -313,7 +333,11 @@ export interface AppNotification {
 
 export interface MessageThread {
   id: string;
-  engagementId: string;
+  /** Anchors the thread — a thread exists once an organizer starts a conversation on a proposal, independent of whether it's ever finalized. */
+  proposalId: string;
+  eventNeedId: string;
+  /** Null until acceptProposal() finalizes this proposal and upgrades the thread in place — never a new thread is created at that point. */
+  engagementId: string | null;
   organizerId: string;
   vendorOwnerId: string;
   createdAt: string;
@@ -345,4 +369,7 @@ export type GigSortOption = "best_match" | "newest" | "event_date" | "highest_bu
 export interface EventNeedWithMatch extends EventNeed {
   matchReason: string | null;
   bidCount: number;
+  /** Resolved once from the parent Booking — see formatNeedEventLabel() in eventNeeds.ts. */
+  eventLabel: string;
+  eventType: EventType | null;
 }

@@ -1,5 +1,6 @@
 import type {
   EngagementStatus,
+  EventNeedPhase,
   EventNeedStatus,
   ExperienceLevel,
   GigSortOption,
@@ -10,6 +11,7 @@ import type {
   ProposalStatus,
   ReviewStatus,
   VendorProfileStatus,
+  VendorSkillSlug,
 } from "@/lib/types/vendors";
 
 export const PRICING_MODEL_LABELS: Record<PricingModel, string> = {
@@ -63,12 +65,48 @@ export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   draft: "Draft",
   submitted: "Submitted",
   shortlisted: "Shortlisted",
+  in_discussion: "In discussion",
   accepted: "Accepted",
   declined: "Declined",
   withdrawn: "Withdrawn",
   expired: "Expired",
   canceled: "Canceled",
+  closed_opportunity_filled: "Opportunity filled",
 };
+
+export const EVENT_NEED_PHASE_LABELS: Record<EventNeedPhase, string> = {
+  not_started: "Not started",
+  accepting_proposals: "Accepting proposals",
+  reviewing_bids: "Reviewing bids",
+  in_discussion: "In discussion",
+  finalized: "Finalized",
+  closed: "Closed",
+  canceled: "Canceled",
+};
+
+/** Category-specific placeholder text for the "What are you looking for?" field. Generic fallback for anything not listed. */
+export const EVENT_NEED_DESCRIPTION_PLACEHOLDERS: Partial<Record<VendorSkillSlug, string>> = {
+  dj: "A DJ who specializes in house music and can bring their own controller.",
+  florist: "A florist who can create arrangements primarily using red and white roses.",
+  photographer: "Looking for someone comfortable shooting nightlife and flash photography.",
+  videographer: "Looking for a videographer to capture highlights and a short recap reel.",
+  graphic_designer: "Looking for a designer to create a flyer and Instagram assets.",
+  chef: "A private chef who can design a plated menu for a seated dinner.",
+  caterer: "A caterer who can serve passed appetizers for a standing reception.",
+  bartender: "A bartender who can build a signature cocktail menu for the night.",
+  influencer: "A local influencer who can help promote the event to their following.",
+  content_creator: "A content creator to shoot short-form video throughout the night.",
+  photo_booth: "A photo booth with a fun prop selection and instant prints.",
+  performer: "An entertainer who can work the room and keep guests engaged.",
+  sponsor: "A brand looking to sponsor food, drinks, or swag for the night.",
+  lighting_technician: "Someone who can design ambient and dance-floor lighting.",
+  sound_engineer: "A sound engineer to run live audio for performers and speeches.",
+  security: "Licensed security staff for a late-night event with 100+ guests.",
+  event_producer: "An event producer to help run the show from load-in to breakdown.",
+  decorator: "A decorator who can bring a cohesive look to the space.",
+};
+
+export const GENERIC_EVENT_NEED_DESCRIPTION_PLACEHOLDER = "Describe what you're looking for — style, vibe, must-haves.";
 
 export const ENGAGEMENT_STATUS_LABELS: Record<EngagementStatus, string> = {
   confirmed: "Confirmed",

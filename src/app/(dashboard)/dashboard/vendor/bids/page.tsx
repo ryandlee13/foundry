@@ -8,21 +8,22 @@ import { getProposalsForVendor, withdrawProposal, renewProposal } from "@/lib/ve
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
 import { getSkillName } from "@/lib/vendors/skills";
 import { PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
-import { formatExpiration } from "@/lib/vendors/expiration";
-import { BID_EXPIRATION_DAYS } from "@/lib/types/vendors";
+import { formatExpiration, computeExpiresAt } from "@/lib/vendors/expiration";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
-import type { BidExpirationDays, EventNeed, ProposalStatus, VendorProposal } from "@/lib/types/vendors";
+import type { EventNeed, ProposalStatus, VendorProposal } from "@/lib/types/vendors";
 
 const STATUS_STYLES: Record<ProposalStatus, string> = {
   draft: "bg-paper-dim text-ink-soft",
   submitted: "bg-brass/15 text-brass-dark",
   shortlisted: "bg-brass/15 text-brass-dark",
+  in_discussion: "bg-brass/15 text-brass-dark",
   accepted: "bg-green-100 text-green-800",
   declined: "bg-wine/10 text-wine",
   withdrawn: "bg-paper-dim text-ink-soft",
   expired: "bg-wine/10 text-wine",
   canceled: "bg-paper-dim text-ink-soft",
+  closed_opportunity_filled: "bg-paper-dim text-ink-soft",
 };
 
 const TABS: { key: "active" | "all"; label: string }[] = [
@@ -69,7 +70,9 @@ export default function VendorBidsPage() {
     return <LoadingState label="Loading your bids…" />;
   }
 
-  const visible = proposals.filter((p) => (tab === "active" ? p.status === "submitted" || p.status === "shortlisted" : true));
+  const visible = proposals.filter((p) =>
+    tab === "active" ? p.status === "submitted" || p.status === "shortlisted" || p.status === "in_discussion" : true
+  );
 
   return (
     <div>
@@ -115,7 +118,7 @@ export default function VendorBidsPage() {
                       </Link>
                       <p className="mt-0.5 text-xs text-ink-soft">
                         {need ? getSkillName(need.skillSlug) : ""} · ${proposal.proposedAmount} ·{" "}
-                        {proposal.status === "submitted" || proposal.status === "shortlisted"
+                        {proposal.status === "submitted" || proposal.status === "shortlisted" || proposal.status === "in_discussion"
                           ? formatExpiration(proposal.expiresAt, now)
                           : `Submitted ${proposal.submittedAt?.slice(0, 10)}`}
                       </p>
@@ -126,7 +129,7 @@ export default function VendorBidsPage() {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {(proposal.status === "submitted" || proposal.status === "shortlisted") && (
+                    {(proposal.status === "submitted" || proposal.status === "shortlisted" || proposal.status === "in_discussion") && (
                       <button
                         type="button"
                         onClick={() => {
@@ -142,7 +145,7 @@ export default function VendorBidsPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          renewProposal(proposal.id, BID_EXPIRATION_DAYS[1] as BidExpirationDays);
+                          renewProposal(proposal.id, computeExpiresAt(new Date().toISOString(), 5));
                           refresh();
                         }}
                         className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink hover:bg-paper-dim"

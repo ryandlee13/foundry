@@ -4,19 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { findAccountById } from "@/lib/auth/storage";
-import { getEventNeedById } from "@/lib/vendors/eventNeeds";
+import { getEventNeedById, formatNeedEventLabel } from "@/lib/vendors/eventNeeds";
 import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import { getProposalsForNeed, getActiveProposal, withdrawProposal, renewProposal } from "@/lib/vendors/proposals";
+import { getThreadForProposal } from "@/lib/vendors/messages";
 import { computeCompetitiveBidSummary } from "@/lib/vendors/matching";
+import { getBookingById } from "@/lib/spaces/bookings";
 import { getSkillName } from "@/lib/vendors/skills";
 import { EXPERIENCE_LEVEL_LABELS, PRICING_MODEL_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
-import { formatExpiration } from "@/lib/vendors/expiration";
+import { formatExpiration, formatDeadlineDate, computeExpiresAt } from "@/lib/vendors/expiration";
 import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 import BidForm from "./BidForm";
-import { BID_EXPIRATION_DAYS } from "@/lib/types/vendors";
-import type { BidExpirationDays, EventNeed, VendorProfile, VendorProposal } from "@/lib/types/vendors";
+import type { EventNeed, VendorProfile, VendorProposal } from "@/lib/types/vendors";
 
 function formatBudget(min: number | null, max: number | null): string {
   if (min === null && max === null) return "Contact for quote";
@@ -27,19 +28,23 @@ function formatBudget(min: number | null, max: number | null): string {
 const PROPOSAL_STATUS_STYLES: Record<string, string> = {
   submitted: "bg-brass/15 text-brass-dark",
   shortlisted: "bg-brass/15 text-brass-dark",
+  in_discussion: "bg-brass/15 text-brass-dark",
   accepted: "bg-green-100 text-green-800",
   declined: "bg-wine/10 text-wine",
   withdrawn: "bg-paper-dim text-ink-soft",
   expired: "bg-wine/10 text-wine",
   canceled: "bg-paper-dim text-ink-soft",
+  closed_opportunity_filled: "bg-paper-dim text-ink-soft",
 };
 
 export default function GigDetailPage({ needId }: { needId: string }) {
   const { user, isLoading: authLoading } = useAuth();
   const [loaded, setLoaded] = useState(false);
   const [need, setNeed] = useState<EventNeed | null>(null);
+  const [eventLabel, setEventLabel] = useState("");
   const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [myProposal, setMyProposal] = useState<VendorProposal | null>(null);
+  const [myThreadId, setMyThreadId] = useState<string | null>(null);
   const [bidForm, setBidForm] = useState<"none" | "new" | "edit">("none");
   const [now, setNow] = useState("");
 
@@ -47,12 +52,18 @@ export default function GigDetailPage({ needId }: { needId: string }) {
     const found = getEventNeedById(needId);
     setNeed(found ?? null);
     setNow(new Date().toISOString());
+    if (found) {
+      const booking = getBookingById(found.bookingId);
+      setEventLabel(formatNeedEventLabel(found, booking?.eventName ?? null));
+    }
 
     if (user) {
       const vendorProfile = getVendorProfileByOwnerId(user.id);
       setProfile(vendorProfile ?? null);
       if (vendorProfile && found) {
-        setMyProposal(getActiveProposal(vendorProfile.id, found.id) ?? null);
+        const proposal = getActiveProposal(vendorProfile.id, found.id) ?? null;
+        setMyProposal(proposal);
+        setMyThreadId(proposal ? (getThreadForProposal(proposal.id)?.id ?? null) : null);
       }
     }
     setLoaded(true);
@@ -83,7 +94,8 @@ export default function GigDetailPage({ needId }: { needId: string }) {
       </Link>
 
       <div className="mt-4 rounded-2xl border border-line bg-paper p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-wider text-brass-dark">{getSkillName(need.skillSlug)}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">{eventLabel}</p>
+        <p className="mt-0.5 text-xs font-semibold uppercase tracking-wider text-brass-dark">{getSkillName(need.skillSlug)}</p>
         <h1 className="mt-1 font-display text-2xl font-semibold text-ink sm:text-3xl">{need.title}</h1>
         <p className="mt-2 text-sm text-ink-soft">
           {need.locationType === "remote" ? "Remote" : need.publicLocation} · Posted by{" "}
@@ -140,7 +152,7 @@ export default function GigDetailPage({ needId }: { needId: string }) {
           <div>
             <dt className="text-xs text-ink-soft">Proposal deadline</dt>
             <dd className="font-medium text-ink">
-              {need.proposalDeadline} ({formatExpiration(new Date(need.proposalDeadline).toISOString(), now)})
+              {formatDeadlineDate(need.proposalDeadline)} ({formatExpiration(need.proposalDeadline, now)})
             </dd>
           </div>
         </dl>
@@ -202,8 +214,25 @@ export default function GigDetailPage({ needId }: { needId: string }) {
                 </span>
                 <span className="text-sm font-semibold text-ink">${myProposal.proposedAmount}</span>
               </div>
+              {myProposal.status === "in_discussion" && (
+                <p className="mt-2 text-sm text-ink-soft">
+                  The organizer wants to discuss further before deciding.
+                  {myThreadId && (
+                    <>
+                      {" "}
+                      <Link href={`/dashboard/messages/${myThreadId}`} className="font-semibold text-brass-dark underline">
+                        Check your messages
+                      </Link>
+                      .
+                    </>
+                  )}
+                </p>
+              )}
+              {myProposal.status === "closed_opportunity_filled" && (
+                <p className="mt-2 text-sm text-ink-soft">This opportunity was filled by another vendor.</p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
-                {(myProposal.status === "submitted" || myProposal.status === "shortlisted") && (
+                {(myProposal.status === "submitted" || myProposal.status === "shortlisted" || myProposal.status === "in_discussion") && (
                   <>
                     <button type="button" onClick={() => setBidForm("edit")} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink hover:bg-paper-dim">
                       Edit bid
@@ -224,7 +253,7 @@ export default function GigDetailPage({ needId }: { needId: string }) {
                   <button
                     type="button"
                     onClick={() => {
-                      renewProposal(myProposal.id, BID_EXPIRATION_DAYS[1] as BidExpirationDays);
+                      renewProposal(myProposal.id, computeExpiresAt(new Date().toISOString(), 5));
                       refresh();
                     }}
                     className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink hover:bg-paper-dim"

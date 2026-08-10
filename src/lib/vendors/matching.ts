@@ -76,7 +76,9 @@ const MIN_BIDS_FOR_MEDIAN = 3;
 export function computeCompetitiveBidSummary(
   activeProposals: Pick<VendorProposal, "proposedAmount" | "pricingModel" | "status">[]
 ): CompetitiveBidSummary {
-  const active = activeProposals.filter((p) => p.status === "submitted" || p.status === "shortlisted" || p.status === "accepted");
+  const active = activeProposals.filter(
+    (p) => p.status === "submitted" || p.status === "shortlisted" || p.status === "in_discussion" || p.status === "accepted"
+  );
   const amounts = active.map((p) => p.proposedAmount).sort((a, b) => a - b);
 
   const median =

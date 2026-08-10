@@ -54,6 +54,7 @@ export default function GigCard({
 
       <div className="mt-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
+          <p className="truncate text-xs font-semibold uppercase tracking-wide text-ink-soft">{need.eventLabel}</p>
           <h3 className="truncate font-display text-lg font-semibold text-ink">{need.title}</h3>
           <p className="text-xs text-ink-soft">
             {getSkillName(need.skillSlug)} · {need.locationType === "remote" ? "Remote" : need.publicLocation}

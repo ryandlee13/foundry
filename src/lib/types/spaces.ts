@@ -122,6 +122,9 @@ export interface Booking {
   coiAgreed: boolean;
   /** Whether the organizer agreed to the security deposit, if the venue requires one. */
   depositAgreed: boolean;
+  /** Organizer-chosen name for this event, e.g. "Foundry Summer Social". Null falls back to a venue+date label — see formatEventLabel() in bookings.ts. */
+  eventName: string | null;
+  eventType: EventType | null;
   createdAt: string;
 }
 

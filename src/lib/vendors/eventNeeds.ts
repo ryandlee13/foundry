@@ -1,4 +1,4 @@
-import type { EventNeed, EventNeedStatus } from "@/lib/types/vendors";
+import type { EventNeed, EventNeedPhase, EventNeedStatus, VendorProposal } from "@/lib/types/vendors";
 
 /** Browser-local event needs ("Looking for a ___" requests). Same prototype caveat as profiles.ts. */
 const EVENT_NEEDS_KEY = "foundry.vendors.eventNeeds";
@@ -112,4 +112,27 @@ export function fillOnePosition(id: string): EventNeed | undefined {
   const need = getEventNeedById(id);
   if (!need) return undefined;
   return updateEventNeed(id, computeFilledPosition(need));
+}
+
+/** Pure: same fallback rule as formatEventLabel() in bookings.ts, for call sites that only have the EventNeed (no venueName). */
+export function formatNeedEventLabel(need: Pick<EventNeed, "publicLocation" | "eventDate">, eventName: string | null): string {
+  return eventName?.trim() || `${need.publicLocation} · ${need.eventDate}`;
+}
+
+/**
+ * Pure, presentation-only phase derived from the need's stored status plus
+ * its proposals — never stored on EventNeed itself. Used by the organizer
+ * roster to show a richer status than the underlying EventNeedStatus enum.
+ */
+export function computeEventNeedPhase(
+  need: Pick<EventNeed, "status">,
+  proposals: Pick<VendorProposal, "status">[]
+): EventNeedPhase {
+  if (need.status === "canceled") return "canceled";
+  if (need.status === "closed") return "closed";
+  if (need.status === "filled" || proposals.some((p) => p.status === "accepted")) return "finalized";
+  if (need.status === "draft") return "not_started";
+  if (proposals.some((p) => p.status === "in_discussion")) return "in_discussion";
+  if (proposals.some((p) => p.status === "submitted" || p.status === "shortlisted")) return "reviewing_bids";
+  return "accepting_proposals";
 }

@@ -143,12 +143,21 @@ workaround.
   input specifically so it cannot leak more even if misused — port that same
   narrow-input-shape discipline into the real RPC.
 - **Chat unlock timing**: a message thread between an organizer and a vendor must not be
-  creatable, and therefore not accessible, until the vendor's proposal has been accepted.
-  This is not just a UI-hidden route — the real implementation needs this enforced at the
-  data layer (thread row simply doesn't exist, and RLS denies reads/writes to non-
-  participants regardless). The prototype models this by only ever creating a thread from
-  inside the accept-proposal transaction (`acceptProposal()` in
-  `src/lib/vendors/engagements.ts`) and RLS-equivalent gating every read through
+  creatable, and therefore not accessible, by anyone other than the organizer who owns the
+  parent event need — and only for a proposal on that need. This is not just a UI-hidden
+  route — the real implementation needs this enforced at the data layer (thread row simply
+  doesn't exist for anyone else to read, and RLS denies reads/writes to non-participants
+  regardless). Unlike an earlier version of this rule, a thread does **not** require the
+  proposal to be accepted first — the product now supports a pre-commitment
+  "Start Conversation" step (the organizer opts into messaging a specific vendor while the
+  proposal is still just `submitted`/`shortlisted`, moving it to `in_discussion`; other
+  proposals on the need stay untouched and no `vendor_engagements` row exists yet). What's
+  still true, and still the security-relevant invariant: **a vendor can never create a
+  thread**, only an organizer can (via `startConversation()` or `acceptProposal()` in
+  `src/lib/vendors/engagements.ts`, both funneling through the same
+  `getOrCreateThreadForProposal()` in `src/lib/vendors/messages.ts`), and a thread is
+  idempotent per proposal — finalizing later upgrades the same thread's `engagement_id` in
+  place rather than creating a second one. RLS-equivalent gating on every read is still
   `isThreadParticipant()`.
 - **Exact venue address stays private through the vendor flow too**: `EventNeed`'s
   `public_location` is the venue's neighborhood, resolved server-side (or, in the
