@@ -30,6 +30,18 @@ This is **not** a substitute for Phases 1–4 below — it's scaffolding to be r
 hardened in place. When Phase 1 starts, this prototype layer should be removed and rebuilt
 properly against real tables, RLS, and Supabase Auth, not incrementally migrated.
 
+The prototype was later extended (still within this same explicit exception, still
+`localStorage`-only) to cover the rest of the venue-owner lifecycle: a real publish-review
+step before a listing goes live, post-publish editing (`VenueEditForm.tsx`, never
+regenerating `id`/`slug`/`ownerId`), owner-configurable booking hours/increment/
+negotiability enforced by `src/lib/spaces/bookingConstraints.ts`, and host-initiated
+booking messaging (`src/lib/spaces/bookingWorkflow.ts` — the venue owner, not the planner,
+creates the thread). A dev-only seeder (`src/lib/spaces/seedVenueOwner.ts`, `/dev/seed-venues`)
+adopts 7 of the seed venues under a real account so this can be tested against owned
+listings. See `CLAUDE.md` → "Local-prototype layer" for the full list. None of this changes
+the phase boundary above — it's still scaffolding, still replaced wholesale when Phase 1/3
+land for real, not migrated incrementally.
+
 ## Phase 0.7 — Vendor marketplace local-prototype detour (out of sequence, explicit exception)
 
 Same basis as Phase 0.5, extended to the full vendor/contractor marketplace from
@@ -44,9 +56,19 @@ limits.
 Key adaptations forced by not having Phase 1's schema yet:
 - No `events` table exists, so a confirmed `Booking` stands in as the anchor for an
   organizer's vendor requests (`EventNeed.bookingId`), not a separate `Event` row.
-- Vendor profile approval already follows the *real* gate (`pending_review` → admin
-  approves) rather than reusing the venue auto-publish exception — when Phase 1 lands, this
-  part of the design carries over largely unchanged, just swapped onto real tables/RLS.
+- Vendor profile approval initially followed the *real* gate (`pending_review` → admin
+  approves) rather than reusing the venue auto-publish exception; it was later switched to
+  publish-immediately too (`publishVendorProfile()`), matching the venue pattern, at the
+  same explicit-exception basis — see `CLAUDE.md` rule #8. Admin moderation
+  (approve/reject/suspend) still exists as a post-publish action. When Phase 1 lands, real
+  pre-publish admin approval should come back for both venues and vendor profiles — this
+  prototype's immediate-publish behavior does not carry over.
+- The deal-finalization flow requires **both parties** to confirm: an organizer's
+  `finalizeDeal()` only sends terms (optionally negotiated), and the vendor must separately
+  call `confirmEngagementTerms()` before the engagement is `confirmed`. The locked terms
+  are worded as a firm mutual commitment, explicitly not a legal-enforceability claim (see
+  `docs/SECURITY.md`) — real contract language is a `TODO(legal)` for before any real
+  launch, not something to design further here.
 - Competitive bid-summary privacy and message-thread access control are implemented in
   application code with test coverage, but — like the rest of this layer — are not enforced
   by anything a motivated user with devtools couldn't bypass. RLS is not optional for this
@@ -136,6 +158,15 @@ schema to port.
   `docs/PRD.md`)
 - Not scoped further here by design — do not pre-build payment tables/columns before this
   phase starts.
+- **Narrow, explicit exception:** `src/lib/spaces/venueBilling.ts` records, client-side,
+  that a venue owner's subscription *would* activate on their first published listing —
+  one standalone `localStorage` module (`foundry.venues.billingActivations`), not a field
+  on `Venue` or `Account`, and deletable in a single `rm` when this phase actually starts.
+  It never renders a price (the monthly figure is genuinely undecided) and never talks to
+  Stripe or any payment provider. This does not pull any other part of Phase 7 forward —
+  no payment tables, no Stripe integration, no real charge — it exists only so the
+  venue-owner UX (a subscription-activation notice at publish time) could be validated
+  ahead of the real billing build.
 
 ---
 

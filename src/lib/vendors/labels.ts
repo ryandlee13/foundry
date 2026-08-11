@@ -109,9 +109,11 @@ export const EVENT_NEED_DESCRIPTION_PLACEHOLDERS: Partial<Record<VendorSkillSlug
 export const GENERIC_EVENT_NEED_DESCRIPTION_PLACEHOLDER = "Describe what you're looking for — style, vibe, must-haves.";
 
 export const ENGAGEMENT_STATUS_LABELS: Record<EngagementStatus, string> = {
+  pending_vendor_confirmation: "Awaiting vendor confirmation",
   confirmed: "Confirmed",
   in_progress: "In progress",
   completed: "Completed",
+  declined_by_vendor: "Vendor declined terms",
   canceled_by_organizer: "Canceled by organizer",
   canceled_by_vendor: "Canceled by vendor",
   disputed: "Disputed",

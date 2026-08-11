@@ -15,13 +15,16 @@ import {
   MATCH_SCOPE_LABELS,
 } from "@/lib/vendors/labels";
 import { buildPortfolioLink, isValidPortfolioUrl } from "@/lib/vendors/portfolioLinks";
+import { canOfferRemoteOnly, getRemoteBlockingSkillNames, reconcileRemoteOnly } from "@/lib/vendors/remoteEligibility";
 import {
   createDraftVendorProfile,
   getVendorProfileByOwnerId,
   updateVendorProfile,
   getPublishReadiness,
-  submitVendorProfileForReview,
+  publishVendorProfile,
 } from "@/lib/vendors/profiles";
+import MapPreview from "@/components/spaces/MapPreview";
+import RadiusSelector from "@/components/spaces/RadiusSelector";
 import { SERVICE_RADIUS_OPTIONS_MILES } from "@/lib/types/vendors";
 import type { EventType } from "@/lib/types/spaces";
 import type {
@@ -246,7 +249,10 @@ export default function VendorOnboardingFlow() {
           ]
       : profile!.services.filter((service) => service.skillSlug !== skill);
 
-    persist({ skills, services });
+    // If the new skill selection no longer supports remote-only (e.g. a DJ
+    // skill was just added), turn a stale remoteOnly claim back off.
+    const remoteOnly = reconcileRemoteOnly(skills, profile!.location.remoteOnly);
+    persist({ skills, services, location: { ...profile!.location, remoteOnly } });
   }
 
   function updateService(skillSlug: VendorSkillSlug, patch: Partial<VendorService>) {
@@ -289,9 +295,9 @@ export default function VendorOnboardingFlow() {
 
   function publish() {
     try {
-      submitVendorProfileForReview(profile!.id);
+      publishVendorProfile(profile!.id);
       addRole("vendor");
-      router.push("/dashboard/vendor?submitted=1");
+      router.push("/dashboard/vendor?published=1");
     } catch {
       setStep(1);
     }
@@ -588,10 +594,10 @@ function PortfolioStep({
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-ink">Portfolio links</p>
+        <p className="text-sm font-medium text-ink">Portfolio links (optional)</p>
         <p className="text-xs text-ink-soft">
-          At least one is required before you can publish. Personal site, SoundCloud, YouTube, Instagram, Behance —
-          anywhere organizers can see your work.
+          Personal site, SoundCloud, YouTube, Instagram, Behance — anywhere organizers can see your work. Not
+          required to publish, but strongly recommended.
         </p>
       </div>
 
@@ -646,84 +652,139 @@ function LocationStep({ profile, persist }: { profile: VendorProfile; persist: (
     updateLocation({ coordinates: resolved.coordinates, homeCity: location.homeCity || resolved.neighborhood });
   }
 
+  const remoteOnlyAvailable = canOfferRemoteOnly(profile.skills);
+  const blockingSkillNames = getRemoteBlockingSkillNames(profile.skills);
   const someRemoteEligible = profile.skills.some((slug) => VENDOR_SKILLS.find((s) => s.slug === slug)?.remoteEligible);
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4">
-        <TextField label="Home city" value={location.homeCity} onChange={(v) => updateLocation({ homeCity: v })} />
-        <TextField label="ZIP code" value={location.homePostalCode} onChange={(v) => updateLocation({ homePostalCode: v })} />
-      </div>
-      <p className="text-xs text-ink-soft" onBlur={handleZipBlur}>
-        Your exact address is never collected or shown — only your general area.
-      </p>
-      <button type="button" onClick={handleZipBlur} className="text-xs font-medium text-brass-dark hover:underline">
-        Resolve location from ZIP
-      </button>
-
-      <div>
-        <label className="block text-sm font-medium text-ink">Service radius</label>
-        <select
-          value={String(location.radiusMode)}
-          onChange={(e) => {
-            const value = e.target.value;
-            const mode: ServiceRadiusMode = value === "anywhere" || value === "custom" ? value : (Number(value) as ServiceRadiusMode);
-            updateLocation({ radiusMode: mode, radiusMiles: typeof mode === "number" ? mode : location.radiusMiles });
-          }}
-          className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
-        >
-          {SERVICE_RADIUS_OPTIONS_MILES.map((mi) => (
-            <option key={mi} value={mi}>
-              {mi} miles
-            </option>
-          ))}
-          <option value="custom">Custom</option>
-          <option value="anywhere">Anywhere</option>
-        </select>
-        {location.radiusMode === "custom" && (
-          <div className="mt-2">
-            <TextField
-              label="Custom radius (miles)"
-              type="number"
-              value={String(location.radiusMiles)}
-              onChange={(v) => updateLocation({ radiusMiles: Math.max(1, Number(v) || 1) })}
-            />
-          </div>
-        )}
-      </div>
-
-      <label className="flex items-center gap-2.5 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={location.willingToTravel}
-          onChange={(e) => updateLocation({ willingToTravel: e.target.checked })}
-          className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass"
-        />
-        Willing to travel beyond my service radius for the right gig
-      </label>
-
-      {someRemoteEligible && (
-        <label className="flex items-center gap-2.5 text-sm text-ink">
+      {remoteOnlyAvailable && (
+        <label className="flex items-center gap-2.5 rounded-lg border border-line bg-paper-dim px-3.5 py-3 text-sm text-ink">
           <input
             type="checkbox"
-            checked={location.remoteAvailable}
-            onChange={(e) => updateLocation({ remoteAvailable: e.target.checked })}
+            checked={location.remoteOnly}
+            onChange={(e) => updateLocation({ remoteOnly: e.target.checked, remoteAvailable: e.target.checked ? true : location.remoteAvailable })}
             className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass"
           />
-          Available for remote work (design, editing, sponsorship, etc.)
+          I work solely remotely — no physical location or travel radius needed
         </label>
       )}
+      {!remoteOnlyAvailable && blockingSkillNames.length > 0 && (
+        <p className="text-xs text-ink-soft">
+          Remote-only isn&apos;t offered because {blockingSkillNames.join(", ")} {blockingSkillNames.length === 1 ? "requires" : "require"} being on-site.
+        </p>
+      )}
 
-      <div>
-        <label className="block text-sm font-medium text-ink">Cities or regions served (comma-separated)</label>
-        <input
-          type="text"
-          value={location.citiesServed.join(", ")}
-          onChange={(e) => updateLocation({ citiesServed: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-          placeholder="Oakland, San Jose"
-          className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
-        />
-      </div>
+      {!location.remoteOnly && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <TextField label="Home city" value={location.homeCity} onChange={(v) => updateLocation({ homeCity: v })} />
+            <TextField
+              label="ZIP code"
+              value={location.homePostalCode}
+              onChange={(v) => updateLocation({ homePostalCode: v })}
+              hint=""
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink">Service address</label>
+            <input
+              type="text"
+              value={location.serviceAddress}
+              onChange={(e) => updateLocation({ serviceAddress: e.target.value })}
+              placeholder="1450 Folsom St, San Francisco, CA 94103"
+              onBlur={handleZipBlur}
+              className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+            />
+            <p className="mt-1 text-xs text-ink-soft">
+              Never shown publicly — used only to measure your travel radius. Organizers only see your general area.
+            </p>
+          </div>
+          <button type="button" onClick={handleZipBlur} className="text-xs font-medium text-brass-dark hover:underline">
+            Resolve location from ZIP
+          </button>
+
+          <div>
+            <label className="block text-sm font-medium text-ink">Service radius</label>
+            <select
+              value={String(location.radiusMode)}
+              onChange={(e) => {
+                const value = e.target.value;
+                const mode: ServiceRadiusMode = value === "anywhere" || value === "custom" ? value : (Number(value) as ServiceRadiusMode);
+                updateLocation({ radiusMode: mode, radiusMiles: typeof mode === "number" ? mode : location.radiusMiles });
+              }}
+              className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+            >
+              {SERVICE_RADIUS_OPTIONS_MILES.map((mi) => (
+                <option key={mi} value={mi}>
+                  {mi} miles
+                </option>
+              ))}
+              <option value="custom">Custom</option>
+              <option value="anywhere">Anywhere</option>
+            </select>
+            {location.radiusMode === "custom" && (
+              <div className="mt-2">
+                <TextField
+                  label="Custom radius (miles)"
+                  type="number"
+                  value={String(location.radiusMiles)}
+                  onChange={(v) => updateLocation({ radiusMiles: Math.max(1, Number(v) || 1) })}
+                />
+              </div>
+            )}
+            {location.radiusMode !== "anywhere" && (
+              <div className="mt-3">
+                <MapPreview
+                  radiusMiles={typeof location.radiusMode === "number" ? location.radiusMode : location.radiusMiles}
+                  maxRadiusMiles={100}
+                  caption={location.homeCity ? `Radius from ${location.homeCity}` : "Radius preview"}
+                />
+                <div className="mt-2">
+                  <RadiusSelector
+                    value={typeof location.radiusMode === "number" ? location.radiusMode : location.radiusMiles}
+                    onChange={(radius) => updateLocation({ radiusMode: radius as ServiceRadiusMode, radiusMiles: radius })}
+                    options={SERVICE_RADIUS_OPTIONS_MILES}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2.5 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={location.willingToTravel}
+              onChange={(e) => updateLocation({ willingToTravel: e.target.checked })}
+              className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+            />
+            Willing to travel beyond my service radius for the right gig
+          </label>
+
+          {someRemoteEligible && (
+            <label className="flex items-center gap-2.5 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={location.remoteAvailable}
+                onChange={(e) => updateLocation({ remoteAvailable: e.target.checked })}
+                className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+              />
+              Also available for remote work (design, editing, sponsorship, etc.)
+            </label>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-ink">Cities or regions served (comma-separated)</label>
+            <input
+              type="text"
+              value={location.citiesServed.join(", ")}
+              onChange={(e) => updateLocation({ citiesServed: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+              placeholder="Oakland, San Jose"
+              className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+            />
+          </div>
+        </>
+      )}
 
       <TextField label="Typical availability" value={location.typicalAvailability} onChange={(v) => updateLocation({ typicalAvailability: v })} placeholder="Weekends, weeknights after 6pm" />
       <TextField label="Lead time required (days)" type="number" value={String(location.leadTimeDays)} onChange={(v) => updateLocation({ leadTimeDays: Math.max(0, Number(v) || 0) })} />
@@ -850,8 +911,8 @@ function PreviewStep({
       )}
 
       <p className="rounded-lg bg-paper-dim px-3.5 py-2.5 text-xs leading-relaxed text-ink-soft">
-        Submitting sends your profile to Foundry for review. It won&apos;t appear publicly until it&apos;s approved —
-        see your status any time from the vendor dashboard.
+        Publishing makes your profile visible on Discover Vendors immediately — there&apos;s no admin review step in
+        this prototype.
       </p>
 
       <div className="flex gap-3">
@@ -868,7 +929,7 @@ function PreviewStep({
           onClick={onPublish}
           className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Submit for review
+          Publish profile
         </button>
       </div>
     </div>

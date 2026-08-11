@@ -102,6 +102,8 @@ export function createDraftVendorProfile(input: {
       radiusMiles: 10,
       willingToTravel: false,
       remoteAvailable: false,
+      remoteOnly: false,
+      serviceAddress: "",
       citiesServed: [],
       typicalAvailability: "",
       leadTimeDays: 3,
@@ -148,25 +150,35 @@ export interface PublishReadiness {
   missing: string[];
 }
 
-/** Mirrors the "clearly explain missing requirements before publishing" requirement. */
+/**
+ * Mirrors the "clearly explain missing requirements before publishing"
+ * requirement. Portfolio links are NOT required — a vendor may publish with
+ * only a description, at least one skill, and a display name (see CLAUDE.md
+ * rule #8's scoped exception; website/Instagram/portfolio links are all
+ * optional extras, not a publish gate).
+ */
 export function getPublishReadiness(profile: VendorProfile): PublishReadiness {
   const missing: string[] = [];
   if (!profile.professionalDescription.trim()) missing.push("Professional description");
   if (profile.skills.length === 0) missing.push("At least one skill");
-  if (profile.portfolioLinks.length === 0) missing.push("At least one portfolio link");
   if (!profile.displayName.trim()) missing.push("Professional display name");
   return { ready: missing.length === 0, missing };
 }
 
-/** Submits a draft/rejected profile for admin review. Does not publish directly — see docs/SECURITY.md #9. */
-export function submitVendorProfileForReview(id: string): VendorProfile | undefined {
+/**
+ * Publishes a draft/rejected profile immediately — no admin review step (see
+ * CLAUDE.md rule #8's scoped exception, reversed for vendor profiles by
+ * explicit user direction). Admin retains the ability to reject/suspend an
+ * already-published profile via rejectVendorProfile()/suspendVendorProfile().
+ */
+export function publishVendorProfile(id: string): VendorProfile | undefined {
   const profile = getVendorProfileById(id);
   if (!profile) return undefined;
   const readiness = getPublishReadiness(profile);
   if (!readiness.ready) {
     throw new Error(`Profile is missing required fields: ${readiness.missing.join(", ")}`);
   }
-  return updateVendorProfile(id, { status: "pending_review", rejectionReason: null });
+  return updateVendorProfile(id, { status: "published", rejectionReason: null });
 }
 
 export function saveVendorProfileDraft(id: string, patch: Partial<VendorProfile>): VendorProfile | undefined {

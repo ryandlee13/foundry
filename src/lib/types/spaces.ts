@@ -102,6 +102,20 @@ export interface Venue {
   photos?: string[];
   /** File names only — video bytes aren't persisted in this prototype (see VenueSubmissionForm.tsx). */
   videoNames?: string[];
+  /** ISO — when this listing first went live. Undefined for listings that predate this field; readers fall back to createdAt. Never changed by an edit. */
+  publishedAt?: string;
+  /** ISO — last time the owner saved an edit. Undefined means never edited. */
+  updatedAt?: string;
+  /** "HH:mm" (24h) earliest a booking may start. Undefined = the venue hasn't stated a window. */
+  earliestStartTime?: string;
+  /** "HH:mm" latest a booking may end. May be numerically <= earliestStartTime, meaning the window crosses midnight (e.g. 18:00-02:00) — see computeBookingWindow() in bookingConstraints.ts. */
+  latestEndTime?: string;
+  /** Booking start/end times must land on this minute grid. Undefined = no increment rule. */
+  bookingIncrementMinutes?: 15 | 30 | 60;
+  /** When true, the owner will consider bookings shorter than minBookingHours (soft confirm, not a hard block). Undefined/false = hard block — today's behavior. */
+  minBookingHoursNegotiable?: boolean;
+  /** When true, the owner will consider guest counts above maxCapacity (soft confirm). Undefined/false = hard block, matching BookingPanel's existing behavior. */
+  capacityNegotiable?: boolean;
 }
 
 export type BookingStatus = "pending" | "confirmed" | "declined";
@@ -126,6 +140,8 @@ export interface Booking {
   eventName: string | null;
   eventType: EventType | null;
   createdAt: string;
+  /** Denormalized venue.ownerId at request time, so a booking can route to its host without a venue lookup; null when the venue had no owner (seed venues). Optional because bookings written before this field exists in a browser predate it — always read via getBookingVenueOwnerId(). */
+  venueOwnerId?: string | null;
 }
 
 /** A venue enriched with its computed distance from the active search center. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectProvider, isValidPortfolioUrl } from "../portfolioLinks";
+import { detectProvider, isValidPortfolioUrl, toSafeExternalUrl, formatExternalUrlLabel } from "../portfolioLinks";
 
 describe("detectProvider", () => {
   it.each([
@@ -36,5 +36,30 @@ describe("isValidPortfolioUrl", () => {
   it("rejects non-http(s) schemes and garbage input", () => {
     expect(isValidPortfolioUrl("javascript:alert(1)")).toBe(false);
     expect(isValidPortfolioUrl("not a url")).toBe(false);
+  });
+});
+
+describe("toSafeExternalUrl", () => {
+  it("returns the url unchanged for http/https", () => {
+    expect(toSafeExternalUrl("https://example.com")).toBe("https://example.com");
+  });
+
+  it("returns null for unsafe schemes or garbage input", () => {
+    expect(toSafeExternalUrl("javascript:alert(1)")).toBeNull();
+    expect(toSafeExternalUrl("not a url")).toBeNull();
+  });
+});
+
+describe("formatExternalUrlLabel", () => {
+  it("strips protocol and www", () => {
+    expect(formatExternalUrlLabel("https://www.instagram.com/janedoe")).toBe("instagram.com/janedoe");
+  });
+
+  it("omits a bare root path", () => {
+    expect(formatExternalUrlLabel("https://janedoephoto.com")).toBe("janedoephoto.com");
+  });
+
+  it("falls back to the raw string for an unparseable URL", () => {
+    expect(formatExternalUrlLabel("not a url")).toBe("not a url");
   });
 });

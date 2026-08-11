@@ -3,7 +3,9 @@
 import { useEffect, useId, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { findAccountById } from "@/lib/auth/storage";
-import { getPastRentalsForOrganizer } from "@/lib/spaces/bookings";
+import { getPastRentalsForOrganizer, formatEventLabel } from "@/lib/spaces/bookings";
+import { evaluateBookingRequest, toVenueBookingPolicy, getConfirmableViolations } from "@/lib/spaces/bookingConstraints";
+import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
 import type { Account } from "@/lib/auth/types";
 import type { Booking, Venue } from "@/lib/types/spaces";
 
@@ -34,6 +36,14 @@ export default function BookingRequestReviewModal({
   }, [open, booking]);
 
   if (!booking || !venue) return null;
+
+  const overriddenConstraints = getConfirmableViolations(
+    evaluateBookingRequest(
+      { eventDate: booking.eventDate, startTime: booking.startTime, endTime: booking.endTime, attendees: booking.attendees },
+      toVenueBookingPolicy(venue),
+      new Date().toISOString().slice(0, 10)
+    )
+  );
 
   return (
     <Dialog open={open} onClose={onClose} labelledBy={titleId} panelClassName="w-full max-w-md p-6">
@@ -67,11 +77,24 @@ export default function BookingRequestReviewModal({
 
       <div className="mt-4 rounded-lg bg-paper-dim px-3.5 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Requested</p>
-        <p className="mt-1 text-sm font-medium text-ink">{venue.name}</p>
+        <p className="mt-1 text-sm font-medium text-ink">{formatEventLabel(booking)}</p>
+        {booking.eventType && <p className="text-xs text-ink-soft">{EVENT_TYPE_LABELS[booking.eventType]}</p>}
+        <p className="text-xs text-ink-soft">{venue.name}</p>
         <p className="text-xs text-ink-soft">
           {booking.eventDate} · {booking.startTime}–{booking.endTime} · {booking.attendees} guests
         </p>
       </div>
+
+      {overriddenConstraints.length > 0 && (
+        <div className="mt-3 rounded-lg border border-brass/40 bg-brass/5 px-3.5 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">Outside your usual preferences</p>
+          <ul className="mt-1 space-y-1 text-xs text-ink-soft">
+            {overriddenConstraints.map((violation) => (
+              <li key={violation.code}>{violation.confirmTitle}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">

@@ -1,4 +1,5 @@
 import type { Booking } from "@/lib/types/spaces";
+import { getVenueBySlugAnywhere } from "./submittedVenues";
 
 /**
  * Browser-local bookings. Same prototype caveat as auth/submittedVenues
@@ -42,16 +43,24 @@ export function addBooking(input: {
   eventName?: string | null;
   eventType?: Booking["eventType"];
 }): Booking {
+  const venue = getVenueBySlugAnywhere(input.venueSlug);
   const booking: Booking = {
     id: crypto.randomUUID(),
     status: "pending",
     createdAt: new Date().toISOString(),
     eventName: null,
     eventType: null,
+    venueOwnerId: venue?.ownerId ?? null,
     ...input,
   };
   saveBookings([...getBookings(), booking]);
   return booking;
+}
+
+/** Resolves a booking's venue-owner id, falling back to a fresh venue lookup for bookings written before venueOwnerId was denormalized. */
+export function getBookingVenueOwnerId(booking: Booking): string | null {
+  if (booking.venueOwnerId !== undefined) return booking.venueOwnerId;
+  return getVenueBySlugAnywhere(booking.venueSlug)?.ownerId ?? null;
 }
 
 /** Pure: the organizer-chosen event name, falling back to "{venue} · {date}" when unset. */

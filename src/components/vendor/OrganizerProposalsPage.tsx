@@ -7,7 +7,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
 import { getProposalsForNeed } from "@/lib/vendors/proposals";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
-import { acceptProposal, declineProposalWithNotification, startConversation } from "@/lib/vendors/engagements";
+import { finalizeDeal, declineProposalWithNotification, startConversation } from "@/lib/vendors/engagements";
 import { shortlistProposal } from "@/lib/vendors/proposals";
 import { getThreadForProposal } from "@/lib/vendors/messages";
 import { getSkillName } from "@/lib/vendors/skills";
@@ -17,6 +17,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 import EmptyState from "@/components/ui/EmptyState";
 import Dialog from "@/components/ui/Dialog";
+import FinalizeDealDialog, { type FinalizeDealTerms } from "./FinalizeDealDialog";
 import type { EventNeed, ProposalStatus, VendorProfile, VendorProposal } from "@/lib/types/vendors";
 
 type SortOption =
@@ -140,14 +141,14 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
     setConfirmingAccept(proposal);
   }
 
-  function confirmAccept() {
+  function confirmAccept(terms?: FinalizeDealTerms) {
     if (!confirmingAccept) return;
     try {
-      acceptProposal(confirmingAccept.id);
+      finalizeDeal({ proposalId: confirmingAccept.id, terms });
       setConfirmingAccept(null);
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't accept this proposal.");
+      setError(err instanceof Error ? err.message : "Couldn't send final terms to this vendor.");
       setConfirmingAccept(null);
     }
   }
@@ -322,41 +323,13 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
         )}
       </div>
 
-      <Dialog
+      <FinalizeDealDialog
         open={confirmingAccept !== null}
+        proposal={confirmingAccept}
+        counterpartyName={confirmingAccept ? (vendorsById[confirmingAccept.vendorProfileId]?.displayName ?? "this vendor") : "this vendor"}
         onClose={() => setConfirmingAccept(null)}
-        labelledBy="accept-proposal-title"
-        panelClassName="w-full max-w-md p-6"
-      >
-        <h2 id="accept-proposal-title" className="font-display text-xl font-semibold text-ink">
-          Finalize this vendor?
-        </h2>
-        {confirmingAccept && (
-          <p className="mt-3 text-sm text-ink-soft">
-            This confirms a ${confirmingAccept.proposedAmount} engagement and its deliverables, notifies the vendor,
-            and closes out any other active proposals once every position for this request is filled.
-            {threadIdByProposal[confirmingAccept.id] && " If you've been messaging this vendor, that conversation continues."}
-            {need.positionsAvailable > 1 &&
-              ` ${need.positionsAvailable - need.positionsFilled} of ${need.positionsAvailable} positions are currently open.`}
-          </p>
-        )}
-        <div className="mt-5 flex gap-3">
-          <button
-            type="button"
-            onClick={() => setConfirmingAccept(null)}
-            className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={confirmAccept}
-            className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-          >
-            Finalize Deal
-          </button>
-        </div>
-      </Dialog>
+        onFinalize={confirmAccept}
+      />
 
       <Dialog
         open={decliningProposal !== null}

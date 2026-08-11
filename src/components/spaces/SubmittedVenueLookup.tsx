@@ -9,13 +9,27 @@ import { getVenueBySlugAnywhere } from "@/lib/spaces/submittedVenues";
 import type { Venue } from "@/lib/types/spaces";
 
 /**
- * Locally-submitted venues only exist in the browser that submitted them
- * (see src/lib/spaces/submittedVenues.ts), so they can't be resolved at
- * build time or on the server. This looks them up client-side after mount.
+ * Locally-submitted venues (including adopted/edited seed venues — see
+ * adoptSeedVenues() and updateSubmittedVenue() in submittedVenues.ts) only
+ * exist in the browser, so they can't be resolved at build time or on the
+ * server. This looks them up client-side after mount.
+ *
+ * `fallbackVenue`, when supplied, is the statically-generated seed record
+ * for this slug (see the [slug] page's own `getVenueBySlug`). It's rendered
+ * immediately so a plain seed venue paints with no loading flash — the
+ * client-side lookup below then runs regardless and swaps in a submitted or
+ * adopted override if one exists, since the static seed data can never
+ * reflect an edit or an ownership adoption made in this browser.
  */
-export default function SubmittedVenueLookup({ slug }: { slug: string }) {
-  const [status, setStatus] = useState<"loading" | "found" | "not-found">("loading");
-  const [venue, setVenue] = useState<Venue | null>(null);
+export default function SubmittedVenueLookup({
+  slug,
+  fallbackVenue = null,
+}: {
+  slug: string;
+  fallbackVenue?: Venue | null;
+}) {
+  const [status, setStatus] = useState<"loading" | "found" | "not-found">(fallbackVenue ? "found" : "loading");
+  const [venue, setVenue] = useState<Venue | null>(fallbackVenue);
 
   useEffect(() => {
     // localStorage is only readable client-side, hence the effect rather
@@ -26,10 +40,10 @@ export default function SubmittedVenueLookup({ slug }: { slug: string }) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setVenue(match);
       setStatus("found");
-    } else {
+    } else if (!fallbackVenue) {
       setStatus("not-found");
     }
-  }, [slug]);
+  }, [slug, fallbackVenue]);
 
   if (status === "loading") {
     return <LoadingState label="Loading space…" />;

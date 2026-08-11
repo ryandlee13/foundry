@@ -28,6 +28,8 @@ function makeProfile(overrides: Partial<VendorProfile> = {}): VendorProfile {
       radiusMiles: 10,
       willingToTravel: false,
       remoteAvailable: false,
+      remoteOnly: false,
+      serviceAddress: "",
       citiesServed: [],
       typicalAvailability: "",
       leadTimeDays: 3,
@@ -143,6 +145,14 @@ describe("matchesLocation", () => {
     const need = makeNeed({ locationType: "remote" });
     expect(matchesLocation(makeProfile({ location: { ...makeProfile().location, remoteAvailable: false } }), need)).toBe(false);
     expect(matchesLocation(makeProfile({ location: { ...makeProfile().location, remoteAvailable: true } }), need)).toBe(true);
+  });
+
+  it("a remote-only vendor only matches remote needs, ignoring proximity entirely", () => {
+    const remoteOnlyProfile = makeProfile({ location: { ...makeProfile().location, remoteOnly: true, radiusMode: "anywhere" } });
+    expect(matchesLocation(remoteOnlyProfile, makeNeed({ locationType: "remote" }))).toBe(true);
+    expect(matchesLocation(remoteOnlyProfile, makeNeed({ locationType: "in_person", coordinates: { lat: 37.7509, lng: -122.4153 } }))).toBe(
+      false
+    );
   });
 });
 

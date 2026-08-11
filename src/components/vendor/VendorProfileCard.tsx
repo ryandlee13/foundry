@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { VENDOR_SKILLS } from "@/lib/vendors/skills";
+import { toSafeExternalUrl } from "@/lib/vendors/portfolioLinks";
 import type { VendorProfile } from "@/lib/types/vendors";
 
 export default function VendorProfileCard({ vendor }: { vendor: VendorProfile }) {
+  const hasLinks =
+    Boolean(toSafeExternalUrl(vendor.websiteUrl)) || Boolean(toSafeExternalUrl(vendor.instagramUrl)) || vendor.portfolioLinks.length > 0;
+
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
       <div className="relative aspect-[4/3] w-full overflow-hidden">
@@ -42,10 +46,13 @@ export default function VendorProfileCard({ vendor }: { vendor: VendorProfile })
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-end border-t border-line pt-3 text-right text-xs font-medium text-ink-soft">
-          {vendor.completedEventCount > 0
-            ? `${vendor.completedEventCount} Foundry event${vendor.completedEventCount === 1 ? "" : "s"}`
-            : "New to Foundry"}
+        <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs font-medium text-ink-soft">
+          <span>{hasLinks ? "🔗 Portfolio linked" : ""}</span>
+          <span>
+            {vendor.completedEventCount > 0
+              ? `${vendor.completedEventCount} Foundry event${vendor.completedEventCount === 1 ? "" : "s"}`
+              : "New to Foundry"}
+          </span>
         </div>
       </div>
 

@@ -41,17 +41,20 @@ choice:
 7. Never describe an uploaded document as "verified" or "approved" in a legal sense. Use
    `submitted` / `under review` / `reviewed`.
 8. Venue listings and vendor profiles are public only when `status = 'approved'`, set only
-   by an admin action. **Scoped exception:** venues submitted through
-   `/list-your-venue` (see `src/components/spaces/VenueSubmissionForm.tsx`) publish to
-   Discover Spaces immediately with no admin review, at explicit user direction, since
-   there's no real backend yet to review against (see "Local-prototype layer" below). This
-   must gain a real approval step before any real launch — don't extend the "skip review"
-   pattern to anything else without the same explicit approval. **Vendor profiles do not
-   use this exception** — `submitVendorProfileForReview()` moves a profile to
-   `pending_review`, and it only becomes publicly visible after an admin (`/dashboard/admin`)
-   calls `approveVendorProfile()`. `VendorProfileLookup` enforces `status === "published"`
-   before rendering anything publicly. Keep it this way; don't collapse it into the venue
-   auto-publish pattern.
+   by an admin action. **Scoped exception (both venues and vendor profiles):** venues
+   submitted through `/list-your-venue` (see
+   `src/components/spaces/VenueSubmissionForm.tsx`) publish to Discover Spaces immediately
+   with no admin review, and — as of the vendor deal-finalization rework — vendor profiles
+   submitted through onboarding now publish the same way: `publishVendorProfile()`
+   (`src/lib/vendors/profiles.ts`) sets `status: "published"` immediately, with no
+   `pending_review` step. This is at explicit user direction, since there's no real backend
+   yet to review against (see "Local-prototype layer" below). Both must gain a real
+   approval step before any real launch — don't extend the "skip review" pattern anywhere
+   else without the same explicit approval. Admin still keeps `approveVendorProfile()`/
+   `rejectVendorProfile()`/`suspendVendorProfile()` for moderation *after* the fact
+   (`/dashboard/admin`) — those didn't go away, only the pre-publish gate did.
+   `VendorProfileLookup` still enforces `status === "published"` before rendering anything
+   publicly, so a rejected/suspended profile still can't be reached.
 9. No secrets or real credentials in source-controlled files. `.env.example` holds names
    and placeholders only.
 
@@ -114,6 +117,37 @@ now rather than waiting.
   accepts/declines from `/dashboard/venue` (`updateBookingStatus`). There's still no
   quote/negotiation step, just a single accept/decline, and no real-time push — the
   "notification" is a badge computed on page load from local data, not a live event.
+- **Venue submission is a 3-step wizard, and the final "Publish listing" step is a real
+  gate, not cosmetic.** `src/lib/spaces/bookingConstraints.ts` (pure) lets an owner set an
+  optional booking-hours window (`earliestStartTime`/`latestEndTime`, which can cross
+  midnight) and a booking increment (15/30/60 min), each independently marked negotiable
+  or non-negotiable alongside the existing min-hours/max-capacity fields.
+  `evaluateBookingRequest()` is the single source of truth `BookingPanel.tsx` calls to
+  decide hard-block vs. confirm-and-proceed — don't duplicate that logic client-side.
+- **Venue listings are editable after publish.** `updateSubmittedVenue()`
+  (`src/lib/spaces/submittedVenues.ts`) never touches `id`/`slug`/`ownerId` — a venue's
+  public URL and ownership are immutable once live. `VenueEditForm.tsx` at
+  `/dashboard/venue/listings/[id]` is a separate component from
+  `VenueSubmissionForm.tsx`, not an `isEdit` prop threaded through the wizard — the create
+  flow hardcodes too many create-only concerns (slug generation, `id`, `badge`, `ownerId`,
+  the router redirect) to safely share one component. Both share the extracted
+  `venueFormSchema.ts`.
+- **First-publish billing trigger.** `src/lib/spaces/venueBilling.ts` records (in
+  `foundry.venues.billingActivations`, keyed by owner) that a venue owner's subscription
+  would activate on their first published listing — deliberately not a field on `Venue` or
+  `Account`, so it stays a single deletable file once real billing (Phase 7) lands. It
+  never renders a dollar figure (`VENUE_SUBSCRIPTION_PLACEHOLDER_COPY` says "$X/month,
+  price to be announced") and the record survives that venue later being removed —
+  `recordFirstPublishActivation()` is idempotent per owner, not per venue.
+- **Host-initiated messaging.** A booking thread (`BookingMessageThread`, part of the
+  `MessageThread` discriminated union in `src/lib/vendors/messages.ts`) can only be
+  created by `startBookingConversation()` in `src/lib/spaces/bookingWorkflow.ts`, which
+  throws unless the caller is the venue owner on a `confirmed` booking — the mirror of "a
+  vendor can never create a thread" (see `docs/SECURITY.md`'s "Chat unlock timing"). The
+  planner is notified their request "moved forward" on accept but gets no thread link
+  until the owner actually clicks "Go to messages." This is the only place
+  `src/lib/spaces/*` imports from `src/lib/vendors/*` (messages + notifications); keep
+  `bookings.ts` itself free of that import so the dependency edge stays one-directional.
 - None of this is real. Before a real launch, all of it needs: a real Supabase project,
   the `docs/DATABASE.md` schema (extended with space type/amenities/rules/photos columns
   and real Storage-backed uploads — see `docs/ROUTES.md`), RLS policies per
@@ -148,8 +182,21 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   requests. `EventNeed.bookingId` points at a `Booking`, not a separate `Event` row.
   Organizer vendor-request UI lives at
   `/dashboard/organizer/bookings/[bookingId]/vendors`, not `/organizer/events/...`.
-- **Vendor profile approval is real** (not the venue auto-publish exception) — see rule #8
-  above.
+- **Vendor profiles now publish immediately, like venues** (rule #8 above) —
+  `publishVendorProfile()` replaced the old `submitVendorProfileForReview()`, and
+  `getPublishReadiness()` no longer requires a portfolio link (website/Instagram/portfolio
+  links are all optional). Admin moderation (`approveVendorProfile`/`rejectVendorProfile`/
+  `suspendVendorProfile`) still exists and still gates public visibility going forward —
+  only the *pre-publish* review step was removed.
+- **Remote-only vendors and service radius.** `VendorLocation.remoteOnly` is only offered
+  as an onboarding option when every skill the vendor selected is `remoteEligible` (see
+  `src/lib/vendors/skills.ts`) — `src/lib/vendors/remoteEligibility.ts` is the single place
+  that decides this, so a DJ or bartender can never claim remote-only. A non-remote-only
+  vendor collects `VendorLocation.serviceAddress` (a real street address) plus a radius in
+  miles, visualized by `MapPreview.tsx` — **that component is an SVG radius diagram with no
+  real coordinates or map tiles**, not an actual map; don't call it a map in UI copy or add
+  a map library to satisfy it. `serviceAddress` follows the same never-public rule as
+  `venues.exactAddress` (rule #5) — it's never rendered on any public vendor page.
 - **No real email is ever sent.** The "email notifications" toggle in vendor onboarding is
   stored as a preference only (`VendorNotificationPreferences.emailEnabled`); nothing in
   this codebase calls an email provider. Don't add Resend or any other transactional-email
@@ -163,20 +210,55 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   records — the same limitation the whole prototype already has for venues/bookings, not a
   new risk introduced here. Real RLS-backed proposal privacy is a Phase 5 requirement, not
   optional polish.
-- Message threads (`src/lib/vendors/messages.ts`) are anchored to a proposal
-  (`proposalId`/`eventNeedId`), not an engagement — `engagementId` starts `null` and is
-  upgraded in place once that proposal is finalized, never duplicated into a second
-  thread. A thread can only be created via `getOrCreateThreadForProposal()`, called from
-  exactly two places in `engagements.ts`: `startConversation()` (the organizer's
-  pre-commitment "let's talk" action — moves the proposal to `in_discussion`, doesn't
-  touch competing proposals, doesn't create an engagement) and `acceptProposal()` (reuses
-  an existing thread, or creates one if the organizer finalized without ever starting a
-  conversation). A vendor can never create a thread. Don't add a third code path that
-  creates one — see `docs/SECURITY.md`'s "Chat unlock timing" for the full rule.
+- **`MessageThread` (`src/lib/vendors/messages.ts`) is a discriminated union**, not one
+  shape with optional fields: `ProposalMessageThread` (`kind: "proposal"`, anchored to
+  `proposalId`/`eventNeedId`, `engagementId` starting `null` and upgraded in place once
+  finalized) or `BookingMessageThread` (`kind: "booking"`, anchored to
+  `bookingId`/`venueId`, see the host-initiated-messaging bullet above). Narrow with
+  `isProposalThread()`/`isBookingThread()` — never compare optional fields for equality to
+  tell the two apart, since `undefined === undefined` silently matches the wrong kind. The
+  shared participant field is `counterpartyId` (renamed from `vendorOwnerId`, since it can
+  now hold a venue operator's id too). `normalizeStoredThread()` backfills `kind` onto
+  threads written before this union existed — don't remove it while any local test data
+  from before this change might still be loaded. A proposal thread can only be created via
+  `getOrCreateThreadForProposal()`, called from exactly two places in `engagements.ts`:
+  `startConversation()` (the organizer's pre-commitment "let's talk" action — moves the
+  proposal to `in_discussion`, doesn't touch competing proposals, doesn't create an
+  engagement) and `finalizeDeal()` (reuses an existing thread, or creates one if the
+  organizer finalized without ever starting a conversation). A vendor can never create
+  either kind of thread. Don't add a third code path that creates one — see
+  `docs/SECURITY.md`'s "Chat unlock timing" for the full rule.
+- **Finalizing a deal is a two-step handshake, not a unilateral organizer action.**
+  `acceptProposal()` was removed entirely (not deprecated) and replaced by
+  `finalizeDeal({ proposalId, terms? })` (creates the engagement in
+  `pending_vendor_confirmation` — omit `terms` to keep the proposal verbatim, or pass
+  edited `{amount, pricingModel, deliverables}` to negotiate before sending),
+  `confirmEngagementTerms(engagementId, actorAccountId)` (vendor-side accept — this is
+  where the competing-proposals-on-the-same-need sweep happens, deliberately *not* at
+  finalize time, so a later vendor decline doesn't require reopening already-closed
+  competitors), and `declineEngagementTerms(engagementId, actorAccountId, reason?)`
+  (releases the held position via `releaseOnePosition()` so the organizer can finalize
+  someone else). The organizer's Find Vendors page shows "Awaiting Vendor Confirmation"
+  until the vendor acts. `VendorEngagement.terms?: AgreedTerms` is the locked record
+  (`AgreedTermsCard.tsx` renders it); the wording is a **firm mutual commitment on
+  Foundry**, explicitly *not* a claim of legal/court enforceability (rule #7's spirit
+  extended to contract language, not just document status) —
+  `formatAgreedTermsFootnote()` in `src/lib/vendors/agreedTerms.ts` carries a
+  `TODO(legal)` marking that real contract language needs counsel review before any real
+  launch. Once confirmed, the roster view sums spend via `computeRosterSpend()`
+  (`src/lib/vendors/engagementTotals.ts`), which deliberately excludes `hourly`/`day_rate`/
+  `contact_for_quote` engagements from the total (those are rates, not fixed amounts) and
+  reports them separately instead of folding them into a misleadingly-precise number.
 - Dev-only fictional seed data lives in `src/lib/vendors/seed.ts`, triggered manually from
   `/dev/seed-vendors` (a page that 404s when `NODE_ENV === "production"`). It is never
   called automatically. Re-running it reuses existing seed accounts/profiles rather than
-  duplicating them (matched by a fixed set of `demo-*@example.com` emails).
+  duplicating them (matched by a fixed set of `demo-*@example.com` emails). The venue-side
+  equivalent, `src/lib/spaces/seedVenueOwner.ts` (triggered from `/dev/seed-venues`),
+  creates a real-email account (`josephwharton@gmail.com`, hardcoded at explicit user
+  instruction, understanding it ships in the public bundle and source history) and adopts
+  7 of the 17 seed Discover Spaces venues under that ownership so the venue-owner
+  dashboard/edit/booking flows can be tested against real owned listings. Same "no
+  password, sign in by email only" caveat as the vendor seeder.
 
 ## Commands
 

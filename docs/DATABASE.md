@@ -65,7 +65,14 @@ One row per Supabase Auth user. This is the single identity — roles are layere
   responses), `approx_location` (public — neighborhood name only, no street address or
   coordinates precise enough to pinpoint the building), `capacity_min`, `capacity_max`,
   `amenities` (`text[]`), `status` (enum: `draft` | `pending_review` | `approved` |
-  `rejected` | `archived`), `rejection_reason`, `created_at`, `updated_at`.
+  `rejected` | `archived`), `rejection_reason`, `published_at` (nullable — set once, first
+  time `status` becomes `approved`; drives a "Live since" display, distinct from
+  `created_at`), `earliest_start_time`/`latest_end_time` (nullable `time`, both-or-neither
+  — an owner-configured booking window; `latest_end_time <= earliest_start_time` means the
+  window crosses midnight, not an invalid range), `booking_increment_minutes` (nullable
+  enum: `15`|`30`|`60`), `min_booking_hours_negotiable` (bool, default `false`),
+  `capacity_negotiable` (bool, default `false` — independent of the hours flag; an owner
+  may allow one but not the other), `created_at`, `updated_at`.
 - **FKs:** `owner_id` → `profiles.id`.
 - **Ownership:** Venue operator who created it.
 - **Status values:** `draft` (editable, not submitted) → `pending_review` (submitted to
@@ -75,8 +82,11 @@ One row per Supabase Auth user. This is the single identity — roles are layere
   - `select`: anyone can read `approved` rows through a **public view that excludes
     `exact_address`**; owner and admins can read the full row including `exact_address`.
   - `insert`: authenticated users with the `venue_operator` role, `owner_id = auth.uid()`.
-  - `update`: owner (only while not `approved`, or limited fields once approved — enforced
-    server-side) or admin (for `status`/`rejection_reason`).
+  - `update`: owner may edit listing content (description, photos, amenities, booking
+    window/increment/negotiability, etc.) even after `approved` — the prototype validated
+    this as a real, wanted flow (`VenueEditForm.tsx`), not just a draft-only edit. Owner
+    updates never touch `id`/`owner_id`, and never regenerate the public slug/URL. `status`/
+    `rejection_reason` remain admin-only.
   - `delete`: owner, only while `draft`.
 
 ## 4. `venue_photos`
@@ -182,12 +192,15 @@ One row per Supabase Auth user. This is the single identity — roles are layere
 - **Purpose:** The confirmed (or pending-confirmation) reservation of a venue for an event.
   Created when a quote is accepted.
 - **Key columns:** `id`, `booking_request_id` (unique), `event_id`, `venue_id`,
-  `organizer_id`, `quote_id`, `confirmed_start`, `confirmed_end`, `price_amount`, `status`
+  `venue_owner_id` (denormalized from `venues.owner_id` at booking-creation time — avoids a
+  join purely to check "is this actor the venue owner on this booking" in RLS/authorization
+  checks, e.g. gating who may initiate the booking's message thread), `organizer_id`,
+  `quote_id`, `confirmed_start`, `confirmed_end`, `price_amount`, `status`
   (enum: `pending_documents` | `confirmed` | `cancelled` | `completed`), `created_at`,
   `updated_at`.
 - **FKs:** `booking_request_id` → `booking_requests.id` (unique), `event_id` →
-  `events.id`, `venue_id` → `venues.id`, `organizer_id` → `profiles.id`, `quote_id` →
-  `quotes.id`.
+  `events.id`, `venue_id` → `venues.id`, `venue_owner_id` → `profiles.id`, `organizer_id` →
+  `profiles.id`, `quote_id` → `quotes.id`.
 - **Ownership:** Organizer and venue owner both have a stake; both can read, neither can
   unilaterally alter confirmed terms.
 - **Status values:** `pending_documents` (quote accepted, awaiting required docs, e.g.
@@ -356,14 +369,22 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
 
 - **`vendor_profiles`** (extends §12): also needs `first_name`, `last_name`,
   `profile_photo_path`, `cover_image_path`, `website_url`, `instagram_url`,
-  `home_region`, `home_postal_code`, `latitude`, `longitude`, `radius_mode` (enum:
+  `home_region`, `home_postal_code`, `latitude`, `longitude`, `remote_only` (bool — only
+  settable when every one of the profile's skills has `remote_eligible = true`; a DJ or
+  bartender can never be `remote_only`), `service_address` (**private**, same
+  never-public-payload rule as `venues.exact_address` — used only to compute
+  `radius_miles` matches, not rendered), `radius_mode` (enum:
   `5`|`10`|`25`|`50`|`100`|`custom`|`anywhere`), `radius_miles`, `willing_to_travel` (bool),
-  `remote_available` (bool), `cities_served` (`text[]`), `typical_availability` (text),
+  `cities_served` (`text[]`), `typical_availability` (text),
   `lead_time_days`, `average_rating` (numeric, nullable), `review_count`,
   `completed_event_count`, `rejection_reason`. `status` gains `suspended` alongside the
   existing `draft`/`pending_review`/`approved`/`rejected`/`archived` — note the prototype
-  code calls the public-facing value `published` rather than `approved`; reconcile the
-  enum label when migrating. Notification preferences (in-app/email toggles, per-category
+  code calls the public-facing value `published` rather than `approved`, and (as of the
+  deal-finalization rework) publishes directly to `published` with no `pending_review`
+  step, matching the venue auto-publish exception rather than the original admin-gated
+  design; reconcile both the enum label and the skip-review behavior when migrating (real
+  Phase 5 should restore pre-publish admin approval for both venues and vendor profiles —
+  see `docs/SECURITY.md` §9). Notification preferences (in-app/email toggles, per-category
   booleans, per-skill triggers, match-scope) live as a `vendor_notification_preferences`
   join table per the original proposal — the prototype embeds them directly on the profile
   record for simplicity, which is not appropriate once this is a real table.
@@ -405,16 +426,37 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
 - **`vendor_engagements`** (per original proposal, not yet in §12–17): `id`,
   `event_need_id`, `booking_id` (see the `event_id`→`booking_id` note above),
   `organizer_id`, `vendor_profile_id`, `accepted_proposal_id`, `agreed_amount`,
-  `pricing_model`, `agreed_deliverables`, `status` (enum: `confirmed`|`in_progress`|
-  `completed`|`canceled_by_organizer`|`canceled_by_vendor`|`disputed`), `completed_at`,
-  `canceled_at`. Created only via an "accept proposal" transaction that also fills one
-  `event_need` position (auto-closing it once full) and unlocks the message thread — see
-  `acceptProposal()` in `src/lib/vendors/engagements.ts` for the reference transaction
-  shape to port into a Postgres function/RPC.
-  - **RLS:** `select`: the organizer, the accepted vendor, and admins only. `insert`:
-    server-side only, as part of the accept-proposal transaction. `update`: status
-    transitions restricted server-side (only the organizer marks `completed`/
-    `canceled_by_organizer`; only the vendor sets `canceled_by_vendor`).
+  `pricing_model`, `agreed_deliverables` (these three stay as a denormalized mirror of the
+  locked terms — see `terms` below — so existing read paths don't need a join), `terms`
+  (jsonb — the authoritative locked-terms record: `amount`, `pricing_model`,
+  `deliverables`, `edited_from_proposal` (bool — true when the organizer negotiated away
+  from the vendor's original proposal), `proposed_by_organizer_at`,
+  `confirmed_by_vendor_at` (nullable), `declined_by_vendor_at` (nullable),
+  `decline_reason` (nullable text)), `status` (enum:
+  `pending_vendor_confirmation`|`confirmed`|`in_progress`|`completed`|
+  `declined_by_vendor`|`canceled_by_organizer`|`canceled_by_vendor`|`disputed`),
+  `completed_at`, `canceled_at`. **Finalizing and confirming are two separate
+  transactions, not one:** `finalizeDeal()` (organizer-initiated — creates the row in
+  `pending_vendor_confirmation`, holding the `event_need` position so it can't be
+  double-committed while a decision is pending, but does **not** yet close competing
+  proposals on the same need or unlock the message thread's engagement link) and
+  `confirmEngagementTerms()` (vendor-initiated — moves to `confirmed`, stamps
+  `confirmed_by_vendor_at`, and **only now** closes the other proposals on that need,
+  specifically so a later `declineEngagementTerms()` doesn't have to reopen
+  already-closed competitors). `declineEngagementTerms()` moves to `declined_by_vendor`
+  and releases the held position back to the need (`positions_filled` decremented) so the
+  organizer can finalize a different vendor. See `finalizeDeal()`/
+  `confirmEngagementTerms()`/`declineEngagementTerms()` in
+  `src/lib/vendors/engagements.ts` for the reference transaction shapes to port into
+  Postgres functions/RPCs. The `terms`/agreed-commitment language is worded as a firm
+  mutual commitment on Foundry, **not** a legal-enforceability claim — see
+  `docs/SECURITY.md`'s vendor-marketplace notes and the `TODO(legal)` in
+  `src/lib/vendors/agreedTerms.ts`.
+  - **RLS:** `select`: the organizer, the vendor, and admins only. `insert`: server-side
+    only, as part of the finalize-deal transaction. `update`: status transitions
+    restricted server-side — only the vendor may move `pending_vendor_confirmation` →
+    `confirmed`/`declined_by_vendor`; only the organizer marks `completed`/
+    `canceled_by_organizer`; only the vendor sets `canceled_by_vendor`.
 - **`vendor_reviews`** (per original proposal): `id`, `engagement_id` (unique),
   `organizer_id`, `vendor_profile_id`, `overall_rating` (1–5), five optional category
   ratings (`quality`/`communication`/`reliability`/`professionalism`/`value`),
@@ -455,18 +497,30 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
     something to bolt onto the prototype.
   - **RLS:** `select`/`update` (mark read): owner (`recipient_id = auth.uid()`) only.
     `insert`: server-side only, as a side effect of the action that triggered it.
-- **`message_threads` / `messages`** (extends §16/§17): `message_threads` is anchored to
-  `proposal_id` → `vendor_proposals.id` (not `engagement_id`) plus a denormalized
-  `event_need_id` for grouping/headers. `engagement_id` is nullable — null until that
-  proposal is finalized, at which point the existing thread row is updated in place
-  (never a second thread created for the same proposal). **A thread is only creatable by
-  the organizer who owns the parent event need, for a proposal on that need** — via
-  `startConversation()` (pre-commitment: planner opts into messaging a specific vendor
-  before finalizing, proposal moves to `in_discussion`) or `acceptProposal()` (falls back
-  to creating one if the organizer finalized without ever starting a conversation first).
-  A vendor can never create a thread. This is the concrete mechanism behind
-  `docs/SECURITY.md`'s "chat unlock timing" rule — see that doc for the up-to-date
-  statement (this replaced an earlier accept-only-creation design).
+- **`message_threads` / `messages`** (extends §16/§17): the prototype's
+  `MessageThread` is two distinct row shapes, matching §16's existing polymorphic
+  `context_type` design — a real migration should use `context_type` in
+  (`'proposal'`,`'booking'`) rather than inventing a new table. The shared participant
+  column is `counterparty_id` (the non-organizer party — a vendor on a proposal thread, a
+  venue owner on a booking thread; named generically since one column now serves both
+  contexts). **Proposal threads**: anchored to `proposal_id` → `vendor_proposals.id` (not
+  `engagement_id`) plus a denormalized `event_need_id` for grouping/headers.
+  `engagement_id` is nullable — null until that proposal is finalized, at which point the
+  existing thread row is updated in place (never a second thread created for the same
+  proposal). Only creatable by the organizer who owns the parent event need, for a
+  proposal on that need — via `startConversation()` (pre-commitment: planner opts into
+  messaging a specific vendor before finalizing, proposal moves to `in_discussion`) or
+  `finalizeDeal()` (falls back to creating one if the organizer finalized without ever
+  starting a conversation first; this replaced the earlier `acceptProposal()`). A vendor
+  can never create a proposal thread. **Booking threads**: anchored to `booking_id` →
+  `bookings.id` plus a denormalized `venue_id`. Only creatable by the venue owner on a
+  `confirmed` booking, via `startBookingConversation()` in
+  `src/lib/spaces/bookingWorkflow.ts` — the organizer/planner is notified their booking
+  "moved forward" on acceptance but gets no thread to reply in until the venue owner
+  initiates one; the planner can never create a booking thread either. This dual rule (no
+  vendor-initiated proposal thread, no planner-initiated booking thread) is the concrete
+  mechanism behind `docs/SECURITY.md`'s "chat unlock timing" rules — see that doc for the
+  up-to-date statement of both.
 
 ---
 
@@ -484,9 +538,11 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
 | `vendor_profiles` | `listing_status` (shared) | `draft`, `pending_review`, `approved`, `rejected`, `archived` |
 | `event_needs` | `event_need_status` | `open`, `in_review`, `filled`, `cancelled` |
 | `proposals` | `proposal_status` | `submitted`, `accepted`, `declined`, `withdrawn` |
+| `vendor_engagements` | `engagement_status` | `pending_vendor_confirmation`, `confirmed`, `in_progress`, `completed`, `declined_by_vendor`, `canceled_by_organizer`, `canceled_by_vendor`, `disputed` |
 
 `listing_status` is shared between `venues` and `vendor_profiles` since both go through the
-identical admin-approval lifecycle.
+identical admin-approval lifecycle — though see the vendor marketplace extension section
+above for the prototype's current (temporary) skip-review exception on both.
 
 ## Key State Transitions
 
@@ -508,6 +564,14 @@ event_need:      open -> in_review -> filled | cancelled
 
 proposal:        submitted -> accepted | declined | withdrawn
                  (accepting one proposal on an event_need moves that need to `filled`)
+
+vendor_engagement: pending_vendor_confirmation -> confirmed -> in_progress -> completed
+                    pending_vendor_confirmation -> declined_by_vendor (releases the held
+                      event_need position back to the organizer)
+                    confirmed/in_progress -> canceled_by_organizer | canceled_by_vendor | disputed
+                    (competing proposals on the same event_need close only at `confirmed`,
+                     not at `pending_vendor_confirmation` — see the vendor marketplace
+                     extension section above)
 
 venue / vendor_profiles listing_status:
                  draft -> pending_review -> approved | rejected

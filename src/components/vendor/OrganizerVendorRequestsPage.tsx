@@ -20,7 +20,8 @@ import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { getThreadForEngagement, getUnreadMessageCount } from "@/lib/vendors/messages";
 import { getSkillName } from "@/lib/vendors/skills";
 import { formatDeadlineDate } from "@/lib/vendors/expiration";
-import { EVENT_NEED_STATUS_LABELS, ENGAGEMENT_STATUS_LABELS, EVENT_NEED_PHASE_LABELS } from "@/lib/vendors/labels";
+import { computeRosterSpend } from "@/lib/vendors/engagementTotals";
+import { EVENT_NEED_STATUS_LABELS, ENGAGEMENT_STATUS_LABELS, EVENT_NEED_PHASE_LABELS, PRICING_MODEL_LABELS } from "@/lib/vendors/labels";
 import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
@@ -28,7 +29,9 @@ import ErrorState from "@/components/ui/ErrorState";
 import FindVendorsPrompt from "./FindVendorsPrompt";
 import VendorNeedsBuilder from "./VendorNeedsBuilder";
 import type { Booking } from "@/lib/types/spaces";
-import type { EngagementStatus, EventNeed, EventNeedStatus, VendorEngagement, VendorProfile } from "@/lib/types/vendors";
+import type { EngagementStatus, EventNeed, EventNeedPhase, EventNeedStatus, VendorEngagement, VendorProfile } from "@/lib/types/vendors";
+
+const INACTIVE_ENGAGEMENT_STATUSES = new Set<EngagementStatus>(["canceled_by_organizer", "canceled_by_vendor", "declined_by_vendor"]);
 
 const STATUS_STYLES: Record<EventNeedStatus, string> = {
   draft: "bg-paper-dim text-ink-soft",
@@ -40,9 +43,11 @@ const STATUS_STYLES: Record<EventNeedStatus, string> = {
 };
 
 const ENGAGEMENT_STATUS_STYLES: Record<EngagementStatus, string> = {
+  pending_vendor_confirmation: "bg-brass/15 text-brass-dark",
   confirmed: "bg-brass/15 text-brass-dark",
   in_progress: "bg-brass/15 text-brass-dark",
   completed: "bg-green-100 text-green-800",
+  declined_by_vendor: "bg-wine/10 text-wine",
   canceled_by_organizer: "bg-wine/10 text-wine",
   canceled_by_vendor: "bg-wine/10 text-wine",
   disputed: "bg-wine/10 text-wine",
@@ -56,6 +61,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
   const [coordinates, setCoordinates] = useState({ lat: 37.7749, lng: -122.4194 });
   const [needs, setNeeds] = useState<EventNeed[]>([]);
   const [bidCounts, setBidCounts] = useState<Record<string, number>>({});
+  const [phaseByNeed, setPhaseByNeed] = useState<Record<string, EventNeedPhase>>({});
   const [engagements, setEngagements] = useState<VendorEngagement[]>([]);
   const [vendorsById, setVendorsById] = useState<Record<string, VendorProfile>>({});
   const [unreadByEngagement, setUnreadByEngagement] = useState<Record<string, number>>({});
@@ -76,8 +82,14 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
       const list = getEventNeedsForBooking(bookingId);
       setNeeds(list);
       const counts: Record<string, number> = {};
-      for (const need of list) counts[need.id] = getProposalsForNeed(need.id).length;
+      const phases: Record<string, EventNeedPhase> = {};
+      for (const need of list) {
+        const needProposals = getProposalsForNeed(need.id);
+        counts[need.id] = needProposals.length;
+        phases[need.id] = computeEventNeedPhase(need, needProposals);
+      }
       setBidCounts(counts);
+      setPhaseByNeed(phases);
 
       const roster = getEngagementsForBooking(bookingId);
       setEngagements(roster);
@@ -185,7 +197,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
                       {formatDeadlineDate(need.proposalDeadline)}
                     </p>
                     <p className="mt-1 text-xs font-medium text-brass-dark">
-                      {EVENT_NEED_PHASE_LABELS[computeEventNeedPhase(need, getProposalsForNeed(need.id))]}
+                      {EVENT_NEED_PHASE_LABELS[phaseByNeed[need.id] ?? "not_started"]}
                     </p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[need.status]}`}>
@@ -239,15 +251,27 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
             {engagements.map((engagement) => {
               const vendor = vendorsById[engagement.id];
               const unread = unreadByEngagement[engagement.id] ?? 0;
+              const need = needs.find((n) => n.id === engagement.eventNeedId);
               return (
                 <li key={engagement.id} className="rounded-2xl border border-line bg-paper px-5 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-display text-base font-semibold text-ink">{vendor?.displayName ?? "Vendor"}</p>
-                      <p className="mt-0.5 text-xs text-ink-soft">
-                        ${engagement.agreedAmount} · {engagement.eventNeedId in bidCounts ? getSkillName(needs.find((n) => n.id === engagement.eventNeedId)?.skillSlug ?? "other") : ""}
-                        {unread > 0 && ` · ${unread} unread message${unread === 1 ? "" : "s"}`}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      {vendor?.profilePhoto ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- local data URL, not a remote image domain
+                        <img src={vendor.profilePhoto} alt="" className="h-10 w-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-paper-dim font-display text-sm text-ink-soft">
+                          {vendor?.displayName.charAt(0) ?? "?"}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-display text-base font-semibold text-ink">{vendor?.displayName ?? "Vendor"}</p>
+                        <p className="mt-0.5 text-xs text-ink-soft">
+                          ${engagement.agreedAmount} {PRICING_MODEL_LABELS[engagement.pricingModel]}
+                          {need && ` · ${getSkillName(need.skillSlug)} · ${need.positionsFilled}/${need.positionsAvailable} found`}
+                          {unread > 0 && ` · ${unread} unread message${unread === 1 ? "" : "s"}`}
+                        </p>
+                      </div>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${ENGAGEMENT_STATUS_STYLES[engagement.status]}`}>
                       {ENGAGEMENT_STATUS_LABELS[engagement.status]}
@@ -279,6 +303,18 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
               );
             })}
           </ul>
+          {(() => {
+            const activeEngagements = engagements.filter((e) => !INACTIVE_ENGAGEMENT_STATUSES.has(e.status));
+            const spend = computeRosterSpend(activeEngagements);
+            if (spend.includedCount === 0 && spend.excludedCount === 0) return null;
+            return (
+              <p className="mt-3 text-right text-xs text-ink-soft">
+                <span className="font-semibold text-ink">${spend.totalAmount}</span> committed so far
+                {spend.excludedCount > 0 &&
+                  ` (+${spend.excludedCount} vendor${spend.excludedCount === 1 ? "" : "s"} on hourly/day rates, not included)`}
+              </p>
+            );
+          })()}
         </div>
       )}
 

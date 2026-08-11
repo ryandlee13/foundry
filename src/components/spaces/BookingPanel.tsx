@@ -6,6 +6,16 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { addBooking } from "@/lib/spaces/bookings";
 import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
+import {
+  evaluateBookingRequest,
+  toVenueBookingPolicy,
+  getBlockingViolations,
+  getConfirmableViolations,
+  formatBookingWindow,
+  formatBookingIncrement,
+  type BookingConstraintViolation,
+} from "@/lib/spaces/bookingConstraints";
+import Dialog from "@/components/ui/Dialog";
 import type { EventType, Venue } from "@/lib/types/spaces";
 
 function formatPriceRange(min: number, max: number): string {
@@ -26,6 +36,8 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const [depositAgreed, setDepositAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestedId, setRequestedId] = useState<string | null>(null);
+  const [pendingViolations, setPendingViolations] = useState<BookingConstraintViolation[]>([]);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   function handleBookClick() {
     if (!isLoading && !user) {
@@ -33,24 +45,16 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
     }
   }
 
-  function handleConfirm() {
+  function submitBooking() {
     if (!user) return;
-    setError(null);
-
-    if (!eventDate || !startTime || !endTime || !attendees) {
-      setError("Fill in a date, start/end time, and guest count.");
-      return;
-    }
-    if (Number(attendees) > venue.maxCapacity) {
-      setError(`This space holds up to ${venue.maxCapacity} guests.`);
-      return;
-    }
     if (venue.rules.coiRequired && !coiAgreed) {
       setError("This venue requires a Certificate of Insurance — check the box to agree.");
+      setConfirmDialogOpen(false);
       return;
     }
     if (venue.rules.securityDepositRequired && !depositAgreed) {
       setError("This venue requires a security deposit — check the box to agree.");
+      setConfirmDialogOpen(false);
       return;
     }
 
@@ -70,6 +74,34 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       eventType: eventType || null,
     });
     setRequestedId(booking.id);
+    setConfirmDialogOpen(false);
+  }
+
+  function handleConfirm() {
+    if (!user) return;
+    setError(null);
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const violations = evaluateBookingRequest(
+      { eventDate, startTime, endTime, attendees: Number(attendees) },
+      toVenueBookingPolicy(venue),
+      todayIso
+    );
+
+    const blocking = getBlockingViolations(violations);
+    if (blocking.length > 0) {
+      setError(blocking[0].message);
+      return;
+    }
+
+    const confirmable = getConfirmableViolations(violations);
+    if (confirmable.length > 0) {
+      setPendingViolations(confirmable);
+      setConfirmDialogOpen(true);
+      return;
+    }
+
+    submitBooking();
   }
 
   return (
@@ -88,8 +120,22 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
         </div>
         <div className="flex justify-between">
           <dt className="text-ink-soft">Minimum booking</dt>
-          <dd className="font-medium text-ink">{venue.minBookingHours} hours</dd>
+          <dd className="font-medium text-ink">
+            {venue.minBookingHours} hours{venue.minBookingHoursNegotiable && " (negotiable)"}
+          </dd>
         </div>
+        {formatBookingWindow(venue.earliestStartTime, venue.latestEndTime) && (
+          <div className="flex justify-between">
+            <dt className="text-ink-soft">Booking hours</dt>
+            <dd className="font-medium text-ink">{formatBookingWindow(venue.earliestStartTime, venue.latestEndTime)}</dd>
+          </div>
+        )}
+        {formatBookingIncrement(venue.bookingIncrementMinutes) && (
+          <div className="flex justify-between">
+            <dt className="text-ink-soft">Booking increments</dt>
+            <dd className="font-medium text-ink">{formatBookingIncrement(venue.bookingIncrementMinutes)}</dd>
+          </div>
+        )}
         {venue.rules.coiRequired && (
           <div className="flex justify-between">
             <dt className="text-ink-soft">Insurance</dt>
@@ -258,6 +304,38 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        labelledBy="booking-constraint-title"
+        panelClassName="w-full max-w-md p-6"
+      >
+        <h2 id="booking-constraint-title" className="font-display text-xl font-semibold text-ink">
+          {pendingViolations[0]?.confirmTitle ?? "Outside the venue's preferences"}
+        </h2>
+        <div className="mt-3 space-y-2 text-sm text-ink-soft">
+          {pendingViolations.map((violation) => (
+            <p key={violation.code}>{violation.confirmBody}</p>
+          ))}
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setConfirmDialogOpen(false)}
+            className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            Change my details
+          </button>
+          <button
+            type="button"
+            onClick={submitBooking}
+            className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+          >
+            Submit anyway
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

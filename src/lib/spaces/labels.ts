@@ -1,5 +1,6 @@
 import type {
   AmenityKey,
+  BookingStatus,
   EventType,
   SpaceType,
   SortOption,
@@ -104,4 +105,10 @@ export const BADGE_LABELS: Record<string, string> = {
   new: "New",
   popular: "Popular",
   nightlife: "Great for nightlife",
+};
+
+export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  declined: "Declined",
 };

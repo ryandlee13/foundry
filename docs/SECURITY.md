@@ -94,21 +94,27 @@ workaround.
   page, even briefly, even for "preview."
 - Approval/rejection is an admin-only server-side action, gated by the `admin` role in
   `profile_roles`, and recorded in `admin_audit_logs`.
-- **Scoped, temporary exception:** the browser-local venue-submission prototype
-  (`src/components/spaces/VenueSubmissionForm.tsx`, see `CLAUDE.md` → "Local-prototype
-  layer") publishes immediately with no review step, since there's no real `venues` table
-  or admin action to gate against yet. This does not apply once the real database and
-  admin flow exist — this rule is still non-negotiable for the real product.
-- **Vendor profiles do not use this exception.** The vendor-marketplace prototype
-  (`src/lib/vendors/profiles.ts`) implements the real gate even without a real database:
-  `submitVendorProfileForReview()` moves a profile to `pending_review`; only
-  `approveVendorProfile()`, callable only from the admin dashboard
-  (`/dashboard/admin`, gated on `user.roles.includes("admin")`), makes it `published` and
-  therefore publicly visible. `VendorProfileLookup` re-checks `status === "published"`
-  before rendering. There is currently no self-serve way for a user to grant themselves
-  the `admin` role (by design — see `docs/DATABASE.md` §2) — a dev tester needs to add it
-  manually (e.g. via browser devtools against `foundry.auth.accounts` in `localStorage`),
-  same limitation `docs/DATABASE.md` already notes for the real `admin` role.
+- **Scoped, temporary exception (venues and vendor profiles):** the browser-local
+  venue-submission prototype (`src/components/spaces/VenueSubmissionForm.tsx`, see
+  `CLAUDE.md` → "Local-prototype layer") publishes immediately with no review step, since
+  there's no real `venues` table or admin action to gate against yet. As of the vendor
+  deal-finalization rework, vendor profile submission does the same:
+  `publishVendorProfile()` (`src/lib/vendors/profiles.ts`) sets `status: "published"`
+  immediately in place of the earlier `submitVendorProfileForReview()` →
+  `pending_review` step. Neither of these applies once the real database and admin flow
+  exist — this rule is still non-negotiable for the real product, and both prototype
+  exceptions need a real pre-publish gate before any real launch.
+- **Admin moderation still exists for vendor profiles, just not as a pre-publish gate.**
+  `approveVendorProfile()`/`rejectVendorProfile()`/`suspendVendorProfile()`, callable only
+  from the admin dashboard (`/dashboard/admin`, gated on `user.roles.includes("admin")`),
+  can still move a profile out of public visibility after the fact.
+  `VendorProfileLookup` re-checks `status === "published"` before rendering, so a
+  suspended/rejected profile still can't be reached publicly even though nothing blocked
+  it from *reaching* `published` in the first place. There is currently no self-serve way
+  for a user to grant themselves the `admin` role (by design — see `docs/DATABASE.md`
+  §2) — a dev tester needs to add it manually (e.g. via browser devtools against
+  `foundry.auth.accounts` in `localStorage`), same limitation `docs/DATABASE.md` already
+  notes for the real `admin` role.
 
 ## 10. Secrets hygiene
 
@@ -142,23 +148,40 @@ workaround.
   (`src/lib/vendors/matching.ts`) takes only `{proposedAmount, pricingModel, status}` as
   input specifically so it cannot leak more even if misused — port that same
   narrow-input-shape discipline into the real RPC.
-- **Chat unlock timing**: a message thread between an organizer and a vendor must not be
-  creatable, and therefore not accessible, by anyone other than the organizer who owns the
-  parent event need — and only for a proposal on that need. This is not just a UI-hidden
-  route — the real implementation needs this enforced at the data layer (thread row simply
-  doesn't exist for anyone else to read, and RLS denies reads/writes to non-participants
-  regardless). Unlike an earlier version of this rule, a thread does **not** require the
-  proposal to be accepted first — the product now supports a pre-commitment
-  "Start Conversation" step (the organizer opts into messaging a specific vendor while the
-  proposal is still just `submitted`/`shortlisted`, moving it to `in_discussion`; other
-  proposals on the need stay untouched and no `vendor_engagements` row exists yet). What's
-  still true, and still the security-relevant invariant: **a vendor can never create a
-  thread**, only an organizer can (via `startConversation()` or `acceptProposal()` in
-  `src/lib/vendors/engagements.ts`, both funneling through the same
-  `getOrCreateThreadForProposal()` in `src/lib/vendors/messages.ts`), and a thread is
+- **Chat unlock timing (proposal threads)**: a message thread between an organizer and a
+  vendor must not be creatable, and therefore not accessible, by anyone other than the
+  organizer who owns the parent event need — and only for a proposal on that need. This is
+  not just a UI-hidden route — the real implementation needs this enforced at the data
+  layer (thread row simply doesn't exist for anyone else to read, and RLS denies
+  reads/writes to non-participants regardless). Unlike an earlier version of this rule, a
+  thread does **not** require the proposal to be accepted first — the product supports a
+  pre-commitment "Start Conversation" step (the organizer opts into messaging a specific
+  vendor while the proposal is still just `submitted`/`shortlisted`, moving it to
+  `in_discussion`; other proposals on the need stay untouched and no `vendor_engagements`
+  row exists yet). What's still true, and still the security-relevant invariant: **a
+  vendor can never create a thread**, only an organizer can (via `startConversation()` or
+  `finalizeDeal()` in `src/lib/vendors/engagements.ts` — `finalizeDeal()` replaced the
+  earlier `acceptProposal()`, but the invariant is unchanged — both funnel through the
+  same `getOrCreateThreadForProposal()` in `src/lib/vendors/messages.ts`), and a thread is
   idempotent per proposal — finalizing later upgrades the same thread's `engagement_id` in
   place rather than creating a second one. RLS-equivalent gating on every read is still
-  `isThreadParticipant()`.
+  `isThreadParticipant()`. Note that finalizing no longer unilaterally confirms the deal —
+  `finalizeDeal()` only sends terms; the engagement sits in `pending_vendor_confirmation`
+  until the vendor separately calls `confirmEngagementTerms()`, at which point the
+  competing-proposal-closing sweep runs (deliberately not at finalize time — see
+  `CLAUDE.md`).
+- **Chat unlock timing (booking threads)**: the same invariant, mirrored for venue
+  bookings — a thread between an organizer and a venue owner over a confirmed booking must
+  not be creatable by anyone but the venue owner on that specific booking. This is enforced
+  by `startBookingConversation(bookingId, actorAccountId)` in
+  `src/lib/spaces/bookingWorkflow.ts`, which throws unless the actor owns the venue and the
+  booking is `confirmed`. An organizer/planner can never create a booking thread — they can
+  only reply once the venue owner has created one. `MessageThread` is now a discriminated
+  union (`ProposalMessageThread | BookingMessageThread` in
+  `src/lib/vendors/messages.ts`); `isThreadParticipant()` still gates every read
+  regardless of kind, and `normalizeStoredThread()` must keep backfilling `kind` onto any
+  thread persisted before this union existed so old local data doesn't silently fail to
+  narrow to either branch.
 - **Exact venue address stays private through the vendor flow too**: `EventNeed`'s
   `public_location` is the venue's neighborhood, resolved server-side (or, in the
   prototype, at need-creation time from the venue record) — never the booking's/venue's
@@ -171,3 +194,16 @@ workaround.
   responded to, once, by the vendor). This prevents both fabricated reviews and after-the-
   fact tampering. Do not add a fake-review generator for vendors — see `CLAUDE.md`'s note
   on this.
+- **Vendor service address privacy**: a non-remote-only vendor's `VendorLocation
+  .serviceAddress` (§5's `exact_address` rule, extended to vendors) is never rendered on
+  any public vendor page or included in a public API payload — it exists only to compute
+  the service-radius match in `matchesLocation()` and to display in the vendor's own
+  onboarding form. Only the resolved `homeCity`/neighborhood-level location is public,
+  same pattern as venue `exact_address` → `approx_location`.
+- **Agreed-terms wording is not a legal-enforceability claim**: once an organizer and
+  vendor both confirm engagement terms (`finalizeDeal()` → `confirmEngagementTerms()`),
+  the product describes this as a firm mutual commitment on Foundry — never as a legally
+  binding contract, never implying court enforceability. This extends §7's "never claim
+  legal verification" principle from document status language to deal-terms language.
+  `formatAgreedTermsFootnote()` (`src/lib/vendors/agreedTerms.ts`) carries a `TODO(legal)`
+  marker: real contract language needs counsel review before this ships to a real launch.

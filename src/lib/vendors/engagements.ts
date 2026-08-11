@@ -1,5 +1,5 @@
-import type { EngagementStatus, MessageThread, VendorEngagement, VendorProposal } from "@/lib/types/vendors";
-import { getEventNeedById, fillOnePosition, canFillPosition } from "./eventNeeds";
+import type { AgreedTerms, EngagementStatus, PricingModel, ProposalMessageThread, VendorEngagement, VendorProposal } from "@/lib/types/vendors";
+import { getEventNeedById, fillOnePosition, releaseOnePosition, canFillPosition } from "./eventNeeds";
 import {
   getProposalById,
   getProposalsForNeed,
@@ -15,7 +15,7 @@ import { createNotification } from "./notifications";
 import { createPortfolioItem } from "./eventPortfolio";
 import { getSkillName } from "./skills";
 
-/** Browser-local confirmed vendor engagements, created only via acceptProposal() below. */
+/** Browser-local vendor engagements, created only via finalizeDeal() below (initially "pending_vendor_confirmation" until the vendor confirms via confirmEngagementTerms()). */
 const ENGAGEMENTS_KEY = "foundry.vendors.engagements";
 
 function isBrowser(): boolean {
@@ -68,14 +68,9 @@ function updateEngagementRaw(id: string, patch: Partial<VendorEngagement>): Vend
   return updated;
 }
 
-export interface AcceptProposalResult {
-  proposal: VendorProposal;
-  engagement: VendorEngagement;
-}
-
 export interface StartConversationResult {
   proposal: VendorProposal;
-  thread: MessageThread;
+  thread: ProposalMessageThread;
 }
 
 /**
@@ -106,7 +101,7 @@ export function startConversation(proposalId: string): StartConversationResult {
     proposalId: proposal.id,
     eventNeedId: need.id,
     organizerId: need.organizerId,
-    vendorOwnerId: vendorProfile.ownerId,
+    counterpartyId: vendorProfile.ownerId,
   });
 
   if (!alreadyInDiscussion) {
@@ -122,19 +117,34 @@ export function startConversation(proposalId: string): StartConversationResult {
   return { proposal: updatedProposal, thread };
 }
 
+export interface FinalizeDealInput {
+  proposalId: string;
+  /** Omit to keep the proposal's terms verbatim ("Finalize as proposed"); supply to record negotiated terms ("Edit deal terms"). */
+  terms?: { amount: number; pricingModel: PricingModel; deliverables: string };
+}
+
+export interface FinalizeDealResult {
+  proposal: VendorProposal;
+  engagement: VendorEngagement;
+  thread: ProposalMessageThread;
+}
+
 /**
- * The single cross-entity "finalize" transaction: marks the proposal
- * accepted, fills one position on the event need (auto-closing it once
- * full), creates the engagement, upgrades (or creates) the message thread,
- * closes out any other still-active proposals once the need is fully
- * filled, and notifies everyone involved. Mirrors docs/ARCHITECTURE.md's
- * "cross-row transitions go through one function, not chained client
- * writes" principle, adapted to this client-only prototype (no server RPC
- * exists to run it atomically for real — see CLAUDE.md and this feature's
- * known-limitations note on cross-tab races).
+ * The organizer's half of finalizing a deal: marks the proposal accepted,
+ * HOLDS one position on the event need immediately (auto-closing it once
+ * full — this prevents the organizer from finalizing two vendors for one
+ * slot while the first is still awaiting confirmation), locks an AgreedTerms
+ * record (either the proposal's own terms or organizer-edited ones), creates
+ * the engagement in "pending_vendor_confirmation", upgrades (or creates) the
+ * message thread, and notifies the vendor that final terms are waiting on
+ * them. Does NOT close competing proposals yet — see confirmEngagementTerms().
+ * Mirrors docs/ARCHITECTURE.md's "cross-row transitions go through one
+ * function, not chained client writes" principle, adapted to this
+ * client-only prototype (no server RPC exists to run it atomically for real
+ * — see CLAUDE.md and this feature's known-limitations note on cross-tab races).
  */
-export function acceptProposal(proposalId: string): AcceptProposalResult {
-  const proposal = getProposalById(proposalId);
+export function finalizeDeal(input: FinalizeDealInput): FinalizeDealResult {
+  const proposal = getProposalById(input.proposalId);
   if (!proposal) throw new Error("Proposal not found.");
   if (proposal.status !== "submitted" && proposal.status !== "shortlisted" && proposal.status !== "in_discussion") {
     throw new Error("Only a submitted, shortlisted, or in-discussion proposal can be finalized.");
@@ -149,11 +159,25 @@ export function acceptProposal(proposalId: string): AcceptProposalResult {
   const vendorProfile = getVendorProfileById(proposal.vendorProfileId);
   if (!vendorProfile) throw new Error("Vendor profile not found.");
 
-  const updatedProposal = markProposalAccepted(proposalId);
+  const updatedProposal = markProposalAccepted(input.proposalId);
   if (!updatedProposal) throw new Error("Failed to update proposal.");
-  const updatedNeed = fillOnePosition(need.id);
+  fillOnePosition(need.id);
 
   const now = new Date().toISOString();
+  const finalAmount = input.terms?.amount ?? proposal.proposedAmount;
+  const finalPricingModel = input.terms?.pricingModel ?? proposal.pricingModel;
+  const finalDeliverables = input.terms?.deliverables ?? proposal.deliverables;
+  const terms: AgreedTerms = {
+    amount: finalAmount,
+    pricingModel: finalPricingModel,
+    deliverables: finalDeliverables,
+    editedFromProposal: Boolean(input.terms),
+    proposedByOrganizerAt: now,
+    confirmedByVendorAt: null,
+    declinedByVendorAt: null,
+    declineReason: null,
+  };
+
   const engagement: VendorEngagement = {
     id: crypto.randomUUID(),
     eventNeedId: need.id,
@@ -161,14 +185,15 @@ export function acceptProposal(proposalId: string): AcceptProposalResult {
     organizerId: need.organizerId,
     vendorProfileId: proposal.vendorProfileId,
     acceptedProposalId: proposal.id,
-    agreedAmount: proposal.proposedAmount,
-    pricingModel: proposal.pricingModel,
-    agreedDeliverables: proposal.deliverables,
-    status: "confirmed",
+    agreedAmount: finalAmount,
+    pricingModel: finalPricingModel,
+    agreedDeliverables: finalDeliverables,
+    status: "pending_vendor_confirmation",
     completedAt: null,
     canceledAt: null,
     createdAt: now,
     updatedAt: now,
+    terms,
   };
   saveAll([...getAll(), engagement]);
 
@@ -176,20 +201,57 @@ export function acceptProposal(proposalId: string): AcceptProposalResult {
     proposalId: proposal.id,
     eventNeedId: need.id,
     organizerId: need.organizerId,
-    vendorOwnerId: vendorProfile.ownerId,
+    counterpartyId: vendorProfile.ownerId,
   });
   attachEngagementToThread(proposal.id, engagement.id);
 
   createNotification({
     recipientId: vendorProfile.ownerId,
     type: "bid_accepted",
-    title: "Deal finalized 🎉",
-    body: `Your proposal for "${need.title}" was finalized. You can now message the organizer.`,
-    link: `/dashboard/messages/${thread.id}`,
+    title: "Final terms are ready for your confirmation",
+    body: `The organizer for "${need.title}" locked in final terms — $${finalAmount}. Review and confirm to finalize the deal.`,
+    link: "/dashboard/vendor/confirmed",
   });
 
-  if (updatedNeed?.status === "filled") {
-    const idsToClose = selectProposalsToCloseOnFill(getProposalsForNeed(need.id), proposal.id);
+  return { proposal: updatedProposal, engagement, thread };
+}
+
+/**
+ * The vendor's half: accepts the locked terms. Ownership-guarded — only the
+ * vendor on this engagement may confirm it. Once confirmed, if the event
+ * need is now fully filled, sweeps and closes every other still-active
+ * proposal on it (deferred here from finalizeDeal() specifically so a later
+ * decline doesn't require reopening already-closed competitors).
+ */
+export function confirmEngagementTerms(engagementId: string, actorAccountId: string): VendorEngagement {
+  const engagement = getEngagementById(engagementId);
+  if (!engagement) throw new Error("Engagement not found.");
+  const vendorProfile = getVendorProfileById(engagement.vendorProfileId);
+  if (!vendorProfile || vendorProfile.ownerId !== actorAccountId) {
+    throw new Error("Only the vendor on this engagement can confirm it.");
+  }
+  if (engagement.status !== "pending_vendor_confirmation") {
+    throw new Error("This engagement isn't awaiting confirmation.");
+  }
+
+  const now = new Date().toISOString();
+  const updatedTerms: AgreedTerms | undefined = engagement.terms
+    ? { ...engagement.terms, confirmedByVendorAt: now }
+    : undefined;
+  const updated = updateEngagementRaw(engagementId, { status: "confirmed", terms: updatedTerms });
+  if (!updated) throw new Error("Failed to confirm engagement.");
+
+  createNotification({
+    recipientId: engagement.organizerId,
+    type: "terms_confirmed_by_vendor",
+    title: "Vendor confirmed the deal",
+    body: `${vendorProfile.displayName} confirmed the final terms.`,
+    link: `/dashboard/organizer/bookings/${engagement.bookingId}/vendors`,
+  });
+
+  const need = getEventNeedById(engagement.eventNeedId);
+  if (need && need.positionsFilled >= need.positionsAvailable) {
+    const idsToClose = selectProposalsToCloseOnFill(getProposalsForNeed(need.id), engagement.acceptedProposalId);
     for (const id of idsToClose) {
       closeProposalOpportunityFilled(id);
       const losingProposal = getProposalById(id);
@@ -206,7 +268,45 @@ export function acceptProposal(proposalId: string): AcceptProposalResult {
     }
   }
 
-  return { proposal: updatedProposal, engagement };
+  return updated;
+}
+
+/**
+ * The vendor's other half: declines the locked terms. Releases the position
+ * finalizeDeal() held and restores the proposal to "in_discussion" (still an
+ * active state — declined isn't a proposal-side terminal outcome, since the
+ * organizer may renegotiate or finalize a different vendor).
+ */
+export function declineEngagementTerms(engagementId: string, actorAccountId: string, reason?: string): VendorEngagement {
+  const engagement = getEngagementById(engagementId);
+  if (!engagement) throw new Error("Engagement not found.");
+  const vendorProfile = getVendorProfileById(engagement.vendorProfileId);
+  if (!vendorProfile || vendorProfile.ownerId !== actorAccountId) {
+    throw new Error("Only the vendor on this engagement can decline it.");
+  }
+  if (engagement.status !== "pending_vendor_confirmation") {
+    throw new Error("This engagement isn't awaiting confirmation.");
+  }
+
+  const now = new Date().toISOString();
+  const updatedTerms: AgreedTerms | undefined = engagement.terms
+    ? { ...engagement.terms, declinedByVendorAt: now, declineReason: reason?.trim() || null }
+    : undefined;
+  const updated = updateEngagementRaw(engagementId, { status: "declined_by_vendor", terms: updatedTerms });
+  if (!updated) throw new Error("Failed to decline engagement.");
+
+  releaseOnePosition(engagement.eventNeedId);
+  markProposalInDiscussion(engagement.acceptedProposalId);
+
+  createNotification({
+    recipientId: engagement.organizerId,
+    type: "terms_declined_by_vendor",
+    title: "Vendor declined the final terms",
+    body: `${vendorProfile.displayName} declined the final terms${reason ? `: "${reason}"` : "."}`,
+    link: `/dashboard/organizer/bookings/${engagement.bookingId}/vendors/${engagement.eventNeedId}/proposals`,
+  });
+
+  return updated;
 }
 
 export function declineProposalWithNotification(proposalId: string, reason?: string): VendorProposal | undefined {

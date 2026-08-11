@@ -5,21 +5,19 @@ import { RADIUS_OPTIONS_MILES } from "@/lib/types/spaces";
 export default function RadiusSelector({
   value,
   onChange,
+  options = RADIUS_OPTIONS_MILES,
 }: {
   value: number;
   onChange: (radius: number) => void;
+  /** Defaults to the venue-search options; vendors pass SERVICE_RADIUS_OPTIONS_MILES. */
+  options?: readonly number[];
 }) {
-  const currentIndex = RADIUS_OPTIONS_MILES.indexOf(
-    value as (typeof RADIUS_OPTIONS_MILES)[number]
-  );
+  const currentIndex = options.indexOf(value);
   const index = currentIndex === -1 ? 0 : currentIndex;
 
   function step(delta: number) {
-    const nextIndex = Math.min(
-      RADIUS_OPTIONS_MILES.length - 1,
-      Math.max(0, index + delta)
-    );
-    onChange(RADIUS_OPTIONS_MILES[nextIndex]);
+    const nextIndex = Math.min(options.length - 1, Math.max(0, index + delta));
+    onChange(options[nextIndex]);
   }
 
   return (
@@ -52,7 +50,7 @@ export default function RadiusSelector({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Radius presets">
-        {RADIUS_OPTIONS_MILES.map((radius) => (
+        {options.map((radius) => (
           <button
             key={radius}
             type="button"

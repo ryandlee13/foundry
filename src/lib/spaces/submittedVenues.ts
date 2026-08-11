@@ -6,6 +6,11 @@ import { VENUES } from "./venues";
  * "prototype, not a real backend" caveat as src/lib/auth/storage.ts — these
  * only exist in the browser that submitted them, and immediately go live
  * with no admin review (see the scoped exception noted in CLAUDE.md).
+ *
+ * Adopted seed venues (see adoptSeedVenues() below) are stored here too, as
+ * literal copies of the seed record with the same id/slug — a submitted
+ * entry always supersedes a seed entry sharing its id (selectVisibleSeedVenues),
+ * so there is never a duplicate listing once a seed venue has been adopted.
  */
 const SUBMITTED_VENUES_KEY = "foundry.venues.submitted";
 
@@ -56,9 +61,22 @@ export function addSubmittedVenue(venue: Venue): void {
   saveSubmittedVenues([...getSubmittedVenues(), venue]);
 }
 
-/** Seed venues plus anything submitted in this browser. */
+/**
+ * Pure: seed venues that haven't been superseded by a submitted copy sharing
+ * the same id. This is the mechanism behind adopted seed venues — adopting
+ * one copies it into submitted-venue storage under a real owner, and from
+ * then on the submitted copy (editable, owned) is what renders instead of
+ * the static seed entry, without ever duplicating the listing.
+ */
+export function selectVisibleSeedVenues(seedVenues: Venue[], submittedVenues: Venue[]): Venue[] {
+  const submittedIds = new Set(submittedVenues.map((venue) => venue.id));
+  return seedVenues.filter((venue) => !submittedIds.has(venue.id));
+}
+
+/** Seed venues (minus any adopted/superseded ones) plus anything submitted in this browser. */
 export function getAllVenues(): Venue[] {
-  return [...VENUES, ...getSubmittedVenues()];
+  const submitted = getSubmittedVenues();
+  return [...selectVisibleSeedVenues(VENUES, submitted), ...submitted];
 }
 
 export function getAllSlugs(): string[] {
@@ -71,4 +89,53 @@ export function getVenuesOwnedBy(ownerId: string): Venue[] {
 
 export function getVenueBySlugAnywhere(slug: string): Venue | undefined {
   return getAllVenues().find((venue) => venue.slug === slug);
+}
+
+export function getVenueById(id: string): Venue | undefined {
+  return getAllVenues().find((venue) => venue.id === id);
+}
+
+/**
+ * Never touches id/slug/ownerId — a venue's URL and ownership are immutable
+ * after publish (see CLAUDE.md). Throws VenueStorageQuotaError under the same
+ * conditions as addSubmittedVenue (re-saving up to 20 photo data URLs can
+ * overflow the quota just as easily as a fresh submission).
+ */
+export function updateSubmittedVenue(id: string, patch: Partial<Omit<Venue, "id" | "slug" | "ownerId">>): Venue | undefined {
+  const venues = getSubmittedVenues();
+  const index = venues.findIndex((venue) => venue.id === id);
+  if (index === -1) return undefined;
+
+  const updated: Venue = {
+    ...venues[index],
+    ...patch,
+    id: venues[index].id,
+    slug: venues[index].slug,
+    ownerId: venues[index].ownerId,
+    updatedAt: new Date().toISOString(),
+  };
+  const next = [...venues];
+  next[index] = updated;
+  saveSubmittedVenues(next);
+  return updated;
+}
+
+/**
+ * DEV ONLY (called exclusively from the seed-venue-owner dev seeder). Copies
+ * the given seed venues into submitted-venue storage under `ownerId`,
+ * preserving id/slug/content so every existing lookup (Booking.venueSlug,
+ * /spaces/{slug} links, getVenueBySlugAnywhere) keeps working unchanged.
+ * Idempotent per venue id — already-adopted venues are left untouched.
+ */
+export function adoptSeedVenues(ownerId: string, seedVenueIds: string[], publishedAt: string): Venue[] {
+  const submitted = getSubmittedVenues();
+  const alreadyAdoptedIds = new Set(submitted.map((venue) => venue.id));
+  const toAdopt = VENUES.filter((venue) => seedVenueIds.includes(venue.id) && !alreadyAdoptedIds.has(venue.id));
+  if (toAdopt.length === 0) {
+    return submitted.filter((venue) => seedVenueIds.includes(venue.id));
+  }
+
+  const adopted = toAdopt.map((seed) => ({ ...seed, ownerId, publishedAt }));
+  saveSubmittedVenues([...submitted, ...adopted]);
+  return adopted;
 }

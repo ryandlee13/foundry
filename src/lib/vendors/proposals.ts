@@ -287,7 +287,7 @@ export function markProposalInDiscussion(id: string): VendorProposal | undefined
   return updateProposalRaw(id, { status: "in_discussion" });
 }
 
-/** Internal: used by acceptProposal() in engagements.ts to close out competing bids. */
+/** Internal: used by confirmEngagementTerms() in engagements.ts to close out competing bids. */
 export function closeProposalOpportunityFilled(id: string): VendorProposal | undefined {
   return updateProposalRaw(id, { status: "closed_opportunity_filled" });
 }

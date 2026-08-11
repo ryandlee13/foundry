@@ -6,20 +6,24 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { findAccountById } from "@/lib/auth/storage";
 import { getBookingById } from "@/lib/spaces/bookings";
 import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
-import { getEngagementsForVendor, cancelEngagementByVendor } from "@/lib/vendors/engagements";
+import { getEngagementsForVendor, cancelEngagementByVendor, confirmEngagementTerms, declineEngagementTerms } from "@/lib/vendors/engagements";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
 import { getThreadForEngagement, getUnreadMessageCount } from "@/lib/vendors/messages";
 import { getSkillName } from "@/lib/vendors/skills";
 import { ENGAGEMENT_STATUS_LABELS } from "@/lib/vendors/labels";
+import AgreedTermsCard from "@/components/vendor/AgreedTermsCard";
+import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import type { Booking } from "@/lib/types/spaces";
 import type { EngagementStatus, EventNeed, VendorEngagement } from "@/lib/types/vendors";
 
 const STATUS_STYLES: Record<EngagementStatus, string> = {
+  pending_vendor_confirmation: "bg-brass/15 text-brass-dark",
   confirmed: "bg-brass/15 text-brass-dark",
   in_progress: "bg-brass/15 text-brass-dark",
   completed: "bg-green-100 text-green-800",
+  declined_by_vendor: "bg-wine/10 text-wine",
   canceled_by_organizer: "bg-wine/10 text-wine",
   canceled_by_vendor: "bg-wine/10 text-wine",
   disputed: "bg-wine/10 text-wine",
@@ -33,6 +37,9 @@ export default function VendorConfirmedGigsPage() {
   const [bookingsById, setBookingsById] = useState<Record<string, Booking>>({});
   const [threadIdByEngagement, setThreadIdByEngagement] = useState<Record<string, string>>({});
   const [unreadByEngagement, setUnreadByEngagement] = useState<Record<string, number>>({});
+  const [decliningEngagement, setDecliningEngagement] = useState<VendorEngagement | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!user) return;
@@ -82,10 +89,41 @@ export default function VendorConfirmedGigsPage() {
     refresh();
   }
 
+  function handleConfirmTerms(engagementId: string) {
+    if (!user) return;
+    setActionError(null);
+    try {
+      confirmEngagementTerms(engagementId, user.id);
+      refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Couldn't confirm these terms.");
+    }
+  }
+
+  function openDeclineDialog(engagement: VendorEngagement) {
+    setActionError(null);
+    setDeclineReason("");
+    setDecliningEngagement(engagement);
+  }
+
+  function confirmDeclineTerms() {
+    if (!user || !decliningEngagement) return;
+    try {
+      declineEngagementTerms(decliningEngagement.id, user.id, declineReason || undefined);
+      setDecliningEngagement(null);
+      refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Couldn't decline these terms.");
+      setDecliningEngagement(null);
+    }
+  }
+
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink">Confirmed gigs</h1>
       <p className="mt-1 text-sm text-ink-soft">Engagements from accepted proposals.</p>
+
+      {actionError && <p className="mt-4 rounded-lg border border-wine/30 bg-wine/5 px-3.5 py-2.5 text-sm text-wine">{actionError}</p>}
 
       <div className="mt-8">
         {engagements.length === 0 ? (
@@ -125,11 +163,35 @@ export default function VendorConfirmedGigsPage() {
                     </span>
                   </div>
 
+                  {engagement.status === "pending_vendor_confirmation" && (
+                    <div className="mt-3">
+                      <AgreedTermsCard engagement={engagement} counterpartyName={organizer?.name ?? "the organizer"} />
+                    </div>
+                  )}
+
                   <div className="mt-3 flex flex-wrap gap-2">
                     {threadId && (
                       <Link href={`/dashboard/messages/${threadId}`} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim">
                         Message
                       </Link>
+                    )}
+                    {engagement.status === "pending_vendor_confirmation" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmTerms(engagement.id)}
+                          className="rounded-full bg-wine px-3.5 py-1.5 text-xs font-semibold text-paper transition-colors hover:bg-wine-soft"
+                        >
+                          Confirm deal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeclineDialog(engagement)}
+                          className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-wine transition-colors hover:bg-wine/5"
+                        >
+                          Decline
+                        </button>
+                      </>
                     )}
                     {(engagement.status === "confirmed" || engagement.status === "in_progress") && (
                       <button
@@ -147,6 +209,43 @@ export default function VendorConfirmedGigsPage() {
           </ul>
         )}
       </div>
+
+      <Dialog
+        open={decliningEngagement !== null}
+        onClose={() => setDecliningEngagement(null)}
+        labelledBy="decline-terms-title"
+        panelClassName="w-full max-w-md p-6"
+      >
+        <h2 id="decline-terms-title" className="font-display text-xl font-semibold text-ink">
+          Decline these terms?
+        </h2>
+        <p className="mt-2 text-sm text-ink-soft">
+          The position holds until you respond — declining releases it and lets the organizer finalize someone else.
+        </p>
+        <label className="mt-3 block text-sm font-medium text-ink">Reason (optional, shared with the organizer)</label>
+        <textarea
+          rows={3}
+          value={declineReason}
+          onChange={(e) => setDeclineReason(e.target.value)}
+          className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+        />
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setDecliningEngagement(null)}
+            className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmDeclineTerms}
+            className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+          >
+            Confirm decline
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

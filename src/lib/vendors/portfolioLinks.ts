@@ -46,3 +46,24 @@ export function buildPortfolioLink(input: { url: string; title: string; descript
     displayOrder: input.displayOrder,
   };
 }
+
+/** Returns the URL only if it's http/https — never render a javascript: or other unsafe scheme as a clickable link. */
+export function toSafeExternalUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Compact display label for an external URL, e.g. "instagram.com/janedoe" — strips protocol and www. */
+export function formatExternalUrlLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname !== "/" ? parsed.pathname : "";
+    return `${parsed.hostname.replace(/^www\./, "")}${path}`;
+  } catch {
+    return url;
+  }
+}

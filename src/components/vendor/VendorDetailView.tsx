@@ -7,6 +7,7 @@ import { PRICING_MODEL_LABELS, EXPERIENCE_LEVEL_LABELS } from "@/lib/vendors/lab
 import { PORTFOLIO_PROVIDER_LABELS } from "@/lib/vendors/labels";
 import { getPublishedReviewsForVendor } from "@/lib/vendors/reviews";
 import { getPublicPortfolioItemsForVendor } from "@/lib/vendors/eventPortfolio";
+import { toSafeExternalUrl, formatExternalUrlLabel } from "@/lib/vendors/portfolioLinks";
 import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
 import type { VendorProfile } from "@/lib/types/vendors";
 
@@ -64,6 +65,31 @@ export default function VendorDetailView({ vendor }: { vendor: VendorProfile }) 
               </span>
             ))}
           </div>
+
+          {(toSafeExternalUrl(vendor.websiteUrl) || toSafeExternalUrl(vendor.instagramUrl)) && (
+            <div className="mt-4 flex flex-wrap gap-3 text-sm">
+              {toSafeExternalUrl(vendor.websiteUrl) && (
+                <a
+                  href={vendor.websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="font-medium text-brass-dark hover:underline"
+                >
+                  {formatExternalUrlLabel(vendor.websiteUrl)}
+                </a>
+              )}
+              {toSafeExternalUrl(vendor.instagramUrl) && (
+                <a
+                  href={vendor.instagramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="font-medium text-brass-dark hover:underline"
+                >
+                  {formatExternalUrlLabel(vendor.instagramUrl)}
+                </a>
+              )}
+            </div>
+          )}
 
           {vendor.services.length > 0 && (
             <div className="mt-8">

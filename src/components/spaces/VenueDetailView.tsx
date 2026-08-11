@@ -1,4 +1,5 @@
 import { SPACE_TYPE_LABELS, EVENT_TYPE_LABELS, RULE_LABELS } from "@/lib/spaces/labels";
+import { formatBookingWindow, formatBookingIncrement } from "@/lib/spaces/bookingConstraints";
 import VenueAmenityList from "@/components/spaces/VenueAmenityList";
 import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
 import VenueHostLine from "@/components/spaces/VenueHostLine";
@@ -97,6 +98,21 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
                 {venue.availabilityExamples.map((example) => (
                   <li key={example}>{example}</li>
                 ))}
+              </ul>
+            </div>
+          )}
+
+          {(formatBookingWindow(venue.earliestStartTime, venue.latestEndTime) ||
+            formatBookingIncrement(venue.bookingIncrementMinutes)) && (
+            <div className="mt-8">
+              <h2 className="font-display text-lg font-semibold text-ink">Booking hours</h2>
+              <ul className="mt-3 space-y-1.5 text-sm text-ink-soft">
+                {formatBookingWindow(venue.earliestStartTime, venue.latestEndTime) && (
+                  <li>Events accepted {formatBookingWindow(venue.earliestStartTime, venue.latestEndTime)}</li>
+                )}
+                {formatBookingIncrement(venue.bookingIncrementMinutes) && (
+                  <li>Bookings in {formatBookingIncrement(venue.bookingIncrementMinutes)}</li>
+                )}
               </ul>
             </div>
           )}

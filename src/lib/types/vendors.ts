@@ -89,6 +89,14 @@ export interface VendorLocation {
   radiusMiles: number;
   willingToTravel: boolean;
   remoteAvailable: boolean;
+  /** True when this vendor works SOLELY remotely — only offerable when every selected skill is remote-eligible (see canOfferRemoteOnly in remoteEligibility.ts). When true, matching ignores physical radius entirely. */
+  remoteOnly: boolean;
+  /**
+   * Physical street address the service radius is measured from. Same
+   * never-public rule as venues.exactAddress (docs/SECURITY.md #5) — only
+   * the derived homeCity/coordinates are ever shown publicly.
+   */
+  serviceAddress: string;
   citiesServed: string[];
   typicalAvailability: string;
   leadTimeDays: number;
@@ -242,12 +250,34 @@ export interface SavedEventNeed {
 }
 
 export type EngagementStatus =
+  | "pending_vendor_confirmation"
   | "confirmed"
   | "in_progress"
   | "completed"
+  | "declined_by_vendor"
   | "canceled_by_organizer"
   | "canceled_by_vendor"
   | "disputed";
+
+/**
+ * The locked terms record both parties confirm. Wording is deliberately a
+ * firm mutual commitment, NOT a claim of legal enforceability — see CLAUDE.md
+ * rule #7 and docs/SECURITY.md. TODO(legal): real contract language needs
+ * counsel review before any real launch.
+ */
+export interface AgreedTerms {
+  amount: number;
+  pricingModel: PricingModel;
+  deliverables: string;
+  /** True when the organizer changed anything from the vendor's original proposal ("Edit deal terms" vs "Finalize as proposed"). */
+  editedFromProposal: boolean;
+  /** ISO — when the organizer locked these terms and sent them for confirmation. */
+  proposedByOrganizerAt: string;
+  /** ISO — when the vendor accepted. Null until then. Never modified afterwards. */
+  confirmedByVendorAt: string | null;
+  declinedByVendorAt: string | null;
+  declineReason: string | null;
+}
 
 export interface VendorEngagement {
   id: string;
@@ -264,6 +294,8 @@ export interface VendorEngagement {
   canceledAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Optional so engagements already in a tester's localStorage keep working — finalizeDeal() always sets it going forward. agreedAmount/pricingModel/agreedDeliverables stay mirrored so existing readers need no change. */
+  terms?: AgreedTerms;
 }
 
 export type ReviewRating = 1 | 2 | 3 | 4 | 5;
@@ -318,7 +350,12 @@ export type NotificationType =
   | "vendor_responded_review"
   | "conversation_started"
   | "opportunity_filled"
-  | "proposal_updated";
+  | "proposal_updated"
+  | "venue_booking_requested"
+  | "venue_booking_accepted"
+  | "venue_booking_declined"
+  | "terms_confirmed_by_vendor"
+  | "terms_declined_by_vendor";
 
 export interface AppNotification {
   id: string;
@@ -331,17 +368,32 @@ export interface AppNotification {
   createdAt: string;
 }
 
-export interface MessageThread {
+interface MessageThreadBase {
   id: string;
+  organizerId: string;
+  /** The other participant: a vendor profile's ownerId on a proposal thread, or the venue operator's account id on a booking thread. */
+  counterpartyId: string;
+  createdAt: string;
+}
+
+/** A conversation about a vendor proposal. Created only by the organizer, via startConversation() or finalizeDeal() (engagements.ts). */
+export interface ProposalMessageThread extends MessageThreadBase {
+  kind: "proposal";
   /** Anchors the thread — a thread exists once an organizer starts a conversation on a proposal, independent of whether it's ever finalized. */
   proposalId: string;
   eventNeedId: string;
-  /** Null until acceptProposal() finalizes this proposal and upgrades the thread in place — never a new thread is created at that point. */
+  /** Null until finalizeDeal() finalizes this proposal and upgrades the thread in place — never a new thread is created at that point. */
   engagementId: string | null;
-  organizerId: string;
-  vendorOwnerId: string;
-  createdAt: string;
 }
+
+/** A conversation about a confirmed venue booking. Created only by the venue owner, via startBookingConversation() (bookingWorkflow.ts). */
+export interface BookingMessageThread extends MessageThreadBase {
+  kind: "booking";
+  bookingId: string;
+  venueId: string;
+}
+
+export type MessageThread = ProposalMessageThread | BookingMessageThread;
 
 export interface ChatMessage {
   id: string;

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { canFillPosition, computeFilledPosition, computeEventNeedPhase, formatNeedEventLabel } from "../eventNeeds";
+import {
+  canFillPosition,
+  computeFilledPosition,
+  computeReleasedPosition,
+  computeEventNeedPhase,
+  formatNeedEventLabel,
+} from "../eventNeeds";
 import type { ProposalStatus } from "@/lib/types/vendors";
 
 describe("canFillPosition (over-acceptance guard)", () => {
@@ -30,6 +36,27 @@ describe("computeFilledPosition", () => {
   it("marks filled immediately for single-position needs", () => {
     const result = computeFilledPosition({ positionsFilled: 0, positionsAvailable: 1, status: "published" });
     expect(result).toEqual({ positionsFilled: 1, status: "filled" });
+  });
+});
+
+describe("computeReleasedPosition", () => {
+  it("decrements positionsFilled and reopens a filled need to published", () => {
+    const result = computeReleasedPosition({ positionsFilled: 2, positionsAvailable: 2, status: "filled" });
+    expect(result).toEqual({ positionsFilled: 1, status: "published" });
+  });
+
+  it("decrements without changing status when the need wasn't full", () => {
+    const result = computeReleasedPosition({ positionsFilled: 1, positionsAvailable: 2, status: "published" });
+    expect(result).toEqual({ positionsFilled: 0, status: "published" });
+  });
+
+  it("clamps at 0 rather than going negative", () => {
+    const result = computeReleasedPosition({ positionsFilled: 0, positionsAvailable: 2, status: "published" });
+    expect(result).toEqual({ positionsFilled: 0, status: "published" });
+  });
+
+  it("leaves a closed/canceled need's status untouched", () => {
+    expect(computeReleasedPosition({ positionsFilled: 1, positionsAvailable: 1, status: "closed" }).status).toBe("closed");
   });
 });
 

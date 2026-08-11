@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getVenueBySlug, VENUES } from "@/lib/spaces/venues";
-import VenueDetailView from "@/components/spaces/VenueDetailView";
 import SubmittedVenueLookup from "@/components/spaces/SubmittedVenueLookup";
 
 export function generateStaticParams() {
@@ -30,7 +29,10 @@ export default async function VenueDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const venue = getVenueBySlug(slug);
+  // Seed data only — the source of truth once a venue is adopted or edited
+  // lives in localStorage, so SubmittedVenueLookup always re-checks
+  // client-side and overrides this fallback when a newer copy exists.
+  const seedVenue = getVenueBySlug(slug);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -38,7 +40,7 @@ export default async function VenueDetailPage({
         ← Back to Discover Spaces
       </Link>
 
-      {venue ? <VenueDetailView venue={venue} /> : <SubmittedVenueLookup slug={slug} />}
+      <SubmittedVenueLookup slug={slug} fallbackVenue={seedVenue ?? null} />
     </div>
   );
 }

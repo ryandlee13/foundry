@@ -93,7 +93,7 @@ export function cancelEventNeed(id: string): EventNeed | undefined {
   return setStatus(id, "canceled");
 }
 
-/** Pure predicate (no storage access) — the over-acceptance guard used by acceptProposal() in engagements.ts. */
+/** Pure predicate (no storage access) — the over-acceptance guard used by finalizeDeal() in engagements.ts. */
 export function canFillPosition(need: Pick<EventNeed, "positionsFilled" | "positionsAvailable">): boolean {
   return need.positionsFilled < need.positionsAvailable;
 }
@@ -112,6 +112,27 @@ export function fillOnePosition(id: string): EventNeed | undefined {
   const need = getEventNeedById(id);
   if (!need) return undefined;
   return updateEventNeed(id, computeFilledPosition(need));
+}
+
+/**
+ * Pure: the inverse of computeFilledPosition — reopens a "filled" need when a
+ * held position is released (e.g. a vendor declines the final terms after
+ * finalizeDeal() optimistically held the position). Clamps at 0.
+ */
+export function computeReleasedPosition(
+  need: Pick<EventNeed, "positionsFilled" | "positionsAvailable" | "status">
+): { positionsFilled: number; status: EventNeedStatus } {
+  const positionsFilled = Math.max(0, need.positionsFilled - 1);
+  const status: EventNeedStatus =
+    need.status === "filled" && positionsFilled < need.positionsAvailable ? "published" : need.status;
+  return { positionsFilled, status };
+}
+
+/** Called when a vendor declines final terms — releases the position finalizeDeal() held. */
+export function releaseOnePosition(id: string): EventNeed | undefined {
+  const need = getEventNeedById(id);
+  if (!need) return undefined;
+  return updateEventNeed(id, computeReleasedPosition(need));
 }
 
 /** Pure: same fallback rule as formatEventLabel() in bookings.ts, for call sites that only have the EventNeed (no venueName). */

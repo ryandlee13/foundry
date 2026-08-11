@@ -6,11 +6,12 @@ import {
   createDraftVendorProfile,
   updateVendorProfile,
   getVendorProfileByOwnerId,
+  getVendorProfileById,
   approveVendorProfile,
 } from "./profiles";
 import { createDraftEventNeed, publishEventNeed, getEventNeedsForOrganizer } from "./eventNeeds";
 import { createProposal, getProposalsForVendor, declineProposal } from "./proposals";
-import { acceptProposal, completeEngagement, startConversation } from "./engagements";
+import { finalizeDeal, confirmEngagementTerms, completeEngagement, startConversation } from "./engagements";
 import { createReview } from "./reviews";
 import { computeExpiresAt } from "./expiration";
 import type {
@@ -106,6 +107,14 @@ function getOrCreateAccount(name: string, email: string, role: "organizer" | "ve
   return authStorage.createAccount({ name, email, role });
 }
 
+/** Seed shortcut: runs both halves of the real two-step flow so demo engagements land "confirmed" rather than sitting in "pending_vendor_confirmation" forever. */
+function finalizeAndConfirmForSeed(proposalId: string) {
+  const { engagement } = finalizeDeal({ proposalId });
+  const vendorOwnerId = getVendorProfileById(engagement.vendorProfileId)?.ownerId;
+  if (!vendorOwnerId) return engagement;
+  return confirmEngagementTerms(engagement.id, vendorOwnerId);
+}
+
 function seedVendorProfile(seed: VendorSeed): VendorProfile {
   const account = getOrCreateAccount(seed.name, seed.email, "vendor");
   authStorage.addRoleToAccount(account.id, "vendor");
@@ -146,6 +155,8 @@ function seedVendorProfile(seed: VendorSeed): VendorProfile {
       radiusMiles: 25,
       willingToTravel: true,
       remoteAvailable: seed.remote,
+      remoteOnly: false,
+      serviceAddress: "",
       citiesServed: [],
       typicalAvailability: "Weekends, some weeknights",
       leadTimeDays: 5,
@@ -359,7 +370,7 @@ function seedFoundrySummerSocial(vendorsBySkill: Map<VendorSkillSlug, VendorProf
     .map((vendor, i) => seedProposal(photoNeed.id, vendor, 700 + i * 50, "Nightlife and flash photography is my specialty — would love to shoot this."))
     .filter((p): p is VendorProposal => p !== null);
   if (photoProposals[0] && photoNeed.status === "published") {
-    acceptProposal(photoProposals[0].id);
+    finalizeAndConfirmForSeed(photoProposals[0].id);
     engagementsCompleted += 1;
   }
 
@@ -439,7 +450,7 @@ export function seedVendorMarketplaceDemoData(): SeedResult {
     proposalsCreated += 1;
 
     if (pattern === 0) {
-      const { engagement } = acceptProposal(proposal.id);
+      const engagement = finalizeAndConfirmForSeed(proposal.id);
       completeEngagement(engagement.id);
       engagementsCompleted += 1;
       createReview({
@@ -456,7 +467,7 @@ export function seedVendorMarketplaceDemoData(): SeedResult {
         wouldWorkWithAgain: true,
       });
     } else if (pattern === 1) {
-      acceptProposal(proposal.id);
+      finalizeAndConfirmForSeed(proposal.id);
     } else if (pattern === 2) {
       declineProposal(proposal.id, "Went with another vendor for this event.");
     } else {

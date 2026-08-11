@@ -11,6 +11,12 @@ export function matchesSkill(profile: VendorProfile, need: EventNeed): boolean {
 }
 
 export function matchesLocation(profile: VendorProfile, need: EventNeed): boolean {
+  // A remote-only vendor has no physical service area at all — they can
+  // only ever match remote needs, regardless of proximity/radius/anywhere.
+  if (profile.location.remoteOnly) {
+    return need.locationType === "remote";
+  }
+
   if (need.locationType === "remote") {
     return profile.location.remoteAvailable;
   }

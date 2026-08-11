@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
   addSubmittedVenue,
   getAllSlugs,
+  getVenuesOwnedBy,
   VenueStorageQuotaError,
 } from "@/lib/spaces/submittedVenues";
 import { uniqueSlug } from "@/lib/spaces/slug";
@@ -21,73 +21,36 @@ import {
   RULE_LABELS,
   SPACE_TYPE_LABELS,
 } from "@/lib/spaces/labels";
+import {
+  venueFormSchema,
+  VENUE_FORM_DEFAULT_VALUES,
+  STEP_1_FIELDS,
+  STEP_2_FIELDS,
+  RULE_KEYS,
+  SPACE_TYPE_VALUES,
+  BOOKING_INCREMENT_OPTIONS,
+  MIN_PHOTOS,
+  MAX_PHOTOS,
+  MAX_PHOTO_FILE_SIZE_MB,
+  type VenueFormInput,
+  type VenueFormValues,
+} from "@/lib/spaces/venueFormSchema";
+import {
+  getBillingActivationForOwner,
+  recordFirstPublishActivation,
+  VENUE_SUBSCRIPTION_PLACEHOLDER_COPY,
+} from "@/lib/spaces/venueBilling";
+import VenueListingReview from "./VenueListingReview";
 import LoadingState from "@/components/ui/LoadingState";
 import type {
   AmenityKey,
   EventType,
-  SpaceType,
   Venue,
   VenueRules,
 } from "@/lib/types/spaces";
 
-const MIN_PHOTOS = 7;
-const MAX_PHOTOS = 20;
-const MAX_PHOTO_FILE_SIZE_MB = 20;
-
-const SPACE_TYPE_VALUES = Object.keys(SPACE_TYPE_LABELS) as [SpaceType, ...SpaceType[]];
-const EVENT_TYPE_VALUES = Object.keys(EVENT_TYPE_LABELS) as [EventType, ...EventType[]];
-const AMENITY_VALUES = AMENITY_ENTRIES_ALPHABETICAL.map(([key]) => key) as [
-  AmenityKey,
-  ...AmenityKey[],
-];
-const RULE_KEYS = Object.keys(RULE_LABELS) as (keyof VenueRules)[];
-
-const STEP_1_FIELDS = [
-  "name",
-  "tagline",
-  "description",
-  "address",
-  "spaceType",
-  "eventTypes",
-  "maxCapacity",
-  "seatedCapacity",
-  "minBookingHours",
-  "minHourlyRate",
-  "maxHourlyRate",
-] as const;
-
-const submissionSchema = z
-  .object({
-    name: z.string().min(2, "Enter a name for your space"),
-    tagline: z.string().min(5, "Add a short one-line tagline"),
-    description: z.string().min(20, "Tell organizers a bit more about the space"),
-    address: z.string().min(5, "Enter the venue's street address"),
-    spaceType: z.enum(SPACE_TYPE_VALUES),
-    eventTypes: z.array(z.enum(EVENT_TYPE_VALUES)).min(1, "Pick at least one event type"),
-    maxCapacity: z.coerce.number().int().min(1, "Enter a max capacity"),
-    seatedCapacity: z.coerce.number().int().min(1, "Enter a seated capacity"),
-    minBookingHours: z.coerce
-      .number()
-      .int()
-      .min(0, "Minimum booking length can't be negative"),
-    minHourlyRate: z.coerce.number().min(0, "Enter an hourly rate"),
-    maxHourlyRate: z.coerce.number().min(0, "Enter an hourly rate"),
-    availabilityExamples: z.string().optional(),
-    amenities: z.array(z.enum(AMENITY_VALUES)),
-    amenityNotes: z.record(z.string(), z.string()),
-    rules: z.record(z.string(), z.boolean()),
-  })
-  .refine((data) => data.maxHourlyRate >= data.minHourlyRate, {
-    message: "Max rate should be at least the min rate",
-    path: ["maxHourlyRate"],
-  })
-  .refine((data) => data.maxCapacity >= data.seatedCapacity, {
-    message: "Max capacity should be at least seated capacity",
-    path: ["maxCapacity"],
-  });
-
-type SubmissionInput = z.input<typeof submissionSchema>;
-type SubmissionValues = z.output<typeof submissionSchema>;
+type SubmissionInput = VenueFormInput;
+type SubmissionValues = VenueFormValues;
 
 function Required() {
   return (
@@ -127,13 +90,15 @@ function CheckboxGrid<T extends string>({
 export default function VenueSubmissionForm() {
   const router = useRouter();
   const { user, isLoading, addRole } = useAuth();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [reviewValues, setReviewValues] = useState<SubmissionValues | null>(null);
 
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
   const [videoNames, setVideoNames] = useState<string[]>([]);
   const [step1Error, setStep1Error] = useState<string | null>(null);
+  const [step2Error, setStep2Error] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [openNoteFor, setOpenNoteFor] = useState<AmenityKey | null>(null);
 
@@ -143,26 +108,11 @@ export default function VenueSubmissionForm() {
     handleSubmit,
     trigger,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<SubmissionInput, unknown, SubmissionValues>({
-    resolver: zodResolver(submissionSchema),
-    defaultValues: {
-      name: "",
-      tagline: "",
-      description: "",
-      address: "",
-      spaceType: "loft",
-      eventTypes: [],
-      maxCapacity: 50,
-      seatedCapacity: 30,
-      minBookingHours: 3,
-      minHourlyRate: 100,
-      maxHourlyRate: 200,
-      availabilityExamples: "",
-      amenities: [],
-      amenityNotes: {},
-      rules: {},
-    },
+    resolver: zodResolver(venueFormSchema),
+    defaultValues: VENUE_FORM_DEFAULT_VALUES,
   });
 
   const selectedAmenities = useWatch({ control, name: "amenities" });
@@ -268,6 +218,24 @@ export default function VenueSubmissionForm() {
     );
   }
 
+  async function handleReview() {
+    const valid = await trigger(STEP_2_FIELDS);
+    if (!valid) {
+      setStep2Error("Please fix the highlighted field(s) below before continuing.");
+      return;
+    }
+    // RHF hands back raw (string) values for number inputs until zod coerces
+    // them — parse here so the review screen shows real numbers, not "50".
+    const parsed = venueFormSchema.safeParse(getValues());
+    if (!parsed.success) {
+      setStep2Error("Please fix the highlighted field(s) below before continuing.");
+      return;
+    }
+    setStep2Error(null);
+    setReviewValues(parsed.data);
+    setStep(3);
+  }
+
   function onSubmit(values: SubmissionValues) {
     setSubmitError(null);
     if (photos.length < MIN_PHOTOS) {
@@ -326,10 +294,18 @@ export default function VenueSubmissionForm() {
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean),
+      earliestStartTime: values.earliestStartTime || undefined,
+      latestEndTime: values.latestEndTime || undefined,
+      bookingIncrementMinutes: values.bookingIncrementMinutes as Venue["bookingIncrementMinutes"],
+      capacityNegotiable: values.capacityNegotiable,
+      minBookingHoursNegotiable: values.minBookingHoursNegotiable,
       badge: "new",
       ownerId: currentUser.id,
       createdAt: new Date().toISOString(),
+      publishedAt: new Date().toISOString(),
     };
+
+    const isFirstVenue = getVenuesOwnedBy(currentUser.id).length === 0 && !getBillingActivationForOwner(currentUser.id);
 
     try {
       addSubmittedVenue(venue);
@@ -341,6 +317,9 @@ export default function VenueSubmissionForm() {
       );
       return;
     }
+    if (isFirstVenue) {
+      recordFirstPublishActivation(currentUser.id, venue.id);
+    }
     addRole("venue_operator");
     router.push(`/spaces/${slug}`);
   }
@@ -349,15 +328,17 @@ export default function VenueSubmissionForm() {
     <div className="mx-auto max-w-2xl">
       <div className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-wider text-brass-dark">
-          Step {step} of 2
+          Step {step} of 3
         </p>
         <h1 className="mt-2 font-display text-3xl font-semibold text-ink">
-          {step === 1 ? "Submit your space" : "Requirements & bundled services"}
+          {step === 1 ? "Submit your space" : step === 2 ? "Requirements & bundled services" : "Review and publish"}
         </h1>
         <p className="mt-2 text-sm text-ink-soft">
           {step === 1
             ? "Photos, price estimates, and availability."
-            : "What organizers need to know before booking, and what's included."}
+            : step === 2
+              ? "What organizers need to know before booking, and what's included."
+              : "Take one more look — you can jump back to fix anything before it goes live."}
         </p>
         <p className="mt-2 text-xs text-ink-soft">
           <span className="text-wine">*</span> Required
@@ -624,6 +605,15 @@ export default function VenueSubmissionForm() {
               </div>
             </div>
 
+            <label className="flex items-center gap-2.5 text-sm text-ink">
+              <input
+                type="checkbox"
+                {...register("capacityNegotiable")}
+                className="h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+              />
+              I&apos;ll consider larger groups (I&apos;ll confirm what my space and permits allow)
+            </label>
+
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label htmlFor="minBookingHours" className="block text-sm font-medium text-ink">
@@ -674,6 +664,67 @@ export default function VenueSubmissionForm() {
               </p>
             )}
 
+            <label className="flex items-center gap-2.5 text-sm text-ink">
+              <input
+                type="checkbox"
+                {...register("minBookingHoursNegotiable")}
+                className="h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+              />
+              I&apos;ll consider shorter bookings
+            </label>
+
+            <div>
+              <p className="text-sm font-medium text-ink">Booking window (optional)</p>
+              <p className="text-xs text-ink-soft">
+                Leave blank if you don&apos;t want to state hours. If the end time is earlier
+                than the start time, we&apos;ll read it as running past midnight (e.g. 6:00 PM –
+                2:00 AM).
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="earliestStartTime" className="block text-xs font-medium text-ink-soft">
+                    Earliest start
+                  </label>
+                  <input
+                    id="earliestStartTime"
+                    type="time"
+                    {...register("earliestStartTime")}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="latestEndTime" className="block text-xs font-medium text-ink-soft">
+                    Latest end
+                  </label>
+                  <input
+                    id="latestEndTime"
+                    type="time"
+                    {...register("latestEndTime")}
+                    className="mt-1 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                  />
+                </div>
+              </div>
+              {errors.latestEndTime && <p className="mt-1 text-xs text-wine">{errors.latestEndTime.message}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="bookingIncrementMinutes" className="block text-sm font-medium text-ink">
+                Booking increments (optional)
+              </label>
+              <select
+                id="bookingIncrementMinutes"
+                {...register("bookingIncrementMinutes")}
+                className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+              >
+                <option value="">No preference</option>
+                {BOOKING_INCREMENT_OPTIONS.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes === 60 ? "1 hour" : `${minutes} minutes`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label htmlFor="availabilityExamples" className="block text-sm font-medium text-ink">
                 Availability (one example per line)
@@ -699,6 +750,9 @@ export default function VenueSubmissionForm() {
 
         {step === 2 && (
           <div className="space-y-6">
+            {step2Error && (
+              <p className="rounded-lg bg-wine/10 px-3.5 py-2.5 text-sm text-wine">{step2Error}</p>
+            )}
             <div>
               <p className="text-sm font-medium text-ink">Amenities included</p>
               <p className="text-xs text-ink-soft">
@@ -785,9 +839,46 @@ export default function VenueSubmissionForm() {
               </div>
             </div>
 
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleReview}
+                className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+              >
+                Continue to review
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && reviewValues && (
+          <div className="space-y-6">
+            <VenueListingReview
+              values={reviewValues}
+              photos={photos}
+              videoNames={videoNames}
+              resolvedNeighborhood={resolveAddress(reviewValues.address).neighborhood}
+              onEditStep={(target) => setStep(target)}
+              billingNotice={
+                getVenuesOwnedBy(currentUser.id).length === 0 && !getBillingActivationForOwner(currentUser.id) ? (
+                  <div className="border-t border-line pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Subscription</p>
+                    <p className="mt-2 text-sm text-ink-soft">{VENUE_SUBSCRIPTION_PLACEHOLDER_COPY}</p>
+                  </div>
+                ) : null
+              }
+            />
+
             <p className="rounded-lg bg-paper-dim px-3.5 py-2.5 text-xs leading-relaxed text-ink-soft">
-              Your listing goes live on Discover Spaces immediately after you submit —
-              there&apos;s no review step or fee yet in this prototype.
+              Your listing goes live on Discover Spaces immediately after you publish —
+              there&apos;s no admin review step or fee yet in this prototype.
             </p>
 
             {submitError && (
@@ -799,7 +890,7 @@ export default function VenueSubmissionForm() {
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => setStep(2)}
                 className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
               >
                 Back
