@@ -31,6 +31,8 @@ export interface VendorSkillDefinition {
   description: string;
   /** Whether this skill can reasonably be delivered without being on-site (design, editing, sponsorship, etc.). */
   remoteEligible: boolean;
+  /** Placeholder shown in the service-title field. Must be specific to THIS skill — a shared example (e.g. a DJ set shown to a photographer) reads as a bug. */
+  exampleServiceTitle: string;
 }
 
 export type PricingModel = "hourly" | "flat_fee" | "day_rate" | "package" | "contact_for_quote";

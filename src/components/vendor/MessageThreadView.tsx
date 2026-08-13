@@ -17,7 +17,8 @@ import { getEventNeedById } from "@/lib/vendors/eventNeeds";
 import { getProposalById } from "@/lib/vendors/proposals";
 import { getEffectiveProposalStatus } from "@/lib/vendors/expiration";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
-import { getBookingById, formatEventLabel } from "@/lib/spaces/bookings";
+import { getBookingById, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getSkillName } from "@/lib/vendors/skills";
 import { ENGAGEMENT_STATUS_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
 import LoadingState from "@/components/ui/LoadingState";
@@ -103,10 +104,11 @@ function BookingThreadHeader({ booking, otherAccount }: { booking: Booking; othe
         {booking.venueName} — {otherAccount?.name ?? "Foundry user"}
       </p>
       <p className="mt-1 text-sm text-ink-soft">
-        {booking.eventDate} · {booking.startTime}–{booking.endTime} · {booking.attendees} guests
+        {formatEventDate(booking.eventDate)} · {formatTimeRange(booking.startTime, booking.endTime)} ·{" "}
+        {booking.attendees} guests
       </p>
       <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold">
-        <Link href={`/spaces/${booking.venueSlug}`} className="text-brass-dark hover:underline">
+        <Link href={`/spaces/${booking.venueSlug}?from=dashboard`} className="text-brass-dark hover:underline">
           View venue
         </Link>
         <Link href="/dashboard/organizer" className="text-brass-dark hover:underline">

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useOwnedVenuesData } from "@/hooks/useOwnedVenuesData";
 import { acceptBookingRequest, declineBookingRequest, startBookingConversation } from "@/lib/spaces/bookingWorkflow";
+import { formatEventDate } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getBillingActivationForOwner } from "@/lib/spaces/venueBilling";
 import BookingRequestReviewModal from "@/components/dashboard/BookingRequestReviewModal";
 import EmptyState from "@/components/ui/EmptyState";
@@ -66,7 +68,7 @@ export default function VenueDashboardPage() {
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Venue dashboard</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Your listings and the bookings against them. Listings go live immediately in this
             prototype — there&apos;s no admin review step yet.
@@ -123,8 +125,8 @@ export default function VenueDashboardPage() {
                           {booking.organizerName} · {venue.name}
                         </p>
                         <p className="text-xs text-ink-soft">
-                          {booking.eventDate} · {booking.startTime}–{booking.endTime} ·{" "}
-                          {booking.attendees} guests
+                          {formatEventDate(booking.eventDate)} ·{" "}
+                          {formatTimeRange(booking.startTime, booking.endTime)} · {booking.attendees} guests
                         </p>
                       </div>
                       <button
@@ -149,7 +151,7 @@ export default function VenueDashboardPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <Link
-                        href={`/spaces/${venue.slug}`}
+                        href={`/spaces/${venue.slug}?from=dashboard`}
                         className="font-display text-lg font-semibold text-ink hover:underline"
                       >
                         {venue.name}
@@ -158,12 +160,16 @@ export default function VenueDashboardPage() {
                         {venue.neighborhood}, {venue.city}
                       </p>
                       <p className="mt-0.5 text-xs text-ink-soft">
-                        Live since {formatLiveSince(venue.publishedAt ?? venue.createdAt)}
+                        {venue.listingHidden ? "Hidden from Discover Spaces" : `Live since ${formatLiveSince(venue.publishedAt ?? venue.createdAt)}`}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="rounded-full bg-brass/15 px-2.5 py-1 text-xs font-semibold text-brass-dark">
-                        Live
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          venue.listingHidden ? "bg-paper-dim text-ink-soft" : "bg-brass/15 text-brass-dark"
+                        }`}
+                      >
+                        {venue.listingHidden ? "Private" : "Live"}
                       </span>
                       <Link
                         href={`/dashboard/venue/listings/${venue.id}`}
@@ -192,7 +198,8 @@ export default function VenueDashboardPage() {
                             >
                               <div>
                                 <span className="text-ink">
-                                  {booking.eventDate} · {booking.startTime}–{booking.endTime}
+                                  {formatEventDate(booking.eventDate)} ·{" "}
+                                  {formatTimeRange(booking.startTime, booking.endTime)}
                                 </span>
                                 <span className="ml-2 text-ink-soft">
                                   {booking.organizerName} · {booking.attendees} guests

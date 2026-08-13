@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getBookingById, formatEventLabel } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getVenueBySlugAnywhere } from "@/lib/spaces/submittedVenues";
 import {
   getEventNeedsForBooking,
@@ -160,7 +161,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Find vendors</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            {formatEventLabel(booking)} · {booking.startTime}–{booking.endTime}
+            {formatEventLabel(booking)} · {formatTimeRange(booking.startTime, booking.endTime)}
           </p>
         </div>
         <button

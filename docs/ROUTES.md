@@ -12,8 +12,8 @@ placeholders; the guards described here land in the auth-implementation phase
 | `/` | Landing page — value proposition for all three audiences, plus a hero search (`HeroSearch.tsx`: event type, San Francisco, date, start/end time) that deep-links into `/spaces` with those filters already applied via `urlState.ts`'s existing query params |
 | `/sign-in` | Functional against the local-prototype auth layer (see `CLAUDE.md`) — not real Supabase Auth |
 | `/sign-up` | Same prototype layer; role picked at signup, more can be added to the account later |
-| `/spaces` | Discover Spaces — venue discovery/filtering UI over local + submitted venues, no backend yet (see below) |
-| `/spaces/[slug]` | Venue detail — booking is functional against the local-prototype `bookings` store; requests start `pending` until the owner accepts from `/dashboard/venue` (no quote step) |
+| `/spaces` | Discover Spaces — venue discovery/filtering UI over local + submitted venues (via `getPubliclyVisibleVenues()`, which drops listings an owner set to private), no backend yet (see below) |
+| `/spaces/[slug]` | Venue detail — booking is functional against the local-prototype `bookings` store; requests start `pending` until the owner accepts from `/dashboard/venue` (no quote step). The booking panel is hidden for the venue's own owner and for anyone whose active role is venue/vendor/admin (UX only — the real gate is Phase 2 server-side). `?from=dashboard` sends the back link to `/dashboard` instead of Discover Spaces |
 | `/list-your-venue` | Real (prototype) venue submission form — gated on being signed in, 3-step wizard ending in a review step + "Publish listing", publishes immediately with no admin review (scoped exception, see `docs/SECURITY.md` #9) |
 | `/about` | "Coming soon" placeholder |
 | `/vendors` | Vendor directory — real (prototype), lists `published` vendor profiles with skill/remote/search filters |
@@ -88,8 +88,8 @@ header nav (For Planners / For Venues / For Vendors / About) is hidden on all
 | `/dashboard/venue` | `venue_operator` | Venue operator home: listings with "Live since" date, incoming booking requests, "Go to messages"/"Open conversation" per confirmed booking |
 | `/dashboard/venue/listings/new` *(future — use `/list-your-venue`)* | `venue_operator` | Submit a new venue listing |
 | `/dashboard/venue/listings/[id]` | `venue_operator` | Real (prototype) — edit an owned listing (`VenueEditForm.tsx`); never changes `id`/`slug`/`ownerId` |
-| `/dashboard/vendor` | `vendor` | Real (prototype) — profile status, active/expiring bids, confirmed gigs count, rating |
-| `/dashboard/vendor/onboarding` | `vendor` | Real (prototype) — 6-step profile creation/publish flow |
+| `/dashboard/vendor` | `vendor` | Real (prototype), titled "Event details" — profile status, active/expiring bids, confirmed gigs count, rating |
+| `/dashboard/vendor/onboarding` | `vendor` | Real (prototype) — 4-step profile creation/publish flow (basic info, services + portfolio, location, preview). Accepts `?step=2` to deep-link "List another service". Notification preferences are a post-publish dialog, not a step |
 | `/dashboard/vendor/gigs` | `vendor` | Real (prototype) — Discover Gigs, matched by skill + location/remote, filters, transparent match-reason text |
 | `/dashboard/vendor/gigs/[id]` | `vendor` | Real (prototype) — opportunity detail, competitive bid summary, Place a Bid |
 | `/dashboard/vendor/bids` | `vendor` | Real (prototype) — active/all bids, withdraw/renew |

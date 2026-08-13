@@ -5,8 +5,11 @@ import Link from "next/link";
 import { useOwnedVenuesData } from "@/hooks/useOwnedVenuesData";
 import { computeVenueEarnings, selectUpcomingBookings } from "@/lib/spaces/venueEarnings";
 import { getBillingActivationForOwner, VENUE_SUBSCRIPTION_PLACEHOLDER_COPY } from "@/lib/spaces/venueBilling";
+import { setVenueVisibility } from "@/lib/spaces/submittedVenues";
 import KpiCard from "./KpiCard";
 import UpcomingEventCard from "./UpcomingEventCard";
+import VenueProfileSummary from "./VenueProfileSummary";
+import type { Venue } from "@/lib/types/spaces";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 
@@ -15,8 +18,13 @@ function formatMoney(amount: number): string {
 }
 
 export default function VenueDashboard({ accountId }: { accountId: string }) {
-  const { loaded, venues, bookingsByVenue, pendingCount } = useOwnedVenuesData(accountId);
+  const { loaded, venues, bookingsByVenue, pendingCount, refresh } = useOwnedVenuesData(accountId);
   const [todayIso, setTodayIso] = useState("");
+
+  function handleToggleVisibility(venue: Venue) {
+    setVenueVisibility(venue.id, !venue.listingHidden);
+    refresh();
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -74,6 +82,8 @@ export default function VenueDashboard({ accountId }: { accountId: string }) {
         payment step yet, so figures are calculated from each listing&apos;s hourly rate and the hours actually
         booked, not from money collected.
       </p>
+
+      <VenueProfileSummary venues={venues} onToggleVisibility={handleToggleVisibility} />
 
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">

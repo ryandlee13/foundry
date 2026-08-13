@@ -3,8 +3,13 @@
 import { useEffect, useId, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { findAccountById } from "@/lib/auth/storage";
-import { getPastRentalsForOrganizer, formatEventLabel } from "@/lib/spaces/bookings";
-import { evaluateBookingRequest, toVenueBookingPolicy, getConfirmableViolations } from "@/lib/spaces/bookingConstraints";
+import { getPastRentalsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
+import {
+  evaluateBookingRequest,
+  toVenueBookingPolicy,
+  getConfirmableViolations,
+  formatTimeRange,
+} from "@/lib/spaces/bookingConstraints";
 import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
 import type { Account } from "@/lib/auth/types";
 import type { Booking, Venue } from "@/lib/types/spaces";
@@ -81,7 +86,8 @@ export default function BookingRequestReviewModal({
         {booking.eventType && <p className="text-xs text-ink-soft">{EVENT_TYPE_LABELS[booking.eventType]}</p>}
         <p className="text-xs text-ink-soft">{venue.name}</p>
         <p className="text-xs text-ink-soft">
-          {booking.eventDate} · {booking.startTime}–{booking.endTime} · {booking.attendees} guests
+          {formatEventDate(booking.eventDate)} · {formatTimeRange(booking.startTime, booking.endTime)} ·{" "}
+          {booking.attendees} guests
         </p>
       </div>
 

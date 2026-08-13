@@ -185,6 +185,26 @@ export function saveVendorProfileDraft(id: string, patch: Partial<VendorProfile>
   return updateVendorProfile(id, patch);
 }
 
+/**
+ * The vendor's own "make me private" control — back to `draft`, so the
+ * profile stops appearing in Discover Vendors.
+ *
+ * Deliberately refuses to touch a `rejected`/`suspended` profile: those are
+ * admin moderation states, and letting a vendor flip out of one and back to
+ * `published` via unhide/publish would be a way to self-clear a suspension.
+ */
+export function unpublishVendorProfile(id: string): VendorProfile | undefined {
+  const profile = getVendorProfileById(id);
+  if (!profile) return undefined;
+  if (profile.status !== "published") return profile;
+  return updateVendorProfile(id, { status: "draft" });
+}
+
+/** Whether the vendor may flip their own visibility (moderated profiles may not). */
+export function canToggleOwnVisibility(profile: VendorProfile): boolean {
+  return profile.status === "published" || profile.status === "draft";
+}
+
 function setStatus(id: string, status: VendorProfileStatus, rejectionReason: string | null = null): VendorProfile | undefined {
   return updateVendorProfile(id, { status, rejectionReason });
 }

@@ -9,7 +9,8 @@ import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import { getProposalsForNeed, getActiveProposal, withdrawProposal, renewProposal } from "@/lib/vendors/proposals";
 import { getThreadForProposal } from "@/lib/vendors/messages";
 import { computeCompetitiveBidSummary } from "@/lib/vendors/matching";
-import { getBookingById } from "@/lib/spaces/bookings";
+import { getBookingById, formatEventDate } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getSkillName } from "@/lib/vendors/skills";
 import { EXPERIENCE_LEVEL_LABELS, PRICING_MODEL_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
 import { formatExpiration, formatDeadlineDate, computeExpiresAt } from "@/lib/vendors/expiration";
@@ -107,12 +108,12 @@ export default function GigDetailPage({ needId }: { needId: string }) {
         <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-xs text-ink-soft">Date</dt>
-            <dd className="font-medium text-ink">{need.eventDate}</dd>
+            <dd className="font-medium text-ink">{formatEventDate(need.eventDate)}</dd>
           </div>
           <div>
             <dt className="text-xs text-ink-soft">Time</dt>
             <dd className="font-medium text-ink">
-              {need.startTime}–{need.endTime}
+              {formatTimeRange(need.startTime, need.endTime)}
             </dd>
           </div>
           {need.setupTime && (

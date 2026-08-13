@@ -1,17 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
+import {
+  getVendorProfileByOwnerId,
+  publishVendorProfile,
+  unpublishVendorProfile,
+  canToggleOwnVisibility,
+} from "@/lib/vendors/profiles";
 import { getEngagementsForVendor } from "@/lib/vendors/engagements";
 import { computeVendorEarnings, type VendorEarnings } from "@/lib/vendors/vendorEarnings";
 import { getBookingById } from "@/lib/spaces/bookings";
 import { getVenueById } from "@/lib/spaces/submittedVenues";
 import KpiCard from "./KpiCard";
 import UpcomingEventCard from "./UpcomingEventCard";
+import VendorProfileSummary from "./VendorProfileSummary";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 import type { Booking, Venue } from "@/lib/types/spaces";
+import type { VendorProfile } from "@/lib/types/vendors";
 
 function formatMoney(amount: number): string {
   return `$${amount.toLocaleString()}`;
@@ -19,21 +26,20 @@ function formatMoney(amount: number): string {
 
 export default function VendorDashboard({ accountId }: { accountId: string }) {
   const [loaded, setLoaded] = useState(false);
-  const [hasProfile, setHasProfile] = useState(false);
+  const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [earnings, setEarnings] = useState<VendorEarnings | null>(null);
   const [upcoming, setUpcoming] = useState<Booking[]>([]);
   const [venuesById, setVenuesById] = useState<Record<string, Venue>>({});
 
-  useEffect(() => {
-    const profile = getVendorProfileByOwnerId(accountId);
-    if (!profile) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHasProfile(false);
+  const refresh = useCallback(() => {
+    const found = getVendorProfileByOwnerId(accountId);
+    if (!found) {
+      setProfile(null);
       setLoaded(true);
       return;
     }
 
-    const engagements = getEngagementsForVendor(profile.id);
+    const engagements = getEngagementsForVendor(found.id);
     const todayIso = new Date().toISOString().slice(0, 10);
 
     const upcomingBookings: Booking[] = [];
@@ -48,16 +54,36 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
     }
     upcomingBookings.sort((a, b) => a.eventDate.localeCompare(b.eventDate));
 
-    setHasProfile(true);
+    setProfile(found);
     setEarnings(computeVendorEarnings(engagements, todayIso));
     setUpcoming(upcomingBookings);
     setVenuesById(venues);
     setLoaded(true);
   }, [accountId]);
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, [refresh]);
+
+  function handleToggleVisibility() {
+    if (!profile) return;
+    try {
+      if (profile.status === "published") {
+        unpublishVendorProfile(profile.id);
+      } else {
+        publishVendorProfile(profile.id);
+      }
+      refresh();
+    } catch {
+      // publishVendorProfile throws when the profile isn't complete enough —
+      // the profile card's Edit link is the way out, so there's nothing to do here.
+    }
+  }
+
   if (!loaded) return <LoadingState label="Loading your gigs…" />;
 
-  if (!hasProfile || !earnings) {
+  if (!profile || !earnings) {
     return (
       <EmptyState
         title="No vendor profile yet"
@@ -99,36 +125,45 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
         />
       </div>
 
-      <section>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold text-ink">Upcoming events</h2>
-          <Link
-            href="/dashboard/vendor/onboarding"
-            className="rounded-full bg-wine px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-          >
-            List another service
-          </Link>
-        </div>
-        <p className="mt-1.5 text-xs text-ink-soft">
-          Every service you list is another way organizers and venue owners can find you and request your work
-          directly.
-        </p>
+      <VendorProfileSummary
+        profile={profile}
+        canToggleVisibility={canToggleOwnVisibility(profile)}
+        onToggleVisibility={handleToggleVisibility}
+      />
 
+      <section>
+        <h2 className="font-display text-lg font-semibold text-ink">Upcoming events</h2>
         {upcoming.length === 0 ? (
-          <p className="mt-4 rounded-2xl border border-dashed border-line px-5 py-8 text-center text-sm text-ink-soft">
-            No confirmed gigs on the calendar yet.{" "}
-            <Link href="/dashboard/vendor/gigs" className="font-semibold text-brass-dark hover:underline">
-              Browse open gigs
-            </Link>
+          <p className="mt-3 rounded-2xl border border-dashed border-line px-5 py-8 text-center text-sm text-ink-soft">
+            No confirmed gigs on the calendar yet.
           </p>
         ) : (
-          <ul className="mt-4 space-y-3">
+          <ul className="mt-3 space-y-3">
             {upcoming.map((booking) => (
               <UpcomingEventCard key={booking.id} booking={booking} venue={venuesById[booking.venueId]} />
             ))}
           </ul>
         )}
       </section>
+
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/dashboard/vendor/gigs"
+          className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+        >
+          Find a gig
+        </Link>
+        <Link
+          href="/dashboard/vendor/onboarding?step=2"
+          className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+        >
+          List another service
+        </Link>
+      </div>
+      <p className="-mt-5 text-xs text-ink-soft">
+        Every service you list is another way organizers and venue owners can find you and request your work
+        directly.
+      </p>
     </div>
   );
 }

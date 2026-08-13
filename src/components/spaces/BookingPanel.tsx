@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { addBooking } from "@/lib/spaces/bookings";
+import { addBooking, formatEventDate } from "@/lib/spaces/bookings";
 import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
 import {
   evaluateBookingRequest,
@@ -13,6 +13,7 @@ import {
   getConfirmableViolations,
   formatBookingWindow,
   formatBookingIncrement,
+  formatTimeRange,
   type BookingConstraintViolation,
 } from "@/lib/spaces/bookingConstraints";
 import Dialog from "@/components/ui/Dialog";
@@ -156,7 +157,7 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
             <p className="font-display text-base font-semibold text-ink">Request sent</p>
             {eventName.trim() && <p className="mt-1 text-sm font-medium text-ink">{eventName.trim()}</p>}
             <p className="mt-1 text-xs text-ink-soft">
-              {eventDate} · {startTime}–{endTime} · {attendees} guests
+              {formatEventDate(eventDate)} · {formatTimeRange(startTime, endTime)} · {attendees} guests
             </p>
             <p className="mt-2 text-xs text-ink-soft">
               Waiting on the host to accept — you&apos;ll see it confirmed on your dashboard.

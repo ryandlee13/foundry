@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTimeDisplay } from "@/lib/spaces/bookingConstraints";
 import {
   AMENITY_LABELS,
   EVENT_TYPE_LABELS,
@@ -30,7 +31,10 @@ function buildChips(filters: SearchFilters, onChange: (patch: Partial<SearchFilt
   if (filters.startTime || filters.endTime) {
     chips.push({
       key: "time",
-      label: [filters.startTime, filters.endTime].filter(Boolean).join(" – "),
+      label: [filters.startTime, filters.endTime]
+        .filter((time): time is string => Boolean(time))
+        .map(formatTimeDisplay)
+        .join(" – "),
       onRemove: () => onChange({ startTime: null, endTime: null }),
     });
   }

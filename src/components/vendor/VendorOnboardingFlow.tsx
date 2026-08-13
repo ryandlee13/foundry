@@ -1,19 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import LoadingState from "@/components/ui/LoadingState";
 import { resizeImageFile } from "@/lib/spaces/imageResize";
 import { resolveAddress } from "@/lib/spaces/geocode";
 import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
-import { VENDOR_SKILLS } from "@/lib/vendors/skills";
-import {
-  PRICING_MODEL_LABELS,
-  EXPERIENCE_LEVEL_LABELS,
-  NOTIFICATION_CATEGORY_LABELS,
-  MATCH_SCOPE_LABELS,
-} from "@/lib/vendors/labels";
+import { VENDOR_SKILLS, getSkillExampleTitle, getSkillName } from "@/lib/vendors/skills";
+import { PRICING_MODEL_LABELS } from "@/lib/vendors/labels";
+import SkillMultiSelect from "./SkillMultiSelect";
+import NotificationPreferencesDialog from "./NotificationPreferencesDialog";
 import { buildPortfolioLink, isValidPortfolioUrl } from "@/lib/vendors/portfolioLinks";
 import { canOfferRemoteOnly, getRemoteBlockingSkillNames, reconcileRemoteOnly } from "@/lib/vendors/remoteEligibility";
 import {
@@ -28,28 +25,41 @@ import RadiusSelector from "@/components/spaces/RadiusSelector";
 import { SERVICE_RADIUS_OPTIONS_MILES } from "@/lib/types/vendors";
 import type { EventType } from "@/lib/types/spaces";
 import type {
-  MatchScope,
-  NotificationCategory,
   PortfolioLink,
   PricingModel,
   ServiceRadiusMode,
+  VendorNotificationPreferences,
   VendorProfile,
   VendorService,
   VendorSkillSlug,
 } from "@/lib/types/vendors";
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 4;
 const MIN_DESCRIPTION_LENGTH = 40;
 const MAX_DESCRIPTION_LENGTH = 600;
 
-const STEP_TITLES = [
-  "Basic information",
-  "Skills & services",
-  "Portfolio",
-  "Location & availability",
-  "Notification preferences",
-  "Preview & publish",
-];
+/** Deep-link target for "List another service" — skips straight to services. */
+export const SERVICES_STEP = 2;
+
+const STEP_TITLES = ["Basic information", "Services & portfolio", "Location & availability", "Preview & publish"];
+
+/**
+ * Package pricing is deliberately absent: a vendor listing one service
+ * prices it as a rate or a flat fee, and "package" only muddied that. The
+ * PricingModel type still carries it for existing proposals/engagements —
+ * this is the picker's subset, not a type change.
+ */
+const SERVICE_PRICING_MODELS: PricingModel[] = ["hourly", "flat_fee", "day_rate", "contact_for_quote"];
+
+/** Marks a field the profile genuinely can't publish without. */
+function RequiredMark() {
+  return (
+    <span className="text-wine" aria-hidden>
+      {" "}
+      *
+    </span>
+  );
+}
 
 function TextField({
   label,
@@ -59,6 +69,7 @@ function TextField({
   hint,
   error,
   type = "text",
+  required = false,
 }: {
   label: string;
   value: string;
@@ -67,10 +78,14 @@ function TextField({
   hint?: string;
   error?: string;
   type?: string;
+  required?: boolean;
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-ink">{label}</label>
+      <label className="block text-sm font-medium text-ink">
+        {label}
+        {required && <RequiredMark />}
+      </label>
       <input
         type={type}
         value={value}
@@ -164,13 +179,20 @@ function StepNav({
 
 export default function VendorOnboardingFlow() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading, addRole } = useAuth();
-  const [step, setStep] = useState(1);
+  // "List another service" deep-links here with ?step=2 — an existing vendor
+  // adding a service shouldn't be walked through basic info again.
+  const requestedStep = Number(searchParams.get("step"));
+  const [step, setStep] = useState(
+    Number.isInteger(requestedStep) && requestedStep >= 1 && requestedStep <= TOTAL_STEPS ? requestedStep : 1
+  );
   const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [isProcessingImage, setIsProcessingImage] = useState<"photo" | "cover" | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [portfolioDraft, setPortfolioDraft] = useState({ url: "", title: "", description: "" });
   const [portfolioError, setPortfolioError] = useState<string | null>(null);
+  const [showNotificationPrefs, setShowNotificationPrefs] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -224,33 +246,36 @@ export default function VendorOnboardingFlow() {
     }
   }
 
-  function toggleSkill(skill: VendorSkillSlug) {
-    const skills = profile!.skills.includes(skill)
-      ? profile!.skills.filter((s) => s !== skill)
-      : [...profile!.skills, skill];
-
-    const services = skills.includes(skill)
-      ? profile!.services.some((service) => service.skillSlug === skill)
-        ? profile!.services
-        : [
-            ...profile!.services,
-            {
-              id: crypto.randomUUID(),
-              skillSlug: skill,
-              title: "",
-              description: "",
-              pricingModel: "contact_for_quote" as PricingModel,
-              startingPrice: null,
-              pricingVisible: false,
-              equipmentIncluded: "",
-              experienceLevel: "intermediate" as const,
-              eventTypesServed: [],
-            } satisfies VendorService,
-          ]
-      : profile!.services.filter((service) => service.skillSlug !== skill);
+  function addSkill(skill: VendorSkillSlug) {
+    if (profile!.skills.includes(skill)) return;
+    const skills = [...profile!.skills, skill];
+    const services = profile!.services.some((service) => service.skillSlug === skill)
+      ? profile!.services
+      : [
+          ...profile!.services,
+          {
+            id: crypto.randomUUID(),
+            skillSlug: skill,
+            title: "",
+            description: "",
+            pricingModel: "contact_for_quote" as PricingModel,
+            startingPrice: null,
+            pricingVisible: false,
+            equipmentIncluded: "",
+            experienceLevel: "intermediate" as const,
+            eventTypesServed: [],
+          } satisfies VendorService,
+        ];
 
     // If the new skill selection no longer supports remote-only (e.g. a DJ
     // skill was just added), turn a stale remoteOnly claim back off.
+    const remoteOnly = reconcileRemoteOnly(skills, profile!.location.remoteOnly);
+    persist({ skills, services, location: { ...profile!.location, remoteOnly } });
+  }
+
+  function removeSkill(skill: VendorSkillSlug) {
+    const skills = profile!.skills.filter((s) => s !== skill);
+    const services = profile!.services.filter((service) => service.skillSlug !== skill);
     const remoteOnly = reconcileRemoteOnly(skills, profile!.location.remoteOnly);
     persist({ skills, services, location: { ...profile!.location, remoteOnly } });
   }
@@ -297,10 +322,18 @@ export default function VendorOnboardingFlow() {
     try {
       publishVendorProfile(profile!.id);
       addRole("vendor");
-      router.push("/dashboard/vendor?published=1");
+      // Notification preferences are confirmed here rather than as a step —
+      // the dialog routes on to the dashboard once saved.
+      setShowNotificationPrefs(true);
     } catch {
       setStep(1);
     }
+  }
+
+  function saveNotificationPrefs(patch: Partial<VendorNotificationPreferences>) {
+    persist({ notificationPreferences: { ...profile!.notificationPreferences, ...patch } });
+    setShowNotificationPrefs(false);
+    router.push("/dashboard/vendor?published=1");
   }
 
   return (
@@ -317,27 +350,42 @@ export default function VendorOnboardingFlow() {
             imageError={imageError}
           />
         )}
-        {step === 2 && <SkillsStep profile={profile} onToggleSkill={toggleSkill} onUpdateService={updateService} />}
-        {step === 3 && (
-          <PortfolioStep
+        {step === 2 && (
+          <SkillsStep
             profile={profile}
-            draft={portfolioDraft}
-            setDraft={setPortfolioDraft}
-            error={portfolioError}
-            onAdd={addPortfolioLink}
-            onRemove={removePortfolioLink}
+            onAddSkill={addSkill}
+            onRemoveSkill={removeSkill}
+            onUpdateService={updateService}
+            portfolioDraft={portfolioDraft}
+            setPortfolioDraft={setPortfolioDraft}
+            portfolioError={portfolioError}
+            onAddPortfolioLink={addPortfolioLink}
+            onRemovePortfolioLink={removePortfolioLink}
           />
         )}
-        {step === 4 && <LocationStep profile={profile} persist={persist} />}
-        {step === 5 && <NotificationStep profile={profile} persist={persist} />}
-        {step === 6 && <PreviewStep profile={profile} readiness={readiness} onSaveDraft={saveAsDraft} onPublish={publish} onEditStep={setStep} />}
+        {step === 3 && <LocationStep profile={profile} persist={persist} />}
+        {step === 4 && (
+          <PreviewStep
+            profile={profile}
+            readiness={readiness}
+            onSaveDraft={saveAsDraft}
+            onPublish={publish}
+            onEditStep={setStep}
+          />
+        )}
 
-        {step < 6 && (
+        {step < TOTAL_STEPS && (
           <div className="mt-8">
             <StepNav step={step} canContinue={canContinueFromStep(step, profile)} onBack={goBack} onContinue={goNext} />
           </div>
         )}
       </div>
+
+      <NotificationPreferencesDialog
+        open={showNotificationPrefs}
+        preferences={profile.notificationPreferences}
+        onSave={saveNotificationPrefs}
+      />
     </div>
   );
 }
@@ -346,8 +394,14 @@ function canContinueFromStep(step: number, profile: VendorProfile): boolean {
   if (step === 1) {
     return profile.displayName.trim().length > 0 && profile.professionalDescription.trim().length >= MIN_DESCRIPTION_LENGTH;
   }
-  if (step === 2) return profile.skills.length > 0;
-  if (step === 3) return true; // portfolio is required to publish, not to advance — enforced at step 6
+  // Every added service now needs a title and description before moving on —
+  // both are marked required on the card.
+  if (step === 2) {
+    return (
+      profile.skills.length > 0 &&
+      profile.services.every((service) => service.title.trim().length > 0 && service.description.trim().length > 0)
+    );
+  }
   return true;
 }
 
@@ -367,12 +421,17 @@ function BasicInfoStep({
   const descriptionLength = profile.professionalDescription.length;
   return (
     <div className="space-y-5">
+      <p className="text-xs text-ink-soft">
+        Fields marked <RequiredMark /> are required to publish.
+      </p>
+
       <div className="grid grid-cols-2 gap-4">
-        <TextField label="First name" value={profile.firstName} onChange={(v) => persist({ firstName: v })} />
-        <TextField label="Last name" value={profile.lastName} onChange={(v) => persist({ lastName: v })} />
+        <TextField label="First name" required value={profile.firstName} onChange={(v) => persist({ firstName: v })} />
+        <TextField label="Last name" required value={profile.lastName} onChange={(v) => persist({ lastName: v })} />
       </div>
       <TextField
         label="Professional display name or business name"
+        required
         value={profile.displayName}
         onChange={(v) => persist({ displayName: v })}
         placeholder="DJ Jane / Golden Gate Catering Co."
@@ -380,7 +439,10 @@ function BasicInfoStep({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <p className="text-sm font-medium text-ink">Profile photo</p>
+          <p className="text-sm font-medium text-ink">
+            Profile photo
+            <RequiredMark />
+          </p>
           {profile.profilePhoto && (
             // eslint-disable-next-line @next/next/no-img-element -- local data URL, not a remote image domain
             <img src={profile.profilePhoto} alt="Profile" className="mt-2 h-16 w-16 rounded-full object-cover" />
@@ -399,7 +461,7 @@ function BasicInfoStep({
           </label>
         </div>
         <div>
-          <p className="text-sm font-medium text-ink">Cover image (optional)</p>
+          <p className="text-sm font-medium text-ink">Cover image</p>
           {profile.coverImage && (
             // eslint-disable-next-line @next/next/no-img-element -- local data URL, not a remote image domain
             <img src={profile.coverImage} alt="Cover" className="mt-2 h-16 w-full rounded-lg object-cover" />
@@ -422,7 +484,10 @@ function BasicInfoStep({
 
       <div>
         <div className="flex items-center justify-between">
-          <label className="block text-sm font-medium text-ink">Professional description</label>
+          <label className="block text-sm font-medium text-ink">
+            Professional description
+            <RequiredMark />
+          </label>
           <span className={`text-xs ${descriptionLength >= MIN_DESCRIPTION_LENGTH ? "text-brass-dark" : "text-ink-soft"}`}>
             {descriptionLength} / {MAX_DESCRIPTION_LENGTH}
           </span>
@@ -441,57 +506,66 @@ function BasicInfoStep({
       </div>
 
       <TextField
-        label="Years of experience"
-        type="number"
-        value={String(profile.yearsExperience)}
-        onChange={(v) => persist({ yearsExperience: Math.max(0, Number(v) || 0) })}
+        label="Social media"
+        value={profile.websiteUrl}
+        onChange={(v) => persist({ websiteUrl: v })}
+        placeholder="https://instagram.com/… or your website"
+        hint="Where organizers can see more of you — a social profile or your own site."
       />
-      <div className="grid grid-cols-2 gap-4">
-        <TextField label="Website (optional)" value={profile.websiteUrl} onChange={(v) => persist({ websiteUrl: v })} placeholder="https://" />
-        <TextField label="Instagram (optional)" value={profile.instagramUrl} onChange={(v) => persist({ instagramUrl: v })} placeholder="https://instagram.com/…" />
-      </div>
     </div>
   );
 }
 
 function SkillsStep({
   profile,
-  onToggleSkill,
+  onAddSkill,
+  onRemoveSkill,
   onUpdateService,
+  portfolioDraft,
+  setPortfolioDraft,
+  portfolioError,
+  onAddPortfolioLink,
+  onRemovePortfolioLink,
 }: {
   profile: VendorProfile;
-  onToggleSkill: (skill: VendorSkillSlug) => void;
+  onAddSkill: (skill: VendorSkillSlug) => void;
+  onRemoveSkill: (skill: VendorSkillSlug) => void;
   onUpdateService: (skillSlug: VendorSkillSlug, patch: Partial<VendorService>) => void;
+  portfolioDraft: { url: string; title: string; description: string };
+  setPortfolioDraft: (draft: { url: string; title: string; description: string }) => void;
+  portfolioError: string | null;
+  onAddPortfolioLink: () => void;
+  onRemovePortfolioLink: (id: string) => void;
 }) {
-  const skillOptions = useMemo<[VendorSkillSlug, string][]>(
-    () => VENDOR_SKILLS.map((skill) => [skill.slug, skill.name]),
-    []
-  );
-
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium text-ink">Select your skills and services</p>
-        <p className="text-xs text-ink-soft">Pick at least one. You can add details for each below.</p>
-        <div className="mt-2">
-          <CheckboxGrid options={skillOptions} selected={profile.skills} onToggle={onToggleSkill} />
-        </div>
+        <p className="text-sm font-medium text-ink">
+          What services do you offer?
+          <RequiredMark />
+        </p>
+        <p className="mb-2 text-xs text-ink-soft">
+          Search and add at least one — each one gets its own card below.
+        </p>
+        <SkillMultiSelect selected={profile.skills} onAdd={onAddSkill} onRemove={onRemoveSkill} />
       </div>
 
       {profile.services.map((service) => (
         <div key={service.id} className="rounded-xl border border-line p-4">
-          <p className="text-sm font-semibold text-ink">
-            {VENDOR_SKILLS.find((s) => s.slug === service.skillSlug)?.name}
-          </p>
+          <p className="text-sm font-semibold text-ink">{getSkillName(service.skillSlug)}</p>
           <div className="mt-3 space-y-3">
             <TextField
-              label="Service title (optional)"
+              label="Service title"
+              required
               value={service.title}
               onChange={(v) => onUpdateService(service.skillSlug, { title: v })}
-              placeholder="4-hour open-format DJ set"
+              placeholder={getSkillExampleTitle(service.skillSlug)}
             />
             <div>
-              <label className="block text-sm font-medium text-ink">Short description (optional)</label>
+              <label className="block text-sm font-medium text-ink">
+                Short description
+                <RequiredMark />
+              </label>
               <textarea
                 rows={2}
                 value={service.description}
@@ -507,9 +581,9 @@ function SkillsStep({
                   onChange={(e) => onUpdateService(service.skillSlug, { pricingModel: e.target.value as PricingModel })}
                   className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
                 >
-                  {Object.entries(PRICING_MODEL_LABELS).map(([value, label]) => (
+                  {SERVICE_PRICING_MODELS.map((value) => (
                     <option key={value} value={value}>
-                      {label}
+                      {PRICING_MODEL_LABELS[value]}
                     </option>
                   ))}
                 </select>
@@ -540,20 +614,6 @@ function SkillsStep({
               onChange={(v) => onUpdateService(service.skillSlug, { equipmentIncluded: v })}
             />
             <div>
-              <label className="block text-sm font-medium text-ink">Experience level</label>
-              <select
-                value={service.experienceLevel}
-                onChange={(e) => onUpdateService(service.skillSlug, { experienceLevel: e.target.value as VendorService["experienceLevel"] })}
-                className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
-              >
-                {Object.entries(EXPERIENCE_LEVEL_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
               <p className="text-sm font-medium text-ink">Types of events you serve</p>
               <div className="mt-2">
                 <CheckboxGrid
@@ -572,29 +632,9 @@ function SkillsStep({
           </div>
         </div>
       ))}
-    </div>
-  );
-}
 
-function PortfolioStep({
-  profile,
-  draft,
-  setDraft,
-  error,
-  onAdd,
-  onRemove,
-}: {
-  profile: VendorProfile;
-  draft: { url: string; title: string; description: string };
-  setDraft: (draft: { url: string; title: string; description: string }) => void;
-  error: string | null;
-  onAdd: () => void;
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-medium text-ink">Portfolio links (optional)</p>
+      <div className="border-t border-line pt-6">
+        <p className="text-sm font-medium text-ink">Portfolio links</p>
         <p className="text-xs text-ink-soft">
           Personal site, SoundCloud, YouTube, Instagram, Behance — anywhere organizers can see your work. Not
           required to publish, but strongly recommended.
@@ -611,7 +651,7 @@ function PortfolioStep({
               </div>
               <button
                 type="button"
-                onClick={() => onRemove(link.id)}
+                onClick={() => onRemovePortfolioLink(link.id)}
                 className="shrink-0 text-xs font-medium text-wine hover:text-wine-soft"
               >
                 Remove
@@ -622,14 +662,20 @@ function PortfolioStep({
       )}
 
       <div className="space-y-3 rounded-xl border border-dashed border-line p-4">
-        <TextField label="URL" value={draft.url} onChange={(v) => setDraft({ ...draft, url: v })} placeholder="https://soundcloud.com/…" error={error ?? undefined} />
+        <TextField
+          label="URL"
+          value={portfolioDraft.url}
+          onChange={(v) => setPortfolioDraft({ ...portfolioDraft, url: v })}
+          placeholder="https://soundcloud.com/…"
+          error={portfolioError ?? undefined}
+        />
         <div className="grid grid-cols-2 gap-4">
-          <TextField label="Title (optional)" value={draft.title} onChange={(v) => setDraft({ ...draft, title: v })} />
-          <TextField label="Description (optional)" value={draft.description} onChange={(v) => setDraft({ ...draft, description: v })} />
+          <TextField label="Title (optional)" value={portfolioDraft.title} onChange={(v) => setPortfolioDraft({ ...portfolioDraft, title: v })} />
+          <TextField label="Description (optional)" value={portfolioDraft.description} onChange={(v) => setPortfolioDraft({ ...portfolioDraft, description: v })} />
         </div>
         <button
           type="button"
-          onClick={onAdd}
+          onClick={onAddPortfolioLink}
           className="rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
         >
           Add link
@@ -788,62 +834,6 @@ function LocationStep({ profile, persist }: { profile: VendorProfile; persist: (
 
       <TextField label="Typical availability" value={location.typicalAvailability} onChange={(v) => updateLocation({ typicalAvailability: v })} placeholder="Weekends, weeknights after 6pm" />
       <TextField label="Lead time required (days)" type="number" value={String(location.leadTimeDays)} onChange={(v) => updateLocation({ leadTimeDays: Math.max(0, Number(v) || 0) })} />
-    </div>
-  );
-}
-
-function NotificationStep({ profile, persist }: { profile: VendorProfile; persist: (patch: Partial<VendorProfile>) => void }) {
-  const prefs = profile.notificationPreferences;
-
-  function updatePrefs(patch: Partial<VendorProfile["notificationPreferences"]>) {
-    persist({ notificationPreferences: { ...prefs, ...patch } });
-  }
-
-  return (
-    <div className="space-y-6">
-      <label className="flex items-center gap-2.5 text-sm text-ink">
-        <input type="checkbox" checked={prefs.inAppEnabled} onChange={(e) => updatePrefs({ inAppEnabled: e.target.checked })} className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass" />
-        In-app notifications
-      </label>
-      <label className="flex items-center gap-2.5 text-sm text-ink">
-        <input type="checkbox" checked={prefs.emailEnabled} onChange={(e) => updatePrefs({ emailEnabled: e.target.checked })} className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass" />
-        Email notifications
-      </label>
-
-      <div>
-        <p className="text-sm font-medium text-ink">Notify me about</p>
-        <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
-          {(Object.entries(NOTIFICATION_CATEGORY_LABELS) as [NotificationCategory, string][]).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-2.5 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={prefs.categories[key]}
-                onChange={(e) => updatePrefs({ categories: { ...prefs.categories, [key]: e.target.checked } })}
-                className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass"
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <p className="text-sm font-medium text-ink">Match scope</p>
-        <div className="mt-2 grid gap-2.5">
-          {(Object.entries(MATCH_SCOPE_LABELS) as [MatchScope, string][]).map(([value, label]) => (
-            <label key={value} className="flex items-center gap-2.5 text-sm text-ink">
-              <input
-                type="radio"
-                name="matchScope"
-                checked={prefs.matchScope === value}
-                onChange={() => updatePrefs({ matchScope: value })}
-                className="h-4 w-4 border-line text-wine focus:ring-1 focus:ring-brass"
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

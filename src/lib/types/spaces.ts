@@ -116,6 +116,13 @@ export interface Venue {
   minBookingHoursNegotiable?: boolean;
   /** When true, the owner will consider guest counts above maxCapacity (soft confirm). Undefined/false = hard block, matching BookingPanel's existing behavior. */
   capacityNegotiable?: boolean;
+  /**
+   * Owner-controlled visibility on Discover Spaces. Undefined/false = listed,
+   * so every venue that predates this field stays visible. This hides the
+   * listing from search; it is NOT an admin moderation state (see
+   * docs/SECURITY.md #9 — real approval is still a Phase 3 requirement).
+   */
+  listingHidden?: boolean;
 }
 
 export type BookingStatus = "pending" | "confirmed" | "declined";

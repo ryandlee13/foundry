@@ -35,7 +35,7 @@ export default function VendorDashboardPage() {
   if (!data.profile) {
     return (
       <div>
-        <h1 className="font-display text-2xl font-semibold text-ink">Vendor dashboard</h1>
+        <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Your profile status, open gigs matching your skills, and active bids will appear here.
         </p>
@@ -63,7 +63,7 @@ export default function VendorDashboardPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Vendor dashboard</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
           <p className="mt-1 text-sm text-ink-soft">Welcome back, {profile.displayName}.</p>
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[profile.status]}`}>

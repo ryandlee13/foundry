@@ -1,7 +1,8 @@
-import Link from "next/link";
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getVenueBySlug, VENUES } from "@/lib/spaces/venues";
 import SubmittedVenueLookup from "@/components/spaces/SubmittedVenueLookup";
+import VenueBackLink from "@/components/spaces/VenueBackLink";
 
 export function generateStaticParams() {
   return VENUES.map((venue) => ({ slug: venue.slug }));
@@ -36,9 +37,9 @@ export default async function VenueDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-      <Link href="/spaces" className="text-sm font-medium text-ink-soft hover:text-ink">
-        ← Back to Discover Spaces
-      </Link>
+      <Suspense fallback={<span className="text-sm font-medium text-ink-soft">← Back</span>}>
+        <VenueBackLink />
+      </Suspense>
 
       <SubmittedVenueLookup slug={slug} fallbackVenue={seedVenue ?? null} />
     </div>

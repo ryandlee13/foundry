@@ -79,6 +79,25 @@ export function getAllVenues(): Venue[] {
   return [...selectVisibleSeedVenues(VENUES, submitted), ...submitted];
 }
 
+/** Pure: drops listings their owner has switched to private. */
+export function selectPubliclyVisible(venues: Venue[]): Venue[] {
+  return venues.filter((venue) => !venue.listingHidden);
+}
+
+/**
+ * What Discover Spaces shows. Owner-facing views deliberately use
+ * getAllVenues()/getVenuesOwnedBy() instead, so an owner can still see and
+ * edit a listing they've made private.
+ */
+export function getPubliclyVisibleVenues(): Venue[] {
+  return selectPubliclyVisible(getAllVenues());
+}
+
+/** Owner-controlled listing visibility. Returns undefined for a seed venue nobody owns. */
+export function setVenueVisibility(id: string, listingHidden: boolean): Venue | undefined {
+  return updateSubmittedVenue(id, { listingHidden });
+}
+
 export function getAllSlugs(): string[] {
   return getAllVenues().map((venue) => venue.slug);
 }

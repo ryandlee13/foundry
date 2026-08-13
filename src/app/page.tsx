@@ -1,7 +1,8 @@
 import Link from "next/link";
+import HeroActions from "@/components/marketing/HeroActions";
+import HeroBackdrop from "@/components/marketing/HeroBackdrop";
 import HeroSearch from "@/components/marketing/HeroSearch";
 import TriangleDiagram from "@/components/marketing/TriangleDiagram";
-import CommunitySlideshow from "@/components/marketing/CommunitySlideshow";
 import RecapCarousel from "@/components/marketing/RecapCarousel";
 
 const VENDOR_CATEGORIES = [
@@ -42,56 +43,24 @@ export default function Home() {
     <>
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-line">
-        <div
-          className="absolute inset-0 -z-10"
-          style={{
-            background:
-              "radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--color-brass) 16%, transparent), transparent 55%), radial-gradient(circle at 85% 0%, color-mix(in srgb, var(--color-wine) 14%, transparent), transparent 50%)",
-          }}
-        />
+        <HeroBackdrop />
         <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[1fr_23rem] lg:items-center lg:gap-16 lg:px-8">
           <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-medium text-ink-soft">
-              Now booking in San Francisco
-            </span>
-            <h1 className="mt-6 max-w-2xl font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
+            <h1 className="max-w-2xl font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
               Every venue and every vendor your event needs, in one place.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
               Foundry is made to build community and connect event organizers
               with venues and the creatives needed to bring an event to life.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/spaces"
-                className="rounded-full bg-wine px-6 py-3 text-center text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-              >
-                Browse Spaces
-              </Link>
-              <Link
-                href="/sign-up"
-                className="rounded-full border border-line bg-paper px-6 py-3 text-center text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
-              >
-                List your venue or services
-              </Link>
-            </div>
+            <HeroActions />
           </div>
 
           <HeroSearch />
         </div>
       </section>
 
-      {/* Community gallery */}
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
-        <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
-          Built for community gatherings.
-        </h2>
-        <div className="mt-8">
-          <CommunitySlideshow />
-        </div>
-      </section>
-
-      {/* Triangle pitch */}
+      {/* Marketplace pitch */}
       <section className="border-t border-line">
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
           <div className="text-center">

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { getBookingsForOrganizer, formatEventLabel } from "@/lib/spaces/bookings";
+import { getBookingsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getThreadForBooking, getUnreadMessageCount } from "@/lib/vendors/messages";
 import { BOOKING_STATUS_LABELS } from "@/lib/spaces/labels";
 import EmptyState from "@/components/ui/EmptyState";
@@ -44,7 +45,7 @@ export default function OrganizerDashboardPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-ink">Organizer dashboard</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
       <p className="mt-1 text-sm text-ink-soft">Your venue booking requests.</p>
 
       <div className="mt-8">
@@ -72,13 +73,13 @@ export default function OrganizerDashboardPage() {
               >
                 <div>
                   <Link
-                    href={`/spaces/${booking.venueSlug}`}
+                    href={`/spaces/${booking.venueSlug}?from=dashboard`}
                     className="font-display text-base font-semibold text-ink hover:underline"
                   >
                     {formatEventLabel(booking)}
                   </Link>
                   <p className="text-xs text-ink-soft">
-                    {booking.eventDate} · {booking.startTime}–{booking.endTime} ·{" "}
+                    {formatEventDate(booking.eventDate)} · {formatTimeRange(booking.startTime, booking.endTime)} ·{" "}
                     {booking.attendees} guests
                   </p>
                 </div>

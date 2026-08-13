@@ -1,14 +1,8 @@
 import Link from "next/link";
 import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
-import { formatEventLabel } from "@/lib/spaces/bookings";
+import { formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import type { Booking, Venue } from "@/lib/types/spaces";
-
-function formatEventDate(dateIso: string): string {
-  // Parsed as local noon so a "YYYY-MM-DD" date can't shift a day across time zones.
-  const date = new Date(`${dateIso}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return dateIso;
-  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
 
 /**
  * One upcoming event, led by the venue's photo — an owner with several
@@ -25,7 +19,7 @@ export default function UpcomingEventCard({
 }) {
   return (
     <li className="flex items-center gap-4 rounded-2xl border border-line bg-paper p-3">
-      <Link href={`/spaces/${booking.venueSlug}`} className="shrink-0">
+      <Link href={`/spaces/${booking.venueSlug}?from=dashboard`} className="shrink-0">
         {venue ? (
           <VenueImagePlaceholder
             accent={venue.visualAccent}
@@ -42,7 +36,8 @@ export default function UpcomingEventCard({
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-base font-semibold text-ink">{formatEventLabel(booking)}</p>
         <p className="mt-0.5 truncate text-xs text-ink-soft">
-          {formatEventDate(booking.eventDate)} · {booking.startTime}–{booking.endTime} · {booking.attendees} guests
+          {formatEventDate(booking.eventDate)} · {formatTimeRange(booking.startTime, booking.endTime)} ·{" "}
+          {booking.attendees} guests
         </p>
         <p className="truncate text-xs text-ink-soft">{booking.venueName}</p>
       </div>

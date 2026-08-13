@@ -63,9 +63,21 @@ export function getBookingVenueOwnerId(booking: Booking): string | null {
   return getVenueBySlugAnywhere(booking.venueSlug)?.ownerId ?? null;
 }
 
+/**
+ * Pure: "YYYY-MM-DD" -> "Sat, Mar 14". Dates are stored ISO (what
+ * <input type="date"> produces) but never shown that way. Parsed at local
+ * noon so the date can't shift a day across time zones, and passed through
+ * untouched if unparseable.
+ */
+export function formatEventDate(dateIso: string): string {
+  const date = new Date(`${dateIso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return dateIso;
+  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 /** Pure: the organizer-chosen event name, falling back to "{venue} · {date}" when unset. */
 export function formatEventLabel(booking: Pick<Booking, "eventName" | "venueName" | "eventDate">): string {
-  return booking.eventName?.trim() || `${booking.venueName} · ${booking.eventDate}`;
+  return booking.eventName?.trim() || `${booking.venueName} · ${formatEventDate(booking.eventDate)}`;
 }
 
 export function updateBookingStatus(

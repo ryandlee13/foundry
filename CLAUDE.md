@@ -139,6 +139,18 @@ now rather than waiting.
   never renders a dollar figure (`VENUE_SUBSCRIPTION_PLACEHOLDER_COPY` says "$X/month,
   price to be announced") and the record survives that venue later being removed —
   `recordFirstPublishActivation()` is idempotent per owner, not per venue.
+- **Times and dates are stored ISO, never rendered ISO.** Bookings/needs store
+  `"HH:mm"` (24h) and `"YYYY-MM-DD"` because that's what `<input type="time">`/`type="date"`
+  produce. Every user-facing render goes through `formatTimeDisplay()`/`formatTimeRange()`
+  (`src/lib/spaces/bookingConstraints.ts`) or `formatEventDate()`
+  (`src/lib/spaces/bookings.ts`) — no military time, no raw `2026-08-23` in the UI.
+- **Owner-controlled listing visibility is not moderation.** `Venue.listingHidden` and
+  `unpublishVendorProfile()` let an owner take their own listing out of
+  Discover Spaces / Discover Vendors. `unpublishVendorProfile()` deliberately refuses to
+  act on a `rejected`/`suspended` profile — otherwise a vendor could self-clear an admin
+  suspension by toggling private and back. Discover Spaces reads
+  `getPubliclyVisibleVenues()`; owner-facing views keep using `getVenuesOwnedBy()` so a
+  private listing is still editable.
 - **Dashboard earnings KPIs are estimates on the venue side, real on the vendor side.**
   `Booking` has no price column — there's no quote step yet (Phase 4) — so
   `src/lib/spaces/venueEarnings.ts` derives a figure from the venue's own `minHourlyRate`
@@ -197,6 +209,17 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   links are all optional). Admin moderation (`approveVendorProfile`/`rejectVendorProfile`/
   `suspendVendorProfile`) still exists and still gates public visibility going forward —
   only the *pre-publish* review step was removed.
+- **Vendor onboarding is 4 steps, not 6.** Basic info → Services & portfolio → Location →
+  Preview & publish. Portfolio links were folded into the services step, and notification
+  preferences moved out of the flow entirely into `NotificationPreferencesDialog`, shown
+  once after publish. `?step=2` deep-links an existing vendor straight to services
+  ("List another service") instead of walking them through basic info again — the
+  onboarding route wraps the flow in `<Suspense>` for that `useSearchParams` read. Skills
+  are picked with `SkillMultiSelect` (type-ahead over the alphabetical catalog, "Other"
+  pinned last), and each skill carries its own `exampleServiceTitle` in
+  `src/lib/vendors/skills.ts` — a shared placeholder (a DJ example shown to a
+  photographer) is the specific bug that field exists to prevent, and a test asserts the
+  examples stay distinct.
 - **Remote-only vendors and service radius.** `VendorLocation.remoteOnly` is only offered
   as an onboarding option when every skill the vendor selected is `remoteEligible` (see
   `src/lib/vendors/skills.ts`) — `src/lib/vendors/remoteEligibility.ts` is the single place

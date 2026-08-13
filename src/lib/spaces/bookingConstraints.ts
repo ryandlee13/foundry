@@ -83,8 +83,12 @@ export function formatMinutesAsTime(minutes: number): string {
   return `${hh}:${mm}`;
 }
 
-/** "HH:mm" (24h) -> "6:00 PM" for display. */
-function formatTimeDisplay(hhmm: string): string {
+/**
+ * "HH:mm" (24h) -> "6:00 PM" for display. Times are STORED as 24h ("HH:mm",
+ * what <input type="time"> produces) but never shown that way — every
+ * user-facing surface goes through this or formatTimeRange().
+ */
+export function formatTimeDisplay(hhmm: string): string {
   const minutes = parseTimeToMinutes(hhmm);
   if (minutes === null) return hhmm;
   const hour24 = Math.floor(minutes / 60);
@@ -256,6 +260,11 @@ export function formatBookingWindow(
   if (!window) return null;
   const suffix = window.crossesMidnight ? " (next day)" : "";
   return `${formatTimeDisplay(earliestStartTime)} – ${formatTimeDisplay(latestEndTime)}${suffix}`;
+}
+
+/** "6:00 PM – 11:00 PM" — the display form of a booking's own start/end pair. */
+export function formatTimeRange(startTime: string, endTime: string): string {
+  return `${formatTimeDisplay(startTime)} – ${formatTimeDisplay(endTime)}`;
 }
 
 /** "15-minute increments" / "1-hour increments" / null. */

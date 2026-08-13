@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { getSkillName } from "@/lib/vendors/skills";
+import { formatEventDate } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { formatExpiration } from "@/lib/vendors/expiration";
+import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
+import type { Venue } from "@/lib/types/spaces";
 import type { EventNeedWithMatch } from "@/lib/types/vendors";
 
 function formatBudget(min: number | null, max: number | null): string {
@@ -27,12 +31,15 @@ export function computeGigBadges(need: Pick<EventNeedWithMatch, "publishedAt" | 
 
 export default function GigCard({
   need,
+  venue,
   saved,
   badges,
   now,
   onToggleSave,
 }: {
   need: EventNeedWithMatch;
+  /** The parent booking's venue, when the gig is on-site — gives the vendor a look at the space before bidding. Absent for remote gigs. */
+  venue?: Venue;
   saved: boolean;
   badges: GigBadges;
   now: string;
@@ -42,7 +49,17 @@ export default function GigCard({
   const fewBids = need.bidCount < 3;
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper p-5 transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
+    <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
+      {venue && need.locationType !== "remote" && (
+        <VenueImagePlaceholder
+          accent={venue.visualAccent}
+          icon={venue.icon}
+          imageCount={0}
+          photoUrl={venue.photos?.[0]}
+          className="h-32 w-full"
+        />
+      )}
+      <div className="p-5">
       <div className="flex flex-wrap items-center gap-1.5">
         {isNew && <span className="rounded-full bg-brass/15 px-2.5 py-1 text-[11px] font-semibold text-brass-dark">New</span>}
         {need.locationType === "remote" && (
@@ -77,7 +94,7 @@ export default function GigCard({
       </div>
 
       <p className="mt-2 text-sm text-ink-soft">
-        {need.eventDate} · {need.startTime}–{need.endTime}
+        {formatEventDate(need.eventDate)} · {formatTimeRange(need.startTime, need.endTime)}
       </p>
       {need.deliverables && <p className="mt-1 line-clamp-1 text-xs text-ink-soft">{need.deliverables}</p>}
 
@@ -90,6 +107,7 @@ export default function GigCard({
       </div>
 
       {need.matchReason && <p className="mt-2 text-xs italic text-brass-dark">{need.matchReason}</p>}
+      </div>
 
       <Link href={`/dashboard/vendor/gigs/${need.id}`} className="absolute inset-0" aria-label={`Place a bid on ${need.title}`} />
     </article>

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { findAccountById } from "@/lib/auth/storage";
-import { getBookingById } from "@/lib/spaces/bookings";
+import { getBookingById, formatEventDate } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import { getEngagementsForVendor, cancelEngagementByVendor, confirmEngagementTerms, declineEngagementTerms } from "@/lib/vendors/engagements";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
@@ -153,7 +154,10 @@ export default function VendorConfirmedGigsPage() {
                         {need?.title ?? (need ? getSkillName(need.skillSlug) : "Engagement")}
                       </p>
                       <p className="mt-0.5 text-xs text-ink-soft">
-                        ${engagement.agreedAmount} · {booking ? `${booking.eventDate} · ${booking.startTime}–${booking.endTime}` : ""}
+                        ${engagement.agreedAmount} ·{" "}
+                        {booking
+                          ? `${formatEventDate(booking.eventDate)} · ${formatTimeRange(booking.startTime, booking.endTime)}`
+                          : ""}
                         {organizer && ` · Organized by ${organizer.name.split(" ")[0]}`}
                         {unread > 0 && ` · ${unread} unread message${unread === 1 ? "" : "s"}`}
                       </p>

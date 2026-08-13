@@ -6,7 +6,7 @@ import { applyFilters, countActiveFilters } from "@/lib/spaces/filters";
 import { sortVenues } from "@/lib/spaces/sort";
 import { RADIUS_OPTIONS_MILES, type Venue } from "@/lib/types/spaces";
 import { VENUES } from "@/lib/spaces/venues";
-import { getAllVenues } from "@/lib/spaces/submittedVenues";
+import { getPubliclyVisibleVenues } from "@/lib/spaces/submittedVenues";
 import LocationSearch from "@/components/spaces/LocationSearch";
 import LocationMapModal from "@/components/spaces/LocationMapModal";
 import ResultsToolbar from "@/components/spaces/ResultsToolbar";
@@ -27,7 +27,7 @@ export default function SpacesPageClient() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAllVenues(getAllVenues());
+    setAllVenues(getPubliclyVisibleVenues());
   }, []);
 
   const results = useMemo(() => {

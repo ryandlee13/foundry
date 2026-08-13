@@ -1,3 +1,7 @@
+"use client";
+
+import { useAuth } from "@/components/providers/AuthProvider";
+import { useActiveRole } from "@/hooks/useActiveRole";
 import { SPACE_TYPE_LABELS, EVENT_TYPE_LABELS, RULE_LABELS } from "@/lib/spaces/labels";
 import { formatBookingWindow, formatBookingIncrement } from "@/lib/spaces/bookingConstraints";
 import VenueAmenityList from "@/components/spaces/VenueAmenityList";
@@ -8,9 +12,23 @@ import BookingPanel from "@/components/spaces/BookingPanel";
 import type { Venue } from "@/lib/types/spaces";
 
 export default function VenueDetailView({ venue }: { venue: Venue }) {
+  const { user } = useAuth();
+  const { activeRole } = useActiveRole();
+
   const allowedRules = (Object.keys(RULE_LABELS) as (keyof typeof RULE_LABELS)[]).filter(
     (key) => venue.rules[key]
   );
+
+  /**
+   * Booking is a planner action. A venue owner or vendor arriving here from
+   * their own dashboard — to look at a space they host at or are working —
+   * has no use for a request form, and offering one reads as a bug.
+   * Signed-out visitors still see it: they're prospective planners.
+   * This is UX only; the real gate is server-side at Phase 2 (CLAUDE.md #3).
+   */
+  const isOwnVenue = user !== null && venue.ownerId === user.id;
+  const isNonPlannerRole = activeRole === "venue_operator" || activeRole === "vendor" || activeRole === "admin";
+  const canBook = !isOwnVenue && !isNonPlannerRole;
 
   return (
     <>
@@ -120,9 +138,11 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
           {venue.ownerId === null && <VenueReviews venueId={venue.id} />}
         </div>
 
-        <aside className="lg:col-span-1">
-          <BookingPanel venue={venue} />
-        </aside>
+        {canBook && (
+          <aside className="lg:col-span-1">
+            <BookingPanel venue={venue} />
+          </aside>
+        )}
       </div>
     </>
   );

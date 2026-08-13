@@ -1,4 +1,6 @@
 import { getSkillName } from "@/lib/vendors/skills";
+import { formatEventDate } from "@/lib/spaces/bookings";
+import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { formatDeadlineDate } from "@/lib/vendors/expiration";
 import type { EventNeed } from "@/lib/types/vendors";
 
@@ -38,12 +40,12 @@ export default function VendorNeedReviewSummary({
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-ink-soft">Date</dt>
-          <dd className="text-right font-medium text-ink">{need.eventDate}</dd>
+          <dd className="text-right font-medium text-ink">{formatEventDate(need.eventDate)}</dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-ink-soft">Time needed</dt>
           <dd className="text-right font-medium text-ink">
-            {need.startTime}–{need.endTime}
+            {formatTimeRange(need.startTime, need.endTime)}
           </dd>
         </div>
         <div className="flex justify-between gap-4">

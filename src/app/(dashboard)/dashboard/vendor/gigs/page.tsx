@@ -7,6 +7,7 @@ import { getVendorProfileByOwnerId, updateVendorProfile } from "@/lib/vendors/pr
 import { getPublishedEventNeeds, formatNeedEventLabel } from "@/lib/vendors/eventNeeds";
 import { getProposalsForNeed } from "@/lib/vendors/proposals";
 import { getBookingById } from "@/lib/spaces/bookings";
+import { getVenueById } from "@/lib/spaces/submittedVenues";
 import { isMatch, getMatchReason } from "@/lib/vendors/matching";
 import { getSavedNeeds, toggleSavedNeed } from "@/lib/vendors/savedNeeds";
 import { VENDOR_SKILLS } from "@/lib/vendors/skills";
@@ -15,6 +16,7 @@ import { SERVICE_RADIUS_OPTIONS_MILES } from "@/lib/types/vendors";
 import GigCard, { computeGigBadges } from "@/components/vendor/GigCard";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
+import type { Venue } from "@/lib/types/spaces";
 import type { EventNeedWithMatch, GigSortOption, VendorProfile, VendorSkillSlug } from "@/lib/types/vendors";
 
 export default function VendorGigsPage() {
@@ -22,6 +24,7 @@ export default function VendorGigsPage() {
   const [loaded, setLoaded] = useState(false);
   const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [allMatches, setAllMatches] = useState<EventNeedWithMatch[]>([]);
+  const [venueByNeedId, setVenueByNeedId] = useState<Record<string, Venue>>({});
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [now, setNow] = useState<string>("");
 
@@ -41,10 +44,16 @@ export default function VendorGigsPage() {
       const published = getPublishedEventNeeds();
       const nowIso = new Date().toISOString();
       setNow(nowIso);
+      // Venue per need, so a vendor can see the space before bidding.
+      const venues: Record<string, Venue> = {};
       const withMatch: EventNeedWithMatch[] = published
         .filter((need) => isMatch(vendorProfile, need))
         .map((need) => {
           const booking = getBookingById(need.bookingId);
+          if (booking) {
+            const venue = getVenueById(booking.venueId);
+            if (venue) venues[need.id] = venue;
+          }
           return {
             ...need,
             matchReason: getMatchReason(vendorProfile, need),
@@ -56,6 +65,7 @@ export default function VendorGigsPage() {
           };
         });
       setAllMatches(withMatch);
+      setVenueByNeedId(venues);
       setSavedIds(new Set(getSavedNeeds(vendorProfile.id).map((s) => s.eventNeedId)));
     }
     setLoaded(true);
@@ -175,6 +185,7 @@ export default function VendorGigsPage() {
               <GigCard
                 key={need.id}
                 need={need}
+                venue={venueByNeedId[need.id]}
                 saved={savedIds.has(need.id)}
                 now={now}
                 badges={computeGigBadges(need, new Date(now).getTime())}
