@@ -23,12 +23,22 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * Inside the dashboard the sidebar is the navigation — repeating the
+ * marketing audience links above it just competes with it. The logo and
+ * account controls stay so there's always a way back out to the site.
+ */
+function isDashboardPath(pathname: string): boolean {
+  return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+}
+
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [venuePopupOpen, setVenuePopupOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, signOut } = useAuth();
+  const showMarketingNav = !isDashboardPath(pathname);
 
   function openVenuePopup() {
     setMenuOpen(false);
@@ -56,38 +66,40 @@ export default function Header() {
           Foundry
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
-          {NAV_LINKS.map((link) => {
-            if ("action" in link) {
+        {showMarketingNav && (
+          <nav className="hidden items-center gap-8 md:flex">
+            {NAV_LINKS.map((link) => {
+              if ("action" in link) {
+                return (
+                  <button
+                    key={link.key}
+                    type="button"
+                    onClick={openVenuePopup}
+                    className="border-b-2 border-transparent pb-1 text-sm font-medium text-ink-soft transition-colors hover:text-ink"
+                  >
+                    {link.label}
+                  </button>
+                );
+              }
+
+              const active = isActivePath(pathname, link.href);
               return (
-                <button
+                <Link
                   key={link.key}
-                  type="button"
-                  onClick={openVenuePopup}
-                  className="border-b-2 border-transparent pb-1 text-sm font-medium text-ink-soft transition-colors hover:text-ink"
+                  href={link.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`border-b-2 pb-1 text-sm font-medium transition-colors ${
+                    active
+                      ? "border-wine text-ink"
+                      : "border-transparent text-ink-soft hover:text-ink"
+                  }`}
                 >
                   {link.label}
-                </button>
+                </Link>
               );
-            }
-
-            const active = isActivePath(pathname, link.href);
-            return (
-              <Link
-                key={link.key}
-                href={link.href}
-                aria-current={active ? "page" : undefined}
-                className={`border-b-2 pb-1 text-sm font-medium transition-colors ${
-                  active
-                    ? "border-wine text-ink"
-                    : "border-transparent text-ink-soft hover:text-ink"
-                }`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
+            })}
+          </nav>
+        )}
 
         <div className="hidden items-center gap-3 md:flex">
           <ResetPrototypeDataButton />
@@ -146,40 +158,42 @@ export default function Header() {
 
       {menuOpen && (
         <div className="border-t border-line bg-paper px-4 pb-6 pt-2 md:hidden">
-          <nav className="flex flex-col gap-1">
-            {NAV_LINKS.map((link) => {
-              if ("action" in link) {
+          {showMarketingNav && (
+            <nav className="flex flex-col gap-1">
+              {NAV_LINKS.map((link) => {
+                if ("action" in link) {
+                  return (
+                    <button
+                      key={link.key}
+                      type="button"
+                      onClick={openVenuePopup}
+                      className="rounded-lg px-3 py-2.5 text-left text-base font-medium text-ink-soft hover:bg-paper-dim hover:text-ink"
+                    >
+                      {link.label}
+                    </button>
+                  );
+                }
+
+                const active = isActivePath(pathname, link.href);
                 return (
-                  <button
+                  <Link
                     key={link.key}
-                    type="button"
-                    onClick={openVenuePopup}
-                    className="rounded-lg px-3 py-2.5 text-left text-base font-medium text-ink-soft hover:bg-paper-dim hover:text-ink"
+                    href={link.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`rounded-lg px-3 py-2.5 text-base font-medium ${
+                      active
+                        ? "bg-paper-dim text-ink"
+                        : "text-ink-soft hover:bg-paper-dim hover:text-ink"
+                    }`}
+                    onClick={() => setMenuOpen(false)}
                   >
                     {link.label}
-                  </button>
+                  </Link>
                 );
-              }
-
-              const active = isActivePath(pathname, link.href);
-              return (
-                <Link
-                  key={link.key}
-                  href={link.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`rounded-lg px-3 py-2.5 text-base font-medium ${
-                    active
-                      ? "bg-paper-dim text-ink"
-                      : "text-ink-soft hover:bg-paper-dim hover:text-ink"
-                  }`}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
+              })}
+            </nav>
+          )}
+          <div className={`flex flex-col gap-2 ${showMarketingNav ? "mt-4 border-t border-line pt-4" : ""}`}>
             <ResetPrototypeDataButton
               className="rounded-full border border-dashed border-line px-5 py-2.5 text-center text-sm font-semibold text-ink-soft"
               onConfirmed={() => setMenuOpen(false)}

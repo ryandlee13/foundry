@@ -139,6 +139,15 @@ now rather than waiting.
   never renders a dollar figure (`VENUE_SUBSCRIPTION_PLACEHOLDER_COPY` says "$X/month,
   price to be announced") and the record survives that venue later being removed —
   `recordFirstPublishActivation()` is idempotent per owner, not per venue.
+- **Dashboard earnings KPIs are estimates on the venue side, real on the vendor side.**
+  `Booking` has no price column — there's no quote step yet (Phase 4) — so
+  `src/lib/spaces/venueEarnings.ts` derives a figure from the venue's own `minHourlyRate`
+  times the hours actually booked, and every surface that renders it says "estimated" and
+  explains why. Do not relabel those numbers as revenue, and don't add a fake `price`
+  field to `Booking` to make them look real. `src/lib/vendors/vendorEarnings.ts` *is*
+  real — it sums confirmed `AgreedTerms` amounts — but it inherits `computeRosterSpend()`'s
+  rule that `hourly`/`day_rate`/`contact_for_quote` amounts are rates, not totals, and
+  reports those separately rather than summing them.
 - **Host-initiated messaging.** A booking thread (`BookingMessageThread`, part of the
   `MessageThread` discriminated union in `src/lib/vendors/messages.ts`) can only be
   created by `startBookingConversation()` in `src/lib/spaces/bookingWorkflow.ts`, which

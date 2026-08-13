@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HeroSearch from "@/components/marketing/HeroSearch";
 import TriangleDiagram from "@/components/marketing/TriangleDiagram";
 import CommunitySlideshow from "@/components/marketing/CommunitySlideshow";
 import RecapCarousel from "@/components/marketing/RecapCarousel";
@@ -48,31 +49,35 @@ export default function Home() {
               "radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--color-brass) 16%, transparent), transparent 55%), radial-gradient(circle at 85% 0%, color-mix(in srgb, var(--color-wine) 14%, transparent), transparent 50%)",
           }}
         />
-        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-medium text-ink-soft">
-            Now booking in San Francisco
-          </span>
-          <h1 className="mt-6 max-w-2xl font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
-            Every venue and every vendor your event needs, in one place.
-          </h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
-            Foundry is made to build community and connect event organizers
-            with venues and the creatives needed to bring an event to life.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/spaces"
-              className="rounded-full bg-wine px-6 py-3 text-center text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-            >
-              Find your venue
-            </Link>
-            <Link
-              href="/sign-up"
-              className="rounded-full border border-line bg-paper px-6 py-3 text-center text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
-            >
-              List your venue or services
-            </Link>
+        <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[1fr_23rem] lg:items-center lg:gap-16 lg:px-8">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-medium text-ink-soft">
+              Now booking in San Francisco
+            </span>
+            <h1 className="mt-6 max-w-2xl font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
+              Every venue and every vendor your event needs, in one place.
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
+              Foundry is made to build community and connect event organizers
+              with venues and the creatives needed to bring an event to life.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/spaces"
+                className="rounded-full bg-wine px-6 py-3 text-center text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+              >
+                Browse Spaces
+              </Link>
+              <Link
+                href="/sign-up"
+                className="rounded-full border border-line bg-paper px-6 py-3 text-center text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+              >
+                List your venue or services
+              </Link>
+            </div>
           </div>
+
+          <HeroSearch />
         </div>
       </section>
 

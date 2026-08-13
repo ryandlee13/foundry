@@ -9,7 +9,7 @@ placeholders; the guards described here land in the auth-implementation phase
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing page — value proposition for all three audiences, CTA into sign-up |
+| `/` | Landing page — value proposition for all three audiences, plus a hero search (`HeroSearch.tsx`: event type, San Francisco, date, start/end time) that deep-links into `/spaces` with those filters already applied via `urlState.ts`'s existing query params |
 | `/sign-in` | Functional against the local-prototype auth layer (see `CLAUDE.md`) — not real Supabase Auth |
 | `/sign-up` | Same prototype layer; role picked at signup, more can be added to the account later |
 | `/spaces` | Discover Spaces — venue discovery/filtering UI over local + submitted venues, no backend yet (see below) |
@@ -48,7 +48,7 @@ with more client-side checks — the fix is real RLS in Phase 1/5.
 
 | Route | Purpose |
 |---|---|
-| `/dashboard` | Entry point. Currently shows all four role sections with the user's actual roles marked, rather than redirecting to a single one. |
+| `/dashboard` | Entry point — a role-scoped home for the **active role** (see below): KPIs, upcoming events, and the primary action for that role. The role pill under the greeting switches between roles the account holds, or adds one it doesn't. |
 
 **Current state vs. target:** `src/app/(dashboard)/dashboard/layout.tsx` today performs a
 **client-side** check against the local-prototype auth context and redirects to
@@ -66,9 +66,20 @@ rendering anything. Role-specific sub-routes additionally check that the user ho
 required role in `profile_roles` — checked server-side, not inferred from which link they
 clicked.
 
+**Active role and sidebar shape.** The dashboard sidebar shows only: `Dashboard`,
+`Event Details`, `Messages`, `Notifications`, `Admin`. "Event Details" resolves to the
+active role's own workspace — `/dashboard/organizer`, `/dashboard/venue`, or
+`/dashboard/vendor` — so the other two roles' links are never shown at once. The active
+role is a **view preference** persisted in `localStorage`
+(`src/lib/auth/activeRole.ts`, key `foundry.auth.activeRole`), resolved through the pure
+`resolveActiveRole()` against the roles the account actually holds — it is never an
+authorization decision, and every real gate still checks `user.roles`. The marketing
+header nav (For Planners / For Venues / For Vendors / About) is hidden on all
+`/dashboard/*` routes, since the sidebar is the navigation there.
+
 | Route | Role required | Purpose |
 |---|---|---|
-| `/dashboard/organizer` | `organizer` | Organizer home: bookings list, Messages link, "Find vendors" link gated on `status === "confirmed"` |
+| `/dashboard/organizer` | `organizer` | Organizer home ("Event Details"): bookings list, Messages link, "Find vendors" link gated on `status === "confirmed"` |
 | `/dashboard/organizer/events/new` *(future)* | `organizer` | Create event brief |
 | `/dashboard/organizer/events/[id]` *(future)* | `organizer` | Manage one event end-to-end |
 | `/dashboard/organizer/bookings/[bookingId]/vendors` | `organizer` (owner of the booking) | Real (prototype) — list/create/publish vendor requests ("Looking for a ___") for one booking, plus the Vendor Roster (per-need "N of M found" count, vendor profile photo, price, running total via `computeRosterSpend()`) of confirmed engagements. Anchored to a `Booking`, not an `Event` row — see `CLAUDE.md` |

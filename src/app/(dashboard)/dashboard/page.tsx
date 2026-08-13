@@ -2,68 +2,89 @@
 
 import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { ROLE_LABELS, type AppRole } from "@/lib/types/roles";
+import { useActiveRole } from "@/hooks/useActiveRole";
+import RolePill from "@/components/dashboard/RolePill";
+import OrganizerDashboard from "@/components/dashboard/OrganizerDashboard";
+import VenueDashboard from "@/components/dashboard/VenueDashboard";
+import VendorDashboard from "@/components/dashboard/VendorDashboard";
+import EmptyState from "@/components/ui/EmptyState";
+import LoadingState from "@/components/ui/LoadingState";
 
-const ROLE_CARDS: { href: string; label: string; description: string; role: AppRole }[] = [
-  {
-    href: "/dashboard/organizer",
-    label: "Organizer",
-    description: "Your upcoming bookings across every venue.",
-    role: "organizer",
-  },
-  {
-    href: "/dashboard/venue",
-    label: "Venue",
-    description: "Listings you've submitted, and bookings against them.",
-    role: "venue_operator",
-  },
-  {
-    href: "/dashboard/vendor",
-    label: "Vendor",
-    description: "Your profile, open needs, and active proposals.",
-    role: "vendor",
-  },
-  {
-    href: "/dashboard/admin",
-    label: "Admin",
-    description: "Approval queue and platform activity.",
-    role: "admin",
-  },
-];
-
-export default function DashboardOverviewPage() {
+export default function DashboardPage() {
   const { user } = useAuth();
+  const { activeRole, resolved, switchRole, addAndSwitchRole } = useActiveRole();
+
+  if (!user || !resolved) {
+    return <LoadingState label="Loading your dashboard…" />;
+  }
 
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink">
-        {user ? `Welcome back, ${user.name.split(" ")[0]}` : "Dashboard"}
+        Welcome back, {user.name.split(" ")[0]}
       </h1>
-      <p className="mt-1 text-sm text-ink-soft">
-        {user && user.roles.length > 0
-          ? `Signed in with the ${user.roles.map((role) => ROLE_LABELS[role]).join(", ")} role${user.roles.length > 1 ? "s" : ""}.`
-          : "All four dashboards are shown below — roles you hold are marked."}
-      </p>
+      <div className="mt-1.5">
+        {activeRole ? (
+          <RolePill
+            activeRole={activeRole}
+            heldRoles={user.roles}
+            onSwitch={switchRole}
+            onAddRole={addAndSwitchRole}
+          />
+        ) : (
+          <p className="text-sm text-ink-soft">Your account doesn&apos;t have a role yet.</p>
+        )}
+      </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        {ROLE_CARDS.map((card) => {
-          const held = user?.roles.includes(card.role);
-          return (
-            <Link
-              key={card.href}
-              href={card.href}
-              className="relative rounded-2xl border border-line bg-paper p-6 transition-colors hover:border-brass"
-            >
-              {held && (
-                <span className="absolute right-4 top-4 rounded-full bg-brass/15 px-2 py-0.5 text-[11px] font-semibold text-brass-dark">
-                  Your role
-                </span>
-              )}
-              <h2 className="font-display text-lg font-semibold text-ink">{card.label}</h2>
-              <p className="mt-1.5 text-sm text-ink-soft">{card.description}</p>
-            </Link>
-          );
-        })}
+      <div className="mt-8">
+        {activeRole === "organizer" && <OrganizerDashboard accountId={user.id} />}
+        {activeRole === "venue_operator" && <VenueDashboard accountId={user.id} />}
+        {activeRole === "vendor" && <VendorDashboard accountId={user.id} />}
+        {activeRole === "admin" && (
+          <EmptyState
+            title="Admin account"
+            description="This account only holds the admin role. Moderation tools live in the Admin section."
+            action={
+              <Link
+                href="/dashboard/admin"
+                className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+              >
+                Go to Admin
+              </Link>
+            }
+          />
+        )}
+        {activeRole === null && (
+          <EmptyState
+            title="Pick how you'll use Foundry"
+            description="Add a role to get started — you can hold more than one and switch between them at any time."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => addAndSwitchRole("organizer")}
+                  className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+                >
+                  Plan events
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addAndSwitchRole("venue_operator")}
+                  className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+                >
+                  List a space
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addAndSwitchRole("vendor")}
+                  className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+                >
+                  Offer a service
+                </button>
+              </div>
+            }
+          />
+        )}
       </div>
     </div>
   );
