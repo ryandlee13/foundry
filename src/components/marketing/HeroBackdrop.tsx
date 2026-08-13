@@ -48,7 +48,10 @@ export default function HeroBackdrop() {
           // Only the first is eager — the rest load as the rotation reaches them.
           priority={photoIndex === 0}
           sizes="100vw"
-          className={`object-cover transition-opacity duration-1000 ${
+          // Modest saturation/contrast lift so the photos keep some punch
+          // through the scrim instead of reading flat. Kept small on purpose —
+          // pushed harder, the darker nightlife shots start to crush.
+          className={`object-cover saturate-[1.14] contrast-[1.06] transition-opacity duration-1000 ${
             photoIndex === index ? "opacity-100" : "opacity-0"
           }`}
         />
