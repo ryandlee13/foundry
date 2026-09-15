@@ -2,8 +2,12 @@
  * Line-art icons for the marketplace diagram. Single stroke weight, no fill,
  * currentColor throughout, so all three read as one family at a glance —
  * emoji varied too much in weight and color to do that.
+ *
+ * SHARED is exported because the homepage section icons
+ * (HomeSectionIcons.tsx) have to sit on the same 64x64 grid at the same
+ * stroke weight, or the two sets read as two different icon sets on one page.
  */
-const SHARED = {
+export const SHARED = {
   viewBox: "0 0 64 64",
   fill: "none",
   stroke: "currentColor",

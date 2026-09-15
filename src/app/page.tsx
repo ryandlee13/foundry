@@ -1,6 +1,9 @@
 import Link from "next/link";
 import HeroBackdrop from "@/components/marketing/HeroBackdrop";
 import HeroDiscovery from "@/components/marketing/HeroDiscovery";
+import ValuePropsSection from "@/components/marketing/ValuePropsSection";
+import FeaturedSpacesSection from "@/components/marketing/FeaturedSpacesSection";
+import VendorCategoriesSection from "@/components/marketing/VendorCategoriesSection";
 import TriangleDiagram from "@/components/marketing/TriangleDiagram";
 import RecapCarousel from "@/components/marketing/RecapCarousel";
 
@@ -57,6 +60,30 @@ export default function Home() {
           <HeroDiscovery />
         </div>
       </section>
+
+      <ValuePropsSection />
+      <FeaturedSpacesSection />
+      <VendorCategoriesSection />
+
+      {/* Event recaps */}
+      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+            Event recaps
+          </h2>
+          <p className="mt-2 max-w-xl text-sm text-ink-soft">
+            A look at Foundry from each side of the marketplace.
+          </p>
+        </div>
+        <RecapCarousel />
+      </section>
+
+      {/*
+        The marketplace diagram and the per-role walkthroughs below now sit
+        after the recaps: the three sections above cover the pitch and the
+        inventory, so these read as the deeper "how it works for me"
+        material rather than the opening argument.
+      */}
 
       {/* Marketplace pitch */}
       <section className="border-t border-line">
@@ -169,19 +196,6 @@ export default function Home() {
             ))}
           </div>
         </div>
-      </section>
-
-      {/* Event recaps */}
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
-            Event recaps
-          </h2>
-          <p className="mt-2 max-w-xl text-sm text-ink-soft">
-            A look at Foundry from each side of the marketplace.
-          </p>
-        </div>
-        <RecapCarousel />
       </section>
 
       {/* Final CTA */}

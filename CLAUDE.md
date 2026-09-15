@@ -84,6 +84,19 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
   sitting beside the search buttons they made "what do I click" a four-way question for
   someone who only wanted a room. The venue tab deliberately does **not** ask about vendor
   needs; that's what the vendor tab is for.
+- **Homepage sections below the hero, in order:** "One event, one place"
+  (`ValuePropsSection`), Featured Spaces (`FeaturedSpacesSection`), Popular Vendor
+  Categories (`VendorCategoriesSection`), Event recaps, then the marketplace diagram and
+  the per-role walkthroughs. Featured Spaces resolves curated *slugs* against the real
+  `VENUES` data (`src/lib/spaces/featured.ts`) rather than copying names/prices, so the
+  homepage can't drift from `/spaces/[slug]`; a test asserts every slug still resolves.
+  Seed venues keep `VenueImagePlaceholder` here for the same reason `/spaces` does — these
+  are fictional listings, and real photographs of real San Francisco rooms would
+  misrepresent actual businesses. Two copy lines are deliberately narrower than the brief
+  they were written from, per the placeholder-copy rule below: "Compare" says *bids and
+  proposals*, not quotes (there is no venue quote step), and "Track" does not claim
+  payments (Phase 7) — it carries a "Payments coming soon" tag instead. Widen both only
+  when those features actually land.
 - Placeholder/marketing copy must not claim things that aren't true yet (no fake reviews,
   no fake activity counts, no "verified" claims on unreviewed documents). **Scoped
   exception:** the homepage "Event recaps" carousel
