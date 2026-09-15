@@ -66,25 +66,38 @@ export default function HeroBackdrop() {
            away to nothing across the rest of the frame. The hero text is
            dark ink, and several of these photos are dark nightlife shots —
            without a local wash behind the copy it would be unreadable.
-      */}
-      <div className="absolute inset-0 bg-paper/10" />
 
-      {/* Desktop: text is in the left column, so the wash is horizontal and
-          clears by ~72%, which is roughly where the headline ends. */}
+        Stops are stated as paper-over-photo alpha; the tint below composites
+        on top, so the effective opacity at each stop is 1-(1-0.06)(1-stop).
+        Nothing is fully opaque — the left edge was once solid paper, hiding
+        the photo there completely.
+
+        The wash under the headline sits at ~0.72 falling to ~0.62, chosen at
+        explicit user direction to favor seeing the photos. That is below the
+        ~0.75 where dark ink starts to lose contrast against the darker
+        nightlife shots, so don't lower it further without checking the
+        headline on mahjong-hall and live-music-room specifically.
+      */}
+      <div className="absolute inset-0 bg-paper/6" />
+
+      {/* Desktop: text is in the left column, so the wash is horizontal. It
+          holds through ~56% (where the headline ends) then drops away fast,
+          clearing by ~76%. */}
       <div
         className="absolute inset-0 hidden lg:block"
         style={{
           background:
-            "linear-gradient(to right, var(--color-paper) 0%, color-mix(in srgb, var(--color-paper) 88%, transparent) 28%, color-mix(in srgb, var(--color-paper) 52%, transparent) 52%, color-mix(in srgb, var(--color-paper) 8%, transparent) 72%, transparent 100%)",
+            "linear-gradient(to right, color-mix(in srgb, var(--color-paper) 70%, transparent) 0%, color-mix(in srgb, var(--color-paper) 60%, transparent) 32%, color-mix(in srgb, var(--color-paper) 42%, transparent) 56%, color-mix(in srgb, var(--color-paper) 10%, transparent) 76%, transparent 100%)",
         }}
       />
 
-      {/* Below lg the hero stacks, so the copy sits over the photo full-width. */}
+      {/* Below lg the hero stacks, so the copy sits over the photo full-width
+          and the wash has to stay heavier through the upper half. */}
       <div
         className="absolute inset-0 lg:hidden"
         style={{
           background:
-            "linear-gradient(to bottom, var(--color-paper) 0%, color-mix(in srgb, var(--color-paper) 88%, transparent) 45%, color-mix(in srgb, var(--color-paper) 60%, transparent) 100%)",
+            "linear-gradient(to bottom, color-mix(in srgb, var(--color-paper) 88%, transparent) 0%, color-mix(in srgb, var(--color-paper) 70%, transparent) 45%, color-mix(in srgb, var(--color-paper) 34%, transparent) 100%)",
         }}
       />
     </div>
