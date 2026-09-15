@@ -47,12 +47,12 @@ export default function HeroVenueSearch() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label="Search event spaces">
+    <form onSubmit={handleSubmit} className="space-y-3" aria-label="Search event spaces">
       <div>
         <label htmlFor="hero-event-type" className={LABEL_CLASS}>
           Event type
         </label>
-        <div className="mt-1.5">
+        <div className="mt-1">
           <EventTypeSelect id="hero-event-type" value={eventType} onChange={setEventType} />
         </div>
       </div>
@@ -68,7 +68,7 @@ export default function HeroVenueSearch() {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className={`mt-1.5 ${FIELD_CLASS}`}
+          className={`mt-1 ${FIELD_CLASS}`}
         />
       </div>
 
@@ -82,7 +82,7 @@ export default function HeroVenueSearch() {
             type="time"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1 ${FIELD_CLASS}`}
           />
         </div>
         <div>
@@ -94,7 +94,7 @@ export default function HeroVenueSearch() {
             type="time"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1 ${FIELD_CLASS}`}
           />
         </div>
       </div>
@@ -111,7 +111,7 @@ export default function HeroVenueSearch() {
           value={guestCount}
           onChange={(e) => setGuestCount(e.target.value)}
           placeholder="How many people?"
-          className={`mt-1.5 ${FIELD_CLASS}`}
+          className={`mt-1 ${FIELD_CLASS}`}
         />
       </div>
 

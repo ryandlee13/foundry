@@ -41,8 +41,17 @@ export default function HeroDiscovery() {
     tabRefs.current[next]?.focus();
   }
 
+  /*
+   * Translucent rather than solid so the photography reads through it and the
+   * card sits *in* the image instead of on top of it as a white box. The blur
+   * is what keeps the form legible over a busy frame at 94%.
+   *
+   * Capped at 456px and centered in its column: at full column width on a
+   * large monitor the card outweighed the headline, which is the balance point
+   * this hero is built around.
+   */
   return (
-    <div className="w-full rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6">
+    <div className="w-full max-w-[456px] rounded-2xl border border-line bg-paper/94 p-5 shadow-[0_18px_50px_-12px_rgba(20,16,14,0.45)] backdrop-blur-[10px] lg:mx-auto">
       <div
         role="tablist"
         aria-label="What are you looking for?"
@@ -63,7 +72,7 @@ export default function HeroDiscovery() {
               aria-selected={selected}
               aria-controls={panelId(key)}
               onClick={() => setTab(key)}
-              className={`rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
                 selected ? "bg-paper text-ink shadow-sm" : "text-ink-soft hover:text-ink"
               }`}
             >
@@ -77,7 +86,7 @@ export default function HeroDiscovery() {
         role="tabpanel"
         id={panelId(tab)}
         aria-labelledby={tabId(tab)}
-        className="mt-5"
+        className="mt-4"
       >
         {tab === "venue" ? <HeroVenueSearch /> : <HeroVendorSearch />}
       </div>

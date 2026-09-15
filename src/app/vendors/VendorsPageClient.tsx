@@ -20,6 +20,8 @@ import type { VendorProfile, VendorSkillSlug } from "@/lib/types/vendors";
 
 const FIELD_CLASS =
   "w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass";
+/** Inputs match VendorCategorySelect's fixed height so the brief row lines up. */
+const INPUT_CLASS = `${FIELD_CLASS} h-11 py-0`;
 const LABEL_CLASS = "block text-xs font-semibold uppercase tracking-wide text-ink-soft";
 
 function toPositiveInt(raw: string): number | null {
@@ -276,7 +278,7 @@ function BriefForm({
             type="date"
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1.5 ${INPUT_CLASS}`}
           />
         </div>
 
@@ -292,7 +294,7 @@ function BriefForm({
             value={guestCount}
             onChange={(e) => setGuestCount(e.target.value)}
             placeholder="120"
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1.5 ${INPUT_CLASS}`}
           />
         </div>
 
@@ -309,7 +311,7 @@ function BriefForm({
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
             placeholder="$ total"
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1.5 ${INPUT_CLASS}`}
           />
         </div>
       </div>

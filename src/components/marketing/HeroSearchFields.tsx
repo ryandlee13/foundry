@@ -4,11 +4,23 @@
  * "why can't I change this" note — and letting the two drift would imply
  * Foundry covers different areas depending on what you're searching for.
  */
-export const FIELD_CLASS =
-  "w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass";
+const FIELD_BASE =
+  "w-full rounded-lg border border-line bg-paper px-3 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass";
 
-export const LABEL_CLASS = "block text-xs font-semibold uppercase tracking-wide text-ink-soft";
+/**
+ * h-11 (44px) rather than vertical padding: it pins every control in the card
+ * to the same height regardless of whether it's an input, a date picker, or
+ * the combobox, which is what actually makes the stack read as tidy. Text
+ * centers itself vertically in an <input>, so no py is needed — a <textarea>
+ * does need it, hence the separate class.
+ */
+export const FIELD_CLASS = `${FIELD_BASE} h-11`;
 
+export const TEXTAREA_CLASS = `${FIELD_BASE} py-2.5`;
+
+export const LABEL_CLASS = "block text-[11px] font-semibold uppercase tracking-wide text-ink-soft";
+
+/** Sits tight under the last field — the card's own padding is the breathing room. */
 export const SUBMIT_CLASS =
   "mt-1 w-full rounded-full bg-wine px-6 py-3 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft";
 
@@ -28,9 +40,9 @@ export function LocationField({ id }: { id: string }) {
         value="San Francisco, CA"
         readOnly
         aria-describedby={`${id}-note`}
-        className={`mt-1.5 cursor-not-allowed ${FIELD_CLASS} text-ink-soft`}
+        className={`mt-1 cursor-not-allowed ${FIELD_CLASS} text-ink-soft`}
       />
-      <p id={`${id}-note`} className="mt-1 text-xs text-ink-soft">
+      <p id={`${id}-note`} className="mt-1 text-[11px] text-ink-soft">
         San Francisco only for now.
       </p>
     </div>

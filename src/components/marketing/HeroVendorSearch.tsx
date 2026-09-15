@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import VendorCategorySelect from "@/components/vendor/VendorCategorySelect";
 import { briefToSearchParams, getEmptyBrief } from "@/lib/vendors/vendorSearch";
-import { FIELD_CLASS, LABEL_CLASS, LocationField, SUBMIT_CLASS } from "./HeroSearchFields";
+import {
+  FIELD_CLASS,
+  LABEL_CLASS,
+  LocationField,
+  SUBMIT_CLASS,
+  TEXTAREA_CLASS,
+} from "./HeroSearchFields";
 import type { VendorSkillSlug } from "@/lib/types/vendors";
 
 const DESCRIPTION_MAX = 300;
@@ -48,12 +54,12 @@ export default function HeroVendorSearch() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label="Search event vendors">
+    <form onSubmit={handleSubmit} className="space-y-3" aria-label="Search event vendors">
       <div>
         <label htmlFor="hero-vendor-category" className={LABEL_CLASS}>
           Vendor category
         </label>
-        <div className="mt-1.5">
+        <div className="mt-1">
           <VendorCategorySelect
             id="hero-vendor-category"
             value={skillSlug}
@@ -74,7 +80,7 @@ export default function HeroVendorSearch() {
           type="date"
           value={eventDate}
           onChange={(e) => setEventDate(e.target.value)}
-          className={`mt-1.5 ${FIELD_CLASS}`}
+          className={`mt-1 ${FIELD_CLASS}`}
         />
       </div>
 
@@ -91,7 +97,7 @@ export default function HeroVendorSearch() {
             value={guestCount}
             onChange={(e) => setGuestCount(e.target.value)}
             placeholder="120"
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1 ${FIELD_CLASS}`}
           />
         </div>
         <div>
@@ -107,7 +113,7 @@ export default function HeroVendorSearch() {
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
             placeholder="$ total"
-            className={`mt-1.5 ${FIELD_CLASS}`}
+            className={`mt-1 ${FIELD_CLASS}`}
           />
         </div>
       </div>
@@ -118,12 +124,12 @@ export default function HeroVendorSearch() {
         </label>
         <textarea
           id="hero-vendor-needs"
-          rows={3}
+          rows={2}
           maxLength={DESCRIPTION_MAX}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Four hours of coverage, candid style, gallery within two weeks."
-          className={`mt-1.5 resize-none ${FIELD_CLASS}`}
+          className={`mt-1 resize-none ${TEXTAREA_CLASS}`}
         />
       </div>
 

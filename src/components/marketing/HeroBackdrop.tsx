@@ -50,54 +50,58 @@ export default function HeroBackdrop() {
           sizes="100vw"
           // Modest saturation/contrast lift so the photos keep some punch
           // through the scrim instead of reading flat. Kept small on purpose —
-          // pushed harder, the darker nightlife shots start to crush.
-          className={`object-cover saturate-[1.14] contrast-[1.06] transition-opacity duration-1000 ${
+          // pushed harder, the darker nightlife shots start to crush. No blur
+          // and no desaturation: the photography is meant to carry the hero.
+          //
+          // The desktop focal point is nudged right of center so subjects tend
+          // to land in the open right half rather than directly behind the
+          // headline. It's one setting across six different compositions, so
+          // it's a bias, not a guarantee.
+          className={`object-cover object-center saturate-[1.14] contrast-[1.06] transition-opacity duration-1000 lg:object-[58%_center] ${
             photoIndex === index ? "opacity-100" : "opacity-0"
           }`}
         />
       ))}
 
       {/*
-        Two-part scrim rather than one heavy wash, so the photos stay visible.
+        A dark scrim, not a light one. The hero copy is warm white now, so
+        readability comes from darkening the photo behind it rather than
+        washing it toward paper — which is what used to flatten the whole
+        left half into near-solid cream.
 
-        1. A light overall tint that ties the photos to the paper palette
-           without hiding them.
-        2. A gradient that is strong only where the headline sits and falls
-           away to nothing across the rest of the frame. The hero text is
-           dark ink, and several of these photos are dark nightlife shots —
-           without a local wash behind the copy it would be unreadable.
+        Two layers:
+        1. A faint universal darken (7%) purely for cohesion, so the right
+           side of the frame doesn't read as a separate, brighter image from
+           the left.
+        2. A localized horizontal gradient that carries the text and is gone
+           by roughly two-thirds across.
 
-        Stops are stated as paper-over-photo alpha; the tint below composites
-        on top, so the effective opacity at each stop is 1-(1-0.06)(1-stop).
-        Nothing is fully opaque — the left edge was once solid paper, hiding
-        the photo there completely.
-
-        The wash under the headline sits at ~0.72 falling to ~0.62, chosen at
-        explicit user direction to favor seeing the photos. That is below the
-        ~0.75 where dark ink starts to lose contrast against the darker
-        nightlife shots, so don't lower it further without checking the
-        headline on mahjong-hall and live-music-room specifically.
+        Stops below are the gradient's own alpha; layer 1 composites on top,
+        so effective darkness is 1-(1-0.07)(1-stop): 0.58 at the left edge,
+        0.53 / 0.40 / 0.25 / 0.13, then just the universal 0.07 from 66% out.
+        The extra mid stops exist to keep the falloff smooth — with only two
+        or three, the transition showed as a visible vertical band down the
+        middle of the hero.
       */}
-      <div className="absolute inset-0 bg-paper/6" />
+      <div className="absolute inset-0 bg-[rgba(20,16,14,0.07)]" />
 
-      {/* Desktop: text is in the left column, so the wash is horizontal. It
-          holds through ~56% (where the headline ends) then drops away fast,
-          clearing by ~76%. */}
+      {/* Desktop: copy is in the left column, so the gradient is horizontal. */}
       <div
         className="absolute inset-0 hidden lg:block"
         style={{
           background:
-            "linear-gradient(to right, color-mix(in srgb, var(--color-paper) 70%, transparent) 0%, color-mix(in srgb, var(--color-paper) 60%, transparent) 32%, color-mix(in srgb, var(--color-paper) 42%, transparent) 56%, color-mix(in srgb, var(--color-paper) 10%, transparent) 76%, transparent 100%)",
+            "linear-gradient(to right, rgba(20,16,14,0.55) 0%, rgba(20,16,14,0.49) 14%, rgba(20,16,14,0.35) 30%, rgba(20,16,14,0.19) 44%, rgba(20,16,14,0.06) 55%, rgba(20,16,14,0) 66%)",
         }}
       />
 
-      {/* Below lg the hero stacks, so the copy sits over the photo full-width
-          and the wash has to stay heavier through the upper half. */}
+      {/* Below lg the hero stacks and the copy sits over the photo
+          full-width, so the gradient runs vertically and stays heavier —
+          there's no empty column to fade into. */}
       <div
         className="absolute inset-0 lg:hidden"
         style={{
           background:
-            "linear-gradient(to bottom, color-mix(in srgb, var(--color-paper) 88%, transparent) 0%, color-mix(in srgb, var(--color-paper) 70%, transparent) 45%, color-mix(in srgb, var(--color-paper) 34%, transparent) 100%)",
+            "linear-gradient(to bottom, rgba(20,16,14,0.62) 0%, rgba(20,16,14,0.52) 40%, rgba(20,16,14,0.34) 100%)",
         }}
       />
     </div>

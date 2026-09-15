@@ -81,7 +81,7 @@ export default function VendorCategorySelect({
         aria-expanded={open}
         aria-controls={listboxId}
         aria-autocomplete="list"
-        className="w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+        className="w-full rounded-lg border border-line bg-paper h-11 px-3 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
       />
 
       {open && (
