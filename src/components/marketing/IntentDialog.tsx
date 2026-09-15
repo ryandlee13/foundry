@@ -15,10 +15,10 @@ export interface IntentOption {
 }
 
 /**
- * A small "which of these are you here to do?" chooser. Used to branch the
- * homepage CTAs — first on intent (find vs. list), then on whether the
- * visitor already has an account — instead of dumping every path into the
- * hero as its own button.
+ * A small "which of these are you here to do?" chooser. Used by the header's
+ * supply-side nav actions to ask whether the visitor already has an account
+ * before dropping them into a flow that needs one, instead of bouncing them
+ * off a sign-in wall after the click.
  */
 export default function IntentDialog({
   open,

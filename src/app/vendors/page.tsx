@@ -4,8 +4,9 @@ import LoadingState from "@/components/ui/LoadingState";
 import VendorsPageClient from "./VendorsPageClient";
 
 export const metadata: Metadata = {
-  title: "For Vendors — Foundry",
-  description: "Browse published Foundry vendor profiles — DJs, photographers, caterers, and more.",
+  title: "Find Vendors — Foundry",
+  description:
+    "Search Foundry vendors for your event — DJs, photographers, florists, caterers, and more. No venue booking required.",
 };
 
 export default function VendorsPage() {

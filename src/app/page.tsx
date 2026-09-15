@@ -1,7 +1,6 @@
 import Link from "next/link";
-import HeroActions from "@/components/marketing/HeroActions";
 import HeroBackdrop from "@/components/marketing/HeroBackdrop";
-import HeroSearch from "@/components/marketing/HeroSearch";
+import HeroDiscovery from "@/components/marketing/HeroDiscovery";
 import TriangleDiagram from "@/components/marketing/TriangleDiagram";
 import RecapCarousel from "@/components/marketing/RecapCarousel";
 
@@ -44,7 +43,7 @@ export default function Home() {
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-line">
         <HeroBackdrop />
-        <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[1fr_23rem] lg:items-center lg:gap-16 lg:px-8">
+        <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 sm:py-28 lg:grid-cols-[1fr_24rem] lg:items-center lg:gap-16 lg:px-8">
           <div>
             <h1 className="max-w-2xl font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
               Every venue and every vendor your event needs, in one place.
@@ -53,10 +52,9 @@ export default function Home() {
               Foundry is made to build community and connect event organizers
               with venues and the creatives needed to bring an event to life.
             </p>
-            <HeroActions />
           </div>
 
-          <HeroSearch />
+          <HeroDiscovery />
         </div>
       </section>
 

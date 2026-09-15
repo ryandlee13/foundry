@@ -4,27 +4,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DEFAULT_LOCATION, DEFAULT_RADIUS_MILES } from "@/lib/spaces/locations";
 import EventTypeSelect from "@/components/spaces/EventTypeSelect";
+import { FIELD_CLASS, LABEL_CLASS, LocationField, SUBMIT_CLASS } from "./HeroSearchFields";
 import type { EventType } from "@/lib/types/spaces";
 
-const FIELD_CLASS =
-  "w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass";
-const LABEL_CLASS = "block text-xs font-semibold uppercase tracking-wide text-ink-soft";
-
 /**
- * Hero search: the fastest path from the homepage into a pre-filtered
- * Discover Spaces result set. Every field maps onto a filter the spaces page
- * already understands (see src/lib/spaces/urlState.ts), so this only builds
- * a query string — no filtering logic lives here.
+ * The fastest path from the homepage into a pre-filtered Discover Spaces
+ * result set. Every field maps onto a filter the spaces page already
+ * understands (src/lib/spaces/urlState.ts), so this only builds a query
+ * string — no filtering logic lives here.
  *
- * Location is fixed to San Francisco for now: it's the only market, and
- * offering a free-text city field would imply coverage that doesn't exist.
+ * Deliberately does NOT ask about vendors. A planner looking for a room
+ * should not have to declare a DJ budget to see rooms; the Find Vendors tab
+ * is the entry point for that, and it stands on its own.
  */
-export default function HeroSearch() {
+export default function HeroVenueSearch() {
   const router = useRouter();
   const [eventType, setEventType] = useState<EventType | null>(null);
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [guestCount, setGuestCount] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -38,15 +37,17 @@ export default function HeroSearch() {
     if (date) params.set("date", date);
     if (startTime) params.set("start", startTime);
     if (endTime) params.set("end", endTime);
+
+    // "attendees" is the existing filter key — it drives filterByCapacity(),
+    // which keeps venues whose maxCapacity clears the count.
+    const guests = Number(guestCount);
+    if (Number.isFinite(guests) && guests > 0) params.set("attendees", Math.floor(guests).toString());
+
     router.push(`/spaces?${params.toString()}`);
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="w-full space-y-4 rounded-2xl border border-line bg-paper p-5 shadow-sm sm:p-6"
-      aria-label="Search event spaces"
-    >
+    <form onSubmit={handleSubmit} className="space-y-4" aria-label="Search event spaces">
       <div>
         <label htmlFor="hero-event-type" className={LABEL_CLASS}>
           Event type
@@ -56,22 +57,7 @@ export default function HeroSearch() {
         </div>
       </div>
 
-      <div>
-        <label htmlFor="hero-location" className={LABEL_CLASS}>
-          Location
-        </label>
-        <input
-          id="hero-location"
-          type="text"
-          value="San Francisco, CA"
-          readOnly
-          aria-describedby="hero-location-note"
-          className={`mt-1.5 cursor-not-allowed ${FIELD_CLASS} text-ink-soft`}
-        />
-        <p id="hero-location-note" className="mt-1 text-xs text-ink-soft">
-          San Francisco only for now.
-        </p>
-      </div>
+      <LocationField id="hero-venue-location" />
 
       <div>
         <label htmlFor="hero-date" className={LABEL_CLASS}>
@@ -113,10 +99,23 @@ export default function HeroSearch() {
         </div>
       </div>
 
-      <button
-        type="submit"
-        className="mt-1 w-full rounded-full bg-wine px-6 py-3 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-      >
+      <div>
+        <label htmlFor="hero-guests" className={LABEL_CLASS}>
+          Guest count
+        </label>
+        <input
+          id="hero-guests"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          value={guestCount}
+          onChange={(e) => setGuestCount(e.target.value)}
+          placeholder="How many people?"
+          className={`mt-1.5 ${FIELD_CLASS}`}
+        />
+      </div>
+
+      <button type="submit" className={SUBMIT_CLASS}>
         Search spaces
       </button>
     </form>

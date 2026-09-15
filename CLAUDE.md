@@ -77,6 +77,13 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
 - Follow the phased plan in `docs/IMPLEMENTATION_PLAN.md` — don't build Phase 4 features
   while Phase 1 (real database migrations) hasn't landed yet, even if it seems faster to
   jump ahead.
+- **The homepage hero is planner-only: two discovery tabs, "Find a Venue" and "Find
+  Vendors" (`src/components/marketing/HeroDiscovery.tsx`).** Supply-side onboarding ("List
+  Your Venue", "Join as a Vendor") lives in the main nav (`Header.tsx`), auth-branched
+  through `IntentDialog`. Don't move those back into the hero — they aren't searches, and
+  sitting beside the search buttons they made "what do I click" a four-way question for
+  someone who only wanted a room. The venue tab deliberately does **not** ask about vendor
+  needs; that's what the vendor tab is for.
 - Placeholder/marketing copy must not claim things that aren't true yet (no fake reviews,
   no fake activity counts, no "verified" claims on unreviewed documents). **Scoped
   exception:** the homepage "Event recaps" carousel
@@ -203,6 +210,17 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   requests. `EventNeed.bookingId` points at a `Booking`, not a separate `Event` row.
   Organizer vendor-request UI lives at
   `/dashboard/organizer/bookings/[bookingId]/vendors`, not `/organizer/events/...`.
+- **Vendor *discovery* deliberately does not require a booking.** `VendorSearchBrief`
+  (`src/lib/vendors/vendorSearch.ts`) is a URL-only, never-persisted search brief — category,
+  date, location, guest count, budget, description — so a planner who already has a space can
+  search vendors without first creating a `Booking`. It is **not** an `EventNeed` and must not
+  grow into one; posting a gig still goes through the booking-anchored flow above. Only three
+  of its fields filter: category, date (via `VendorLocation.leadTimeDays`, the one real
+  availability signal that exists), and budget. Budget only excludes `flat_fee`/`package`
+  starting prices — `hourly`/`day_rate` are **rates, not totals**, the same trap
+  `computeRosterSpend()` guards against, so they're reported as "unknown" and never filtered
+  out. Guest count and the description are carried as context only; vendors have no capacity
+  field and no structured copy to keyword-match, so don't add filters for them.
 - **Vendor profiles now publish immediately, like venues** (rule #8 above) —
   `publishVendorProfile()` replaced the old `submitVendorProfileForReview()`, and
   `getPublishReadiness()` no longer requires a portfolio link (website/Instagram/portfolio
