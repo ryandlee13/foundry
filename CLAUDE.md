@@ -86,8 +86,12 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
   needs; that's what the vendor tab is for.
 - **Homepage sections below the hero, in order:** "One event, one place"
   (`ValuePropsSection`), Featured Spaces (`FeaturedSpacesSection`), Popular Vendor
-  Categories (`VendorCategoriesSection`), Event recaps, then the marketplace diagram and
-  the per-role walkthroughs. Featured Spaces resolves curated *slugs* against the real
+  Categories (`VendorCategoriesSection`), Event recaps, then the closing CTA. The
+  marketplace diagram (`TriangleDiagram.tsx`) and the three per-role walkthroughs were
+  removed from the page at user direction ("for now") — the component file is kept on disk
+  and unreferenced so it can be dropped back in; `MarketplaceIcons.tsx` is still live
+  because `HomeSectionIcons.tsx` shares its stroke config. Featured Spaces resolves
+  curated *slugs* against the real
   `VENUES` data (`src/lib/spaces/featured.ts`) rather than copying names/prices, so the
   homepage can't drift from `/spaces/[slug]`; a test asserts every slug still resolves.
   Seed venues keep `VenueImagePlaceholder` here for the same reason `/spaces` does — these
