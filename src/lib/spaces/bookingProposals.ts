@@ -145,3 +145,66 @@ export function formatProposalFootnote(kind: BookingProposalKind): string {
 export function isProposalOpen(proposal: BookingProposalAttachment): boolean {
   return proposal.status === "sent";
 }
+
+export interface EffectiveBookingTerms {
+  startTime: string;
+  endTime: string;
+  /** Null when the venue only publishes a rate *range* and nothing has pinned it down. */
+  hourlyRate: number | null;
+  estimatedTotal: number | null;
+  /** True once an accepted revised-terms proposal has overridden the original booking. */
+  updatedFromProposal: boolean;
+  /** ISO of the acceptance these terms came from. Null while the booking is unchanged. */
+  acceptedAt: string | null;
+}
+
+/**
+ * What the booking's terms actually are right now: the original request, with
+ * the most recently *accepted* revised-terms proposal layered on top.
+ *
+ * Deliberately derived rather than written back onto the `Booking`. Accepting
+ * a proposal records agreement between two people; it doesn't silently
+ * rewrite the booking row, and `Booking` still has no price column (see
+ * CLAUDE.md). Recomputing from the thread keeps one source of truth and means
+ * a decline can never leave a half-applied change behind.
+ *
+ * Deposit requests are ignored here — they ask for money against the existing
+ * terms, they don't change them.
+ */
+export function resolveEffectiveBookingTerms(
+  base: { startTime: string; endTime: string; hourlyRate: number | null },
+  proposals: BookingProposalAttachment[]
+): EffectiveBookingTerms {
+  const accepted = proposals
+    .filter((proposal) => proposal.kind === "revised_terms" && proposal.status === "accepted")
+    // Latest acceptance wins, so a second round of terms supersedes the first.
+    .sort((a, b) => (a.respondedAt ?? "").localeCompare(b.respondedAt ?? ""));
+
+  const latest = accepted[accepted.length - 1];
+
+  if (!latest) {
+    return {
+      startTime: base.startTime,
+      endTime: base.endTime,
+      hourlyRate: base.hourlyRate,
+      estimatedTotal: computeEstimatedTotal(base.startTime, base.endTime, base.hourlyRate),
+      updatedFromProposal: false,
+      acceptedAt: null,
+    };
+  }
+
+  // A proposal can change the window, the rate, or both — carry through
+  // whatever it left unset.
+  const startTime = latest.startTime ?? base.startTime;
+  const endTime = latest.endTime ?? base.endTime;
+  const hourlyRate = latest.hourlyRate ?? base.hourlyRate;
+
+  return {
+    startTime,
+    endTime,
+    hourlyRate,
+    estimatedTotal: computeEstimatedTotal(startTime, endTime, hourlyRate),
+    updatedFromProposal: true,
+    acceptedAt: latest.respondedAt,
+  };
+}

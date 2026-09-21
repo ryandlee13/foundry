@@ -20,6 +20,11 @@ import { getEffectiveProposalStatus } from "@/lib/vendors/expiration";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { getBookingById, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
+import {
+  resolveEffectiveBookingTerms,
+  type EffectiveBookingTerms,
+} from "@/lib/spaces/bookingProposals";
+import { getVenueById } from "@/lib/spaces/submittedVenues";
 import BookingProposalCard from "@/components/dashboard/BookingProposalCard";
 import BookingProposalComposer from "@/components/dashboard/BookingProposalComposer";
 import type { BookingProposalAttachment } from "@/lib/types/vendors";
@@ -30,7 +35,7 @@ import ErrorState from "@/components/ui/ErrorState";
 import FinalizeDealDialog, { type FinalizeDealTerms } from "./FinalizeDealDialog";
 import AgreedTermsCard from "./AgreedTermsCard";
 import type { Account } from "@/lib/auth/types";
-import type { Booking } from "@/lib/types/spaces";
+import type { Booking, Venue } from "@/lib/types/spaces";
 import type {
   ChatMessage,
   EventNeed,
@@ -100,17 +105,41 @@ function ProposalThreadHeader({
   );
 }
 
-function BookingThreadHeader({ booking, otherAccount }: { booking: Booking; otherAccount: Account | null }) {
+function BookingThreadHeader({
+  booking,
+  otherAccount,
+  terms,
+  rateLabel,
+}: {
+  booking: Booking;
+  otherAccount: Account | null;
+  terms: EffectiveBookingTerms;
+  rateLabel: string | null;
+}) {
   return (
     <>
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{formatEventLabel(booking)}</p>
       <p className="font-display text-lg font-semibold text-ink">
         {booking.venueName} — {otherAccount?.name ?? "Foundry user"}
       </p>
+      {/*
+        Reflects the terms currently in force, not the original request: once
+        the planner accepts revised terms, the time and rate here change with
+        them (see resolveEffectiveBookingTerms).
+      */}
       <p className="mt-1 text-sm text-ink-soft">
-        {formatEventDate(booking.eventDate)} · {formatTimeRange(booking.startTime, booking.endTime)} ·{" "}
+        {formatEventDate(booking.eventDate)} · {formatTimeRange(terms.startTime, terms.endTime)} ·{" "}
         {booking.attendees} guests
+        {rateLabel && <> · {rateLabel}</>}
       </p>
+      {terms.updatedFromProposal && (
+        <p className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 rounded-full bg-brass/15 px-2.5 py-1 text-xs font-medium text-brass-dark">
+          <span className="font-semibold">Updated terms accepted</span>
+          {terms.estimatedTotal !== null && (
+            <span>· est. ${terms.estimatedTotal.toLocaleString()} total</span>
+          )}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold">
         <Link href={`/spaces/${booking.venueSlug}?from=dashboard`} className="text-brass-dark hover:underline">
           View venue
@@ -136,6 +165,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
   const [eventLabel, setEventLabel] = useState("");
   // Booking-thread-only state
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [bookingVenue, setBookingVenue] = useState<Venue | null>(null);
 
   const [draft, setDraft] = useState("");
   const [confirmingFinalize, setConfirmingFinalize] = useState(false);
@@ -155,6 +185,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
       if (isProposalThread(found)) {
         setBooking(null);
+        setBookingVenue(null);
         setProposal(getProposalById(found.proposalId) ?? null);
         const foundNeed = getEventNeedById(found.eventNeedId);
         setNeed(foundNeed ?? null);
@@ -169,6 +200,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
         setEngagement(null);
         setEventLabel("");
         setBooking(getBookingById(found.bookingId) ?? null);
+        setBookingVenue(getVenueById(found.venueId) ?? null);
       }
     }
     setLoaded(true);
@@ -193,6 +225,29 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
   const vendorProfile = proposal ? (getVendorProfileById(proposal.vendorProfileId) ?? null) : null;
   const isOrganizer = user.id === thread.organizerId;
+
+  /*
+   * Booking has no price column (see CLAUDE.md), so the starting rate comes
+   * from the listing. A venue publishing a *range* has no single number to
+   * show, so base rate stays null and the header falls back to the range —
+   * an accepted proposal is what pins it to one figure.
+   */
+  const listedRateIsFixed =
+    bookingVenue !== null && bookingVenue.minHourlyRate === bookingVenue.maxHourlyRate;
+  const effectiveTerms = resolveEffectiveBookingTerms(
+    {
+      startTime: booking?.startTime ?? "",
+      endTime: booking?.endTime ?? "",
+      hourlyRate: listedRateIsFixed ? bookingVenue.minHourlyRate : null,
+    },
+    messages.map((message) => message.proposal).filter((p): p is BookingProposalAttachment => Boolean(p))
+  );
+  const rateLabel =
+    effectiveTerms.hourlyRate !== null
+      ? `$${effectiveTerms.hourlyRate}/hr`
+      : bookingVenue
+        ? `$${bookingVenue.minHourlyRate}–$${bookingVenue.maxHourlyRate}/hr`
+        : null;
   const effectiveProposalStatus = proposal ? getEffectiveProposalStatus(proposal) : null;
   // Explicitly gated on isProposalThread — a booking thread can never finalize a vendor deal.
   const canFinalize =
@@ -254,7 +309,12 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
             onFinalizeClick={() => setConfirmingFinalize(true)}
           />
         ) : booking ? (
-          <BookingThreadHeader booking={booking} otherAccount={otherAccount} />
+          <BookingThreadHeader
+            booking={booking}
+            otherAccount={otherAccount}
+            terms={effectiveTerms}
+            rateLabel={rateLabel}
+          />
         ) : (
           <p className="font-display text-lg font-semibold text-ink">{otherAccount?.name ?? "Foundry user"}</p>
         )}

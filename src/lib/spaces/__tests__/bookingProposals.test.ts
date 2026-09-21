@@ -4,6 +4,7 @@ import {
   computeEstimatedTotal,
   formatProposalFootnote,
   getEmptyProposalDraft,
+  resolveEffectiveBookingTerms,
   summarizeProposal,
   validateProposalDraft,
   type ProposalDraft,
@@ -117,5 +118,85 @@ describe("formatProposalFootnote", () => {
 
   it("does not claim accepting changes the booking", () => {
     expect(formatProposalFootnote("revised_terms")).toContain("doesn't change the booking automatically");
+  });
+});
+
+describe("resolveEffectiveBookingTerms", () => {
+  const base = { startTime: "18:00", endTime: "22:00", hourlyRate: 150 };
+
+  function accepted(overrides: Partial<ProposalDraft>, respondedAt: string) {
+    return {
+      ...buildProposalAttachment(draft(overrides)),
+      status: "accepted" as const,
+      respondedAt,
+    };
+  }
+
+  it("returns the original booking when nothing was accepted", () => {
+    const terms = resolveEffectiveBookingTerms(base, []);
+    expect(terms.startTime).toBe("18:00");
+    expect(terms.hourlyRate).toBe(150);
+    expect(terms.estimatedTotal).toBe(600);
+    expect(terms.updatedFromProposal).toBe(false);
+    expect(terms.acceptedAt).toBeNull();
+  });
+
+  it("ignores a proposal that is still open or was declined", () => {
+    const open = buildProposalAttachment(draft({ hourlyRate: "999" }));
+    const declined = { ...buildProposalAttachment(draft({ hourlyRate: "888" })), status: "declined" as const };
+    const terms = resolveEffectiveBookingTerms(base, [open, declined]);
+    expect(terms.hourlyRate).toBe(150);
+    expect(terms.updatedFromProposal).toBe(false);
+  });
+
+  it("applies an accepted rate change and recomputes the total", () => {
+    const terms = resolveEffectiveBookingTerms(base, [
+      accepted({ hourlyRate: "200" }, "2026-09-20T10:00:00.000Z"),
+    ]);
+    expect(terms.hourlyRate).toBe(200);
+    expect(terms.startTime).toBe("18:00");
+    expect(terms.estimatedTotal).toBe(800);
+    expect(terms.updatedFromProposal).toBe(true);
+    expect(terms.acceptedAt).toBe("2026-09-20T10:00:00.000Z");
+  });
+
+  it("carries through fields the proposal left unset", () => {
+    // Time-only change keeps the original rate, and vice versa.
+    const timeOnly = resolveEffectiveBookingTerms(base, [
+      accepted({ startTime: "19:00", endTime: "23:00" }, "2026-09-20T10:00:00.000Z"),
+    ]);
+    expect(timeOnly.startTime).toBe("19:00");
+    expect(timeOnly.hourlyRate).toBe(150);
+    expect(timeOnly.estimatedTotal).toBe(600);
+  });
+
+  it("lets the latest acceptance supersede an earlier one", () => {
+    const terms = resolveEffectiveBookingTerms(base, [
+      accepted({ hourlyRate: "200" }, "2026-09-20T10:00:00.000Z"),
+      accepted({ hourlyRate: "175" }, "2026-09-21T10:00:00.000Z"),
+    ]);
+    expect(terms.hourlyRate).toBe(175);
+    expect(terms.acceptedAt).toBe("2026-09-21T10:00:00.000Z");
+  });
+
+  it("is unaffected by an accepted deposit request", () => {
+    const deposit = {
+      ...buildProposalAttachment({
+        ...getEmptyProposalDraft("deposit_request"),
+        depositAmount: "500",
+        note: "Holds the date.",
+      }),
+      status: "accepted" as const,
+      respondedAt: "2026-09-22T10:00:00.000Z",
+    };
+    const terms = resolveEffectiveBookingTerms(base, [deposit]);
+    expect(terms.hourlyRate).toBe(150);
+    expect(terms.updatedFromProposal).toBe(false);
+  });
+
+  it("leaves the total null when the venue only publishes a rate range", () => {
+    const terms = resolveEffectiveBookingTerms({ ...base, hourlyRate: null }, []);
+    expect(terms.hourlyRate).toBeNull();
+    expect(terms.estimatedTotal).toBeNull();
   });
 });
