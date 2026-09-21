@@ -86,7 +86,9 @@ export const EVENT_NEED_PHASE_LABELS: Record<EventNeedPhase, string> = {
 
 /** Category-specific placeholder text for the "What are you looking for?" field. Generic fallback for anything not listed. */
 export const EVENT_NEED_DESCRIPTION_PLACEHOLDERS: Partial<Record<VendorSkillSlug, string>> = {
-  dj: "A DJ who specializes in house music and can bring their own controller.",
+  // Names the gear explicitly — this field absorbed the old separate
+  // "equipment requirements" input, so the example has to show that.
+  dj: "A DJ who specializes in house music and can bring their own controller and speakers.",
   florist: "A florist who can create arrangements primarily using red and white roses.",
   photographer: "Looking for someone comfortable shooting nightlife and flash photography.",
   videographer: "Looking for a videographer to capture highlights and a short recap reel.",

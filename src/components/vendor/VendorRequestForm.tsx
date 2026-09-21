@@ -4,14 +4,19 @@ import { useState } from "react";
 import { VENDOR_SKILLS } from "@/lib/vendors/skills";
 import {
   PRICING_MODEL_LABELS,
-  EXPERIENCE_LEVEL_LABELS,
   EVENT_NEED_DESCRIPTION_PLACEHOLDERS,
   GENERIC_EVENT_NEED_DESCRIPTION_PLACEHOLDER,
 } from "@/lib/vendors/labels";
+import {
+  computeNeedBudget,
+  formatBudgetPreview,
+  REQUESTABLE_PRICING_MODELS,
+} from "@/lib/vendors/needBudget";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 import { createDraftEventNeed } from "@/lib/vendors/eventNeeds";
 import { publishEventNeedAndNotifyVendors } from "@/lib/vendors/publishing";
 import type { Booking } from "@/lib/types/spaces";
-import type { EventNeed, ExperienceLevel, PricingModel, VendorSkillSlug } from "@/lib/types/vendors";
+import type { EventNeed, PricingModel, VendorSkillSlug } from "@/lib/types/vendors";
 
 type DeadlineQuickOption = "24h" | "3d" | "5d" | "1w" | "custom";
 
@@ -23,22 +28,37 @@ const DEADLINE_QUICK_OPTIONS: { key: DeadlineQuickOption; label: string; hours: 
   { key: "custom", label: "Custom", hours: null },
 ];
 
+/** Red asterisk marking a field the form won't submit without. */
+function Required() {
+  return (
+    <span className="text-wine" aria-hidden="true">
+      {" "}
+      *
+    </span>
+  );
+}
+
 function TextField({
   label,
   value,
   onChange,
   placeholder,
   type = "text",
+  required = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   type?: string;
+  required?: boolean;
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-ink">{label}</label>
+      <label className="block text-sm font-medium text-ink">
+        {label}
+        {required && <Required />}
+      </label>
       <input
         type={type}
         value={value}
@@ -79,23 +99,31 @@ export default function VendorRequestForm({
   const [skillSlug, setSkillSlug] = useState<VendorSkillSlug>(initialSkillSlug ?? "dj");
   const [title, setTitle] = useState(initialTitle ?? "");
   const [description, setDescription] = useState("");
-  const [deliverables, setDeliverables] = useState("");
   const [locationType, setLocationType] = useState<"in_person" | "remote">("in_person");
   const [startTime, setStartTime] = useState(booking.startTime);
   const [endTime, setEndTime] = useState(booking.endTime);
   const [setupTime, setSetupTime] = useState("");
   const [positionsAvailable, setPositionsAvailable] = useState("1");
+  const [preferredPricingModel, setPreferredPricingModel] = useState<PricingModel | "">("");
+  const [targetPrice, setTargetPrice] = useState("");
   const [budgetMin, setBudgetMin] = useState("");
   const [budgetMax, setBudgetMax] = useState("");
-  const [preferredPricingModel, setPreferredPricingModel] = useState<PricingModel | "">("");
-  const [equipmentRequirements, setEquipmentRequirements] = useState("");
-  const [experiencePreference, setExperiencePreference] = useState<ExperienceLevel | "">("");
   const [portfolioRequired, setPortfolioRequired] = useState(false);
   const [deadlineOption, setDeadlineOption] = useState<DeadlineQuickOption>("5d");
   const [customDeadline, setCustomDeadline] = useState("");
   const [allowQuestions, setAllowQuestions] = useState(true);
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const budgetInput = {
+    pricingModel: preferredPricingModel,
+    targetPrice,
+    startTime,
+    endTime,
+    minOverride: budgetMin,
+    maxOverride: budgetMax,
+  };
+  const budgetPreview = formatBudgetPreview(budgetInput);
 
   const canSubmit = title.trim().length > 0 && description.trim().length > 0 && Number(positionsAvailable) > 0;
   const descriptionPlaceholder = EVENT_NEED_DESCRIPTION_PLACEHOLDERS[skillSlug] ?? GENERIC_EVENT_NEED_DESCRIPTION_PLACEHOLDER;
@@ -109,13 +137,19 @@ export default function VendorRequestForm({
   }
 
   function buildInput() {
+    const budget = computeNeedBudget(budgetInput);
     return {
       bookingId: booking.id,
       organizerId,
       skillSlug,
       title: title.trim(),
       description: description.trim(),
-      deliverables: deliverables.trim(),
+      // Deliverables, equipment, and experience preference were separate
+      // fields that "What are you looking for?" already covers — asking for
+      // the same information three ways produced three thin answers instead
+      // of one useful one. The stored fields remain so existing needs and the
+      // vendor-side readers keep working.
+      deliverables: "",
       locationType,
       publicLocation,
       coordinates,
@@ -125,11 +159,11 @@ export default function VendorRequestForm({
       setupTime: setupTime.trim() || null,
       estimatedAttendance: booking.attendees,
       positionsAvailable: Math.max(1, Number(positionsAvailable) || 1),
-      budgetMin: budgetMin ? Number(budgetMin) : null,
-      budgetMax: budgetMax ? Number(budgetMax) : null,
+      budgetMin: budget.budgetMin,
+      budgetMax: budget.budgetMax,
       preferredPricingModel: preferredPricingModel || null,
-      equipmentRequirements: equipmentRequirements.trim(),
-      experiencePreference: experiencePreference || null,
+      equipmentRequirements: "",
+      experiencePreference: null,
       portfolioRequired,
       proposalDeadline: computeProposalDeadline(),
       allowQuestions,
@@ -160,7 +194,10 @@ export default function VendorRequestForm({
     <div className="space-y-5">
       {!lockSkill && (
         <div>
-          <label className="block text-sm font-medium text-ink">Looking for a…</label>
+          <label className="block text-sm font-medium text-ink">
+            Vendor category
+            <Required />
+          </label>
           <select
             value={skillSlug}
             onChange={(e) => setSkillSlug(e.target.value as VendorSkillSlug)}
@@ -175,10 +212,19 @@ export default function VendorRequestForm({
         </div>
       )}
 
-      <TextField label="Request title" value={title} onChange={setTitle} placeholder={`Looking for a ${VENDOR_SKILLS.find((s) => s.slug === skillSlug)?.name}`} />
+      <TextField
+        label="Request title"
+        required
+        value={title}
+        onChange={setTitle}
+        placeholder={`Looking for a ${VENDOR_SKILLS.find((s) => s.slug === skillSlug)?.name}`}
+      />
 
       <div>
-        <label className="block text-sm font-medium text-ink">What are you looking for?</label>
+        <label className="block text-sm font-medium text-ink">
+          What are you looking for?
+          <Required />
+        </label>
         <textarea
           rows={3}
           value={description}
@@ -186,16 +232,10 @@ export default function VendorRequestForm({
           placeholder={descriptionPlaceholder}
           className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
         />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-ink">Required deliverables</label>
-        <textarea
-          rows={2}
-          value={deliverables}
-          onChange={(e) => setDeliverables(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
-        />
+        <p className="mt-1 text-xs text-ink-soft">
+          Cover the deliverables you need and any gear they should bring — this is the whole
+          brief vendors bid against.
+        </p>
       </div>
 
       <div className="rounded-lg bg-paper-dim px-3.5 py-2.5 text-xs text-ink-soft">
@@ -241,7 +281,13 @@ export default function VendorRequestForm({
       <TextField label="Setup time (optional)" value={setupTime} onChange={setSetupTime} placeholder="e.g. 30 minutes before start" />
 
       <div className="grid grid-cols-2 gap-4">
-        <TextField label="Positions needed" type="number" value={positionsAvailable} onChange={setPositionsAvailable} />
+        <TextField
+          label="Positions needed"
+          required
+          type="number"
+          value={positionsAvailable}
+          onChange={setPositionsAvailable}
+        />
         <div>
           <label className="block text-sm font-medium text-ink">Preferred pricing model</label>
           <select
@@ -250,37 +296,59 @@ export default function VendorRequestForm({
             className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
           >
             <option value="">No preference</option>
-            {Object.entries(PRICING_MODEL_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
+            {/* Day rates, packages, and contact-for-quote are vendor-side
+                concepts — an organizer asking for work states a rate or a
+                fee. See REQUESTABLE_PRICING_MODELS. */}
+            {REQUESTABLE_PRICING_MODELS.map((model) => (
+              <option key={model} value={model}>
+                {PRICING_MODEL_LABELS[model]}
               </option>
             ))}
           </select>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <TextField label="Budget min ($)" type="number" value={budgetMin} onChange={setBudgetMin} />
-        <TextField label="Budget max ($)" type="number" value={budgetMax} onChange={setBudgetMax} />
-      </div>
-
-      <TextField label="Equipment requirements (optional)" value={equipmentRequirements} onChange={setEquipmentRequirements} />
-
       <div>
-        <label className="block text-sm font-medium text-ink">Experience preference</label>
-        <select
-          value={experiencePreference}
-          onChange={(e) => setExperiencePreference(e.target.value as ExperienceLevel | "")}
-          className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
-        >
-          <option value="">No preference</option>
-          {Object.entries(EXPERIENCE_LEVEL_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <label className="block text-sm font-medium text-ink">
+          {preferredPricingModel === "hourly" ? "Hourly rate ($)" : "Price ($)"}
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={targetPrice}
+          onChange={(e) => setTargetPrice(e.target.value)}
+          placeholder={preferredPricingModel === "hourly" ? "80" : "500"}
+          className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+        />
+        {/* An hourly rate becomes a total using this request's own vendor
+            window, so the figure the organizer sees is the one vendors bid
+            against. */}
+        {budgetPreview ? (
+          <p className="mt-1.5 text-sm font-medium text-ink">
+            {budgetPreview}
+            {preferredPricingModel === "hourly" && (
+              <span className="ml-1 font-normal text-ink-soft">
+                — what vendors will see as your budget
+              </span>
+            )}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-ink-soft">
+            {preferredPricingModel === "hourly"
+              ? "We'll work out the total from the vendor hours above."
+              : "The total you're budgeting for this vendor."}
+          </p>
+        )}
       </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <TextField label="Budget min ($, optional)" type="number" value={budgetMin} onChange={setBudgetMin} />
+        <TextField label="Budget max ($, optional)" type="number" value={budgetMax} onChange={setBudgetMax} />
+      </div>
+      <p className="-mt-2 text-xs text-ink-soft">
+        Leave these blank to use the price above. Set them if you already know the range
+        you&apos;ll accept.
+      </p>
 
       <label className="flex items-center gap-2.5 text-sm text-ink">
         <input type="checkbox" checked={portfolioRequired} onChange={(e) => setPortfolioRequired(e.target.checked)} className="h-4 w-4 rounded border-line text-wine focus:ring-1 focus:ring-brass" />
@@ -288,7 +356,13 @@ export default function VendorRequestForm({
       </label>
 
       <div>
-        <label className="block text-sm font-medium text-ink">Proposal deadline</label>
+        <div className="flex items-center gap-1.5">
+          <label className="block text-sm font-medium text-ink">Proposal deadline</label>
+          <InfoTooltip label="What is the proposal deadline?">
+            How long this request stays open for bids. After it passes, vendors can no longer
+            submit, and any bids still waiting on you expire.
+          </InfoTooltip>
+        </div>
         <div className="mt-1.5 flex flex-wrap gap-2">
           {DEADLINE_QUICK_OPTIONS.map((option) => (
             <button
