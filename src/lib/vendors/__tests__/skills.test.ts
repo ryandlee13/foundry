@@ -19,17 +19,45 @@ describe("skill catalog", () => {
 describe("getSkillsAlphabetical", () => {
   it("sorts by display name", () => {
     const names = getSkillsAlphabetical().map((skill) => skill.name);
-    const named = names.slice(0, -1);
-    expect(named).toEqual([...named].sort((a, b) => a.localeCompare(b)));
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
   });
 
-  it("pins Other last rather than sorting it under O", () => {
-    const slugs = getSkillsAlphabetical().map((skill) => skill.slug);
-    expect(slugs[slugs.length - 1]).toBe("other");
+  it("keeps the stored catalog itself alphabetical", () => {
+    // The array order is what a reader of skills.ts sees, so it shouldn't
+    // disagree with what every picker renders.
+    const stored = VENDOR_SKILLS.map((skill) => skill.name);
+    expect(stored).toEqual([...stored].sort((a, b) => a.localeCompare(b)));
   });
 
   it("returns the whole catalog", () => {
     expect(getSkillsAlphabetical()).toHaveLength(VENDOR_SKILLS.length);
+  });
+});
+
+describe("catalog scope", () => {
+  it("offers exactly the thirteen launch categories", () => {
+    expect(getSkillsAlphabetical().map((skill) => skill.slug)).toEqual([
+      "bartender",
+      "caterer",
+      "chef",
+      "content_creator",
+      "decorator",
+      "dj",
+      "florist",
+      "graphic_designer",
+      "lighting_technician",
+      "photo_booth",
+      "photographer",
+      "security",
+      "videographer",
+    ]);
+  });
+
+  it("still allows remote-only for the two desk-based categories", () => {
+    // remoteEligibility.ts keys off this, so dropping "other" (which was
+    // remote-eligible) must not have removed the last remote option.
+    const remote = VENDOR_SKILLS.filter((skill) => skill.remoteEligible).map((s) => s.slug);
+    expect(remote).toEqual(["content_creator", "graphic_designer"]);
   });
 });
 

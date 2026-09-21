@@ -24,19 +24,11 @@ const CATEGORY_OPTIONS: { label: string; skillSlug: VendorSkillSlug }[] = [
   { label: "Caterer", skillSlug: "caterer" },
   { label: "Bartender", skillSlug: "bartender" },
   { label: "Graphic Designer", skillSlug: "graphic_designer" },
-  { label: "Marketing Influencer", skillSlug: "influencer" },
   { label: "Content Creator", skillSlug: "content_creator" },
   { label: "Photo Booth", skillSlug: "photo_booth" },
-  { label: "Magician", skillSlug: "performer" },
-  { label: "Performer", skillSlug: "performer" },
-  { label: "Sponsor", skillSlug: "sponsor" },
-  { label: "Food Sponsor", skillSlug: "sponsor" },
   { label: "Lighting", skillSlug: "lighting_technician" },
-  { label: "Sound Engineer", skillSlug: "sound_engineer" },
   { label: "Security", skillSlug: "security" },
-  { label: "Event Producer", skillSlug: "event_producer" },
   { label: "Decorator", skillSlug: "decorator" },
-  { label: "Other", skillSlug: "other" },
 ];
 
 type Step = "pick" | "fill" | "review";

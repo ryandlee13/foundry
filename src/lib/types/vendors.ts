@@ -1,29 +1,30 @@
 import type { Coordinates, EventType } from "./spaces";
 
+/**
+ * The categories Foundry accepts, trimmed from an earlier 23 to the 13 worth
+ * launching with. Ordered alphabetically by display name (see VENDOR_SKILLS)
+ * so the source of truth reads the same way the pickers do.
+ *
+ * Narrowing this union is a breaking change for stored data: a profile or
+ * event need written against a removed slug still holds that string in
+ * localStorage. `getSkillName()` falls back to the raw slug rather than
+ * throwing, so such a record degrades to showing its slug instead of
+ * crashing — but re-run the dev seeders after changing this list.
+ */
 export type VendorSkillSlug =
-  | "dj"
-  | "photographer"
-  | "videographer"
-  | "graphic_designer"
-  | "event_producer"
-  | "chef"
-  | "caterer"
   | "bartender"
-  | "security"
-  | "sound_engineer"
-  | "lighting_technician"
-  | "decorator"
-  | "florist"
-  | "furniture_rental"
-  | "equipment_rental"
-  | "influencer"
+  | "caterer"
+  | "chef"
   | "content_creator"
-  | "sponsor"
-  | "brand_activation_agency"
+  | "decorator"
+  | "dj"
+  | "florist"
+  | "graphic_designer"
+  | "lighting_technician"
   | "photo_booth"
-  | "performer"
-  | "instructor"
-  | "other";
+  | "photographer"
+  | "security"
+  | "videographer";
 
 export interface VendorSkillDefinition {
   slug: VendorSkillSlug;
