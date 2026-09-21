@@ -171,12 +171,31 @@ workaround.
   competing-proposal-closing sweep runs (deliberately not at finalize time — see
   `CLAUDE.md`).
 - **Chat unlock timing (booking threads)**: the same invariant, mirrored for venue
-  bookings — a thread between an organizer and a venue owner over a confirmed booking must
-  not be creatable by anyone but the venue owner on that specific booking. This is enforced
-  by `startBookingConversation(bookingId, actorAccountId)` in
-  `src/lib/spaces/bookingWorkflow.ts`, which throws unless the actor owns the venue and the
-  booking is `confirmed`. An organizer/planner can never create a booking thread — they can
-  only reply once the venue owner has created one. `MessageThread` is now a discriminated
+  bookings — a thread between an organizer and a venue owner must not be creatable by
+  anyone but the venue owner on that specific booking. Both entry points route through one
+  host-only gate (`openBookingThreadAsHost` in `src/lib/spaces/bookingWorkflow.ts`), which
+  throws unless the actor owns the venue:
+  - `startBookingConversation(bookingId, actorAccountId)` — `confirmed` bookings only; the
+    post-accept "Go to messages" action.
+  - `startBookingInquiry(bookingId, actorAccountId, question)` — also allows a `pending`
+    booking, so a host can ask for detail *before* deciding rather than being forced to
+    accept-or-decline blind. It deliberately leaves the booking `pending`: asking is not a
+    decision, and auto-confirming to unlock chat would make the accept meaningless.
+
+  The security-relevant invariant is **host-initiated**, not "confirmed" — an
+  organizer/planner can never create a booking thread, only reply once the venue owner has
+  created one. A `declined` booking is excluded from both: once the host says no, the
+  channel doesn't open.
+- **Booking proposals carry no payment authority.** A venue owner can attach structured
+  revised terms or a deposit request to a booking-thread message
+  (`BookingProposalAttachment`, composed by `src/lib/spaces/bookingProposals.ts`). Nothing
+  in this path moves money — Foundry has no payment integration (Phase 7), so a deposit
+  request is a written ask the parties settle off-platform, and
+  `formatProposalFootnote()` is the disclaimer that must render with every one. Accepting
+  records agreement only; it does not mutate the `Booking`. Do not add a `paidAt` field or
+  rename toward "charged"/"processed" — that would assert a transaction that never
+  happened. `respondToBookingProposal()` is ownership-guarded to the thread's organizer and
+  refuses to touch an already-decided proposal. `MessageThread` is now a discriminated
   union (`ProposalMessageThread | BookingMessageThread` in
   `src/lib/vendors/messages.ts`); `isThreadParticipant()` still gates every read
   regardless of kind, and `normalizeStoredThread()` must keep backfilling `kind` onto any

@@ -3,6 +3,8 @@
 import { useId } from "react";
 import Dialog from "@/components/ui/Dialog";
 import FilterFields from "./FilterFields";
+import ActiveFilterChips from "./ActiveFilterChips";
+import type { FacetCounts } from "@/lib/spaces/facets";
 import type { SearchFilters } from "@/lib/types/spaces";
 
 export default function MobileFilterDrawer({
@@ -13,6 +15,7 @@ export default function MobileFilterDrawer({
   onClearAll,
   hasActiveFilters,
   resultCount,
+  facetCounts,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +24,7 @@ export default function MobileFilterDrawer({
   onClearAll: () => void;
   hasActiveFilters: boolean;
   resultCount: number;
+  facetCounts: FacetCounts;
 }) {
   const titleId = useId();
 
@@ -49,7 +53,12 @@ export default function MobileFilterDrawer({
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-2">
-        <FilterFields filters={filters} onChange={onChange} />
+        {hasActiveFilters && (
+          <div className="border-b border-line py-4">
+            <ActiveFilterChips filters={filters} onChange={onChange} onClearAll={onClearAll} />
+          </div>
+        )}
+        <FilterFields filters={filters} onChange={onChange} facetCounts={facetCounts} />
       </div>
 
       <div className="flex items-center gap-3 border-t border-line px-5 py-4">

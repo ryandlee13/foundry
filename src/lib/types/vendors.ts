@@ -397,6 +397,41 @@ export interface BookingMessageThread extends MessageThreadBase {
 
 export type MessageThread = ProposalMessageThread | BookingMessageThread;
 
+export type BookingProposalKind = "revised_terms" | "deposit_request";
+
+export type BookingProposalStatus = "sent" | "accepted" | "declined";
+
+/**
+ * A structured offer a venue owner attaches to a booking-thread message:
+ * revised terms, or a deposit they're asking for.
+ *
+ * NOTHING HERE MOVES MONEY. Foundry has no payment integration (Phase 7,
+ * docs/IMPLEMENTATION_PLAN.md) — a deposit_request is a written request that
+ * the two parties settle off-platform, and every surface that renders one
+ * says so. Do not rename these fields toward "paid"/"charged"/"processed",
+ * and do not add a `paidAt` — that would assert a transaction that never
+ * happened. Same rule as CLAUDE.md #7's "never describe something as
+ * verified", applied to money.
+ */
+export interface BookingProposalAttachment {
+  kind: BookingProposalKind;
+  /** "HH:mm" — revised booking window. Both set or neither. */
+  startTime: string | null;
+  endTime: string | null;
+  /** Revised hourly rate, in whole dollars. */
+  hourlyRate: number | null;
+  /** Owner's stated total for the revised window. An estimate, not an invoice. */
+  estimatedTotal: number | null;
+  /** Requested deposit, in whole dollars. Only meaningful for deposit_request. */
+  depositAmount: number | null;
+  /** "YYYY-MM-DD" — when the owner asks for the deposit by. */
+  dueDate: string | null;
+  note: string;
+  status: BookingProposalStatus;
+  /** ISO — when the organizer accepted or declined. Null while "sent". */
+  respondedAt: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   threadId: string;
@@ -404,6 +439,8 @@ export interface ChatMessage {
   body: string;
   createdAt: string;
   readBy: string[];
+  /** Present only on booking threads, and only on messages the venue owner sent. */
+  proposal?: BookingProposalAttachment;
 }
 
 export interface VendorGigFilters {

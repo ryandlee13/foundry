@@ -1,6 +1,6 @@
 import { getBookingById, updateBookingStatus, getBookingVenueOwnerId } from "./bookings";
 import { getVenueBySlugAnywhere } from "./submittedVenues";
-import { getOrCreateThreadForBooking } from "@/lib/vendors/messages";
+import { getOrCreateThreadForBooking, sendMessage } from "@/lib/vendors/messages";
 import { createNotification } from "@/lib/vendors/notifications";
 import type { Booking } from "@/lib/types/spaces";
 import type { BookingMessageThread } from "@/lib/types/vendors";
@@ -52,16 +52,26 @@ export interface StartBookingConversationResult {
 }
 
 /**
- * HOST-ONLY. Throws when the actor isn't the venue owner, or the booking
- * isn't confirmed. The venue mirror of "a vendor can never create a
- * thread" — an organizer can never create a booking thread, only reply once
- * the host has opened one. See docs/SECURITY.md "Chat unlock timing".
+ * Shared host-only gate for opening a booking thread.
+ *
+ * The invariant that matters is HOST-INITIATED, not "confirmed": an organizer
+ * may never create a booking thread, only reply once the host has opened one
+ * (docs/SECURITY.md "Chat unlock timing"). `allowedStatuses` varies because a
+ * host legitimately needs to ask a question *before* deciding, while the
+ * accept-flow's "Go to messages" only makes sense once confirmed.
+ *
+ * A declined booking is excluded from both — once the host says no, the
+ * channel doesn't open.
  */
-export function startBookingConversation(bookingId: string, actorAccountId: string): StartBookingConversationResult {
+function openBookingThreadAsHost(
+  bookingId: string,
+  actorAccountId: string,
+  allowedStatuses: Booking["status"][]
+): StartBookingConversationResult {
   const booking = getBookingById(bookingId);
   if (!booking) throw new Error("Booking not found.");
-  if (booking.status !== "confirmed") {
-    throw new Error("Only a confirmed booking can start a conversation.");
+  if (!allowedStatuses.includes(booking.status)) {
+    throw new Error("This booking can't start a conversation right now.");
   }
 
   const venueOwnerId = getBookingVenueOwnerId(booking);
@@ -80,4 +90,44 @@ export function startBookingConversation(bookingId: string, actorAccountId: stri
   });
 
   return { booking, thread };
+}
+
+/**
+ * HOST-ONLY. Throws when the actor isn't the venue owner, or the booking
+ * isn't confirmed. Used by "Go to messages" after an accept.
+ */
+export function startBookingConversation(bookingId: string, actorAccountId: string): StartBookingConversationResult {
+  return openBookingThreadAsHost(bookingId, actorAccountId, ["confirmed"]);
+}
+
+/**
+ * HOST-ONLY. Opens a thread on a booking the host hasn't decided yet and
+ * sends their opening question, so "I need more detail before I accept" isn't
+ * forced through accept-or-decline.
+ *
+ * Deliberately leaves the booking `pending`: asking a question is not a
+ * decision, and auto-confirming to unlock chat would make the accept
+ * meaningless. Still host-initiated, so the "Chat unlock timing" rule holds.
+ */
+export function startBookingInquiry(
+  bookingId: string,
+  actorAccountId: string,
+  question: string
+): StartBookingConversationResult {
+  const trimmed = question.trim();
+  if (!trimmed) throw new Error("Enter a question to send.");
+
+  const result = openBookingThreadAsHost(bookingId, actorAccountId, ["pending", "confirmed"]);
+
+  sendMessage({ threadId: result.thread.id, senderId: actorAccountId, body: trimmed });
+
+  createNotification({
+    recipientId: result.booking.organizerId,
+    type: "venue_booking_requested",
+    title: `${result.booking.venueName} has a question`,
+    body: "The host asked for more detail before confirming your request.",
+    link: `/dashboard/messages/${result.thread.id}`,
+  });
+
+  return result;
 }

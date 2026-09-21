@@ -54,7 +54,15 @@ export const venueFormSchema = z
     tagline: z.string().min(5, "Add a short one-line tagline"),
     description: z.string().min(20, "Tell organizers a bit more about the space"),
     address: z.string().min(5, "Enter the venue's street address"),
-    spaceType: z.enum(SPACE_TYPE_VALUES),
+    // No default is pre-selected in the form, so an owner who skips this hits
+    // a validation error instead of silently publishing as a "loft". Discover
+    // Spaces filters on spaceType, so a wrong one is worse than none. The
+    // preprocess turns the select's empty placeholder into undefined — same
+    // pattern as bookingIncrementMinutes below.
+    spaceType: z.preprocess(
+      (value) => (value === "" || value === null ? undefined : value),
+      z.enum(SPACE_TYPE_VALUES, { message: "Pick the type of space this is" })
+    ),
     eventTypes: z.array(z.enum(EVENT_TYPE_VALUES)).min(1, "Pick at least one event type"),
     maxCapacity: z.coerce.number().int().min(1, "Enter a max capacity"),
     seatedCapacity: z.coerce.number().int().min(1, "Enter a seated capacity"),
@@ -73,9 +81,24 @@ export const venueFormSchema = z
     ),
     capacityNegotiable: z.boolean(),
     minBookingHoursNegotiable: z.boolean(),
-    amenities: z.array(z.enum(AMENITY_VALUES)),
+    amenities: z
+      .array(z.enum(AMENITY_VALUES))
+      .min(1, "Pick at least one amenity so your space can be found"),
     amenityNotes: z.record(z.string(), z.string()),
-    rules: z.record(z.string(), z.boolean()),
+    /**
+     * Every policy needs an explicit answer, not a default.
+     *
+     * As plain checkboxes, an unticked box meant both "no" and "never looked",
+     * and the two are not the same: a space that genuinely forbids alcohol and
+     * one whose owner skipped the section produced identical data, and
+     * planners filter on it. The form renders Yes/No per policy and this
+     * refine is what stops a half-answered set from publishing.
+     */
+    rules: z
+      .record(z.string(), z.boolean())
+      .refine((value) => RULE_KEYS.every((key) => typeof value[key] === "boolean"), {
+        message: "Answer yes or no for each policy",
+      }),
   })
   .refine((data) => data.maxHourlyRate >= data.minHourlyRate, {
     message: "Max rate should be at least the min rate",
@@ -98,7 +121,8 @@ export const VENUE_FORM_DEFAULT_VALUES: VenueFormInput = {
   tagline: "",
   description: "",
   address: "",
-  spaceType: "loft",
+  // Intentionally unset — see the schema note on spaceType.
+  spaceType: "",
   eventTypes: [],
   maxCapacity: 50,
   seatedCapacity: 30,

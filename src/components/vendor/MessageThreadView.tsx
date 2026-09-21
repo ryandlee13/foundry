@@ -8,6 +8,7 @@ import {
   getThreadById,
   getMessagesForThread,
   sendMessage,
+  respondToBookingProposal,
   markThreadRead,
   isThreadParticipant,
   isProposalThread,
@@ -19,6 +20,9 @@ import { getEffectiveProposalStatus } from "@/lib/vendors/expiration";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { getBookingById, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
+import BookingProposalCard from "@/components/dashboard/BookingProposalCard";
+import BookingProposalComposer from "@/components/dashboard/BookingProposalComposer";
+import type { BookingProposalAttachment } from "@/lib/types/vendors";
 import { getSkillName } from "@/lib/vendors/skills";
 import { ENGAGEMENT_STATUS_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
 import LoadingState from "@/components/ui/LoadingState";
@@ -135,6 +139,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
   const [draft, setDraft] = useState("");
   const [confirmingFinalize, setConfirmingFinalize] = useState(false);
+  const [composingProposal, setComposingProposal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -203,6 +208,20 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
     refresh();
   }
 
+  /** Venue-owner-only: attaches structured terms or a deposit ask to a message. */
+  function handleSendProposal(attachment: BookingProposalAttachment, body: string) {
+    if (!user) return;
+    sendMessage({ threadId, senderId: user.id, body, proposal: attachment });
+    setComposingProposal(false);
+    refresh();
+  }
+
+  function handleRespondToProposal(messageId: string, status: "accepted" | "declined") {
+    if (!user) return;
+    respondToBookingProposal(messageId, user.id, status);
+    refresh();
+  }
+
   function handleFinalize(terms?: FinalizeDealTerms) {
     if (!proposal) return;
     try {
@@ -256,8 +275,17 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
             const isMine = message.senderId === user.id;
             return (
               <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm ${isMine ? "bg-wine text-paper" : "bg-paper-dim text-ink"}`}>
+                <div className={`max-w-[75%] ${message.proposal ? "w-full max-w-[85%]" : ""} rounded-2xl px-3.5 py-2.5 text-sm ${isMine ? "bg-wine text-paper" : "bg-paper-dim text-ink"}`}>
                   <p>{message.body}</p>
+                  {message.proposal && (
+                    <div className="mt-2">
+                      <BookingProposalCard
+                        proposal={message.proposal}
+                        canRespond={thread !== null && thread.organizerId === user?.id}
+                        onRespond={(status) => handleRespondToProposal(message.id, status)}
+                      />
+                    </div>
+                  )}
                   <p className={`mt-1 text-[10px] ${isMine ? "text-paper/70" : "text-ink-soft"}`}>
                     {new Date(message.createdAt).toLocaleString()}
                   </p>
@@ -268,6 +296,31 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/*
+        Booking threads only, and only for the venue owner (the counterparty
+        on a booking thread). A planner can't send themselves a deposit
+        request, and none of this belongs on a vendor-proposal thread, which
+        has its own AgreedTerms flow.
+      */}
+      {booking !== null && thread.counterpartyId === user.id && (
+        <div className="mt-4">
+          {composingProposal ? (
+            <BookingProposalComposer
+              onSend={handleSendProposal}
+              onCancel={() => setComposingProposal(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setComposingProposal(true)}
+              className="w-full rounded-full border border-line bg-paper px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+            >
+              Send updated proposal or deposit request
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 flex gap-2">
         <input

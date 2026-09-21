@@ -83,17 +83,36 @@ export default function VenueDashboard({ accountId }: { accountId: string }) {
         booked, not from money collected.
       </p>
 
-      <VenueProfileSummary venues={venues} onToggleVisibility={handleToggleVisibility} />
+      {/*
+        Booking requests lead. Listing management used to sit at the top with
+        a "List another space" call to action, which made an owner who already
+        has listings land on a page asking them to create more — the work
+        waiting on them is the requests.
+      */}
+      {pendingCount > 0 && (
+        <section className="rounded-2xl border border-brass/50 bg-brass/5 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-ink">
+                {pendingCount} booking request{pendingCount === 1 ? "" : "s"} waiting
+              </h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Accept, decline, or ask the planner for more detail.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/venue"
+              className="rounded-full bg-wine px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+            >
+              Review requests
+            </Link>
+          </div>
+        </section>
+      )}
 
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold text-ink">Upcoming events</h2>
-          <Link
-            href="/list-your-venue"
-            className="rounded-full bg-wine px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-          >
-            List another space
-          </Link>
         </div>
 
         {upcoming.length === 0 ? (
@@ -108,6 +127,10 @@ export default function VenueDashboard({ accountId }: { accountId: string }) {
           </ul>
         )}
       </section>
+
+      {/* Listing management sits below the work now — "List another space"
+          moved into this section's own header for the same reason. */}
+      <VenueProfileSummary venues={venues} onToggleVisibility={handleToggleVisibility} />
 
       <section className="rounded-2xl border border-line bg-paper p-5">
         <h2 className="font-display text-lg font-semibold text-ink">Subscription</h2>

@@ -26,12 +26,20 @@ export default function VenueProfileSummary({
         <h2 className="font-display text-lg font-semibold text-ink">
           {venues.length === 1 ? "Your venue" : "Your venues"}
         </h2>
-        <Link
-          href="/dashboard/venue"
-          className="text-xs font-semibold text-brass-dark transition-colors hover:underline"
-        >
-          Manage bookings →
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/list-your-venue"
+            className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            List another space
+          </Link>
+          <Link
+            href="/dashboard/venue"
+            className="text-xs font-semibold text-brass-dark transition-colors hover:underline"
+          >
+            Manage bookings →
+          </Link>
+        </div>
       </div>
 
       <ul className="mt-4 space-y-3">

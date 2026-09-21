@@ -1,4 +1,11 @@
-import type { BookingMessageThread, ChatMessage, MessageThread, ProposalMessageThread } from "@/lib/types/vendors";
+import type {
+  BookingMessageThread,
+  BookingProposalAttachment,
+  BookingProposalStatus,
+  ChatMessage,
+  MessageThread,
+  ProposalMessageThread,
+} from "@/lib/types/vendors";
 import { createNotification } from "./notifications";
 
 /**
@@ -229,7 +236,13 @@ export function getMessagesForThread(threadId: string): ChatMessage[] {
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
-export function sendMessage(input: { threadId: string; senderId: string; body: string }): ChatMessage {
+export function sendMessage(input: {
+  threadId: string;
+  senderId: string;
+  body: string;
+  /** Booking threads only — a venue owner's structured terms or deposit request. */
+  proposal?: BookingProposalAttachment;
+}): ChatMessage {
   const message: ChatMessage = {
     id: crypto.randomUUID(),
     threadId: input.threadId,
@@ -237,6 +250,7 @@ export function sendMessage(input: { threadId: string; senderId: string; body: s
     body: input.body.trim(),
     createdAt: new Date().toISOString(),
     readBy: [input.senderId],
+    ...(input.proposal ? { proposal: input.proposal } : {}),
   };
   saveMessages([...getMessagesRaw(), message]);
 
@@ -267,4 +281,43 @@ export function markThreadRead(threadId: string, readerId: string): void {
 
 export function getUnreadMessageCount(threadId: string, readerId: string): number {
   return getMessagesForThread(threadId).filter((message) => !message.readBy.includes(readerId)).length;
+}
+
+/**
+ * Records the organizer's answer to a venue owner's proposal.
+ *
+ * Ownership-guarded: only the thread's organizer can respond, and only while
+ * the proposal is still open — a decided proposal is an immutable record of
+ * what both sides agreed, not a toggle. Accepting does NOT alter the booking
+ * or move any money; see bookingProposals.ts for why that's deliberate.
+ */
+export function respondToBookingProposal(
+  messageId: string,
+  actorAccountId: string,
+  status: Extract<BookingProposalStatus, "accepted" | "declined">
+): ChatMessage | undefined {
+  const messages = getMessagesRaw();
+  const target = messages.find((message) => message.id === messageId);
+  if (!target?.proposal || target.proposal.status !== "sent") return undefined;
+
+  const thread = getThreadById(target.threadId);
+  if (!thread || thread.organizerId !== actorAccountId) return undefined;
+
+  const proposal: BookingProposalAttachment = {
+    ...target.proposal,
+    status,
+    respondedAt: new Date().toISOString(),
+  };
+  const updated: ChatMessage = { ...target, proposal };
+  saveMessages(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  createNotification({
+    recipientId: thread.counterpartyId,
+    type: "new_message",
+    title: status === "accepted" ? "Your proposal was accepted" : "Your proposal was declined",
+    body: proposal.note,
+    link: `/dashboard/messages/${target.threadId}`,
+  });
+
+  return updated;
 }

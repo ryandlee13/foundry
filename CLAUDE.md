@@ -184,6 +184,20 @@ now rather than waiting.
   real — it sums confirmed `AgreedTerms` amounts — but it inherits `computeRosterSpend()`'s
   rule that `hourly`/`day_rate`/`contact_for_quote` amounts are rates, not totals, and
   reports those separately rather than summing them.
+- **Venue owners can ask before deciding, and can send terms/deposit asks in-thread.**
+  `startBookingInquiry()` (`src/lib/spaces/bookingWorkflow.ts`) opens a booking thread on a
+  *pending* request and sends the host's question, leaving the booking pending — asking is
+  not a decision. It shares one host-only gate with `startBookingConversation()`; the
+  invariant is host-initiated, not "confirmed" (see `docs/SECURITY.md`). Inside a booking
+  thread the owner can attach a `BookingProposalAttachment` (revised terms, or a deposit
+  request) built by `src/lib/spaces/bookingProposals.ts`. **No money moves anywhere** —
+  Phase 7 hasn't landed, so a deposit request is a written ask settled off-platform and
+  `formatProposalFootnote()` must render with every one. Accepting records agreement; it
+  does not mutate the `Booking`. Don't add a `paidAt`.
+- **Venue dashboard order is deliberate:** KPIs → pending booking requests → upcoming
+  events → your venues → subscription. Listing management used to sit at the top with a
+  "List another space" CTA, which made an owner who already has listings land on a page
+  asking them to create more, when the work waiting on them is the requests.
 - **Host-initiated messaging.** A booking thread (`BookingMessageThread`, part of the
   `MessageThread` discriminated union in `src/lib/vendors/messages.ts`) can only be
   created by `startBookingConversation()` in `src/lib/spaces/bookingWorkflow.ts`, which

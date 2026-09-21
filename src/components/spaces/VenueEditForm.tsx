@@ -12,12 +12,10 @@ import { resizeImageFiles } from "@/lib/spaces/imageResize";
 import {
   AMENITY_ENTRIES_ALPHABETICAL,
   EVENT_TYPE_LABELS,
-  RULE_LABELS,
   SPACE_TYPE_LABELS,
 } from "@/lib/spaces/labels";
 import {
   venueFormSchema,
-  RULE_KEYS,
   SPACE_TYPE_VALUES,
   BOOKING_INCREMENT_OPTIONS,
   MIN_PHOTOS,
@@ -25,6 +23,7 @@ import {
   MAX_PHOTO_FILE_SIZE_MB,
   type VenueFormInput,
 } from "@/lib/spaces/venueFormSchema";
+import PolicyAnswers, { fieldErrorMessage } from "./PolicyAnswers";
 import type { AmenityKey, EventType, Venue, VenueRules } from "@/lib/types/spaces";
 
 function Required() {
@@ -117,6 +116,7 @@ export default function VenueEditForm({ venue }: { venue: Venue }) {
 
   const selectedAmenities = useWatch({ control, name: "amenities" });
   const amenityNotes = useWatch({ control, name: "amenityNotes" });
+  const watchedRules = useWatch({ control, name: "rules" });
 
   function toggleAmenity(value: AmenityKey) {
     const next = selectedAmenities.includes(value)
@@ -593,17 +593,11 @@ export default function VenueEditForm({ venue }: { venue: Venue }) {
           </div>
         </div>
 
-        <div>
-          <p className="text-sm font-medium text-ink">Venue rules & requirements</p>
-          <div className="mt-2 grid gap-2.5">
-            {RULE_KEYS.map((key) => (
-              <label key={key} className="flex items-center gap-2.5 text-sm text-ink">
-                <input type="checkbox" {...register(`rules.${key}` as const)} className="h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass" />
-                {RULE_LABELS[key]}
-              </label>
-            ))}
-          </div>
-        </div>
+        <PolicyAnswers
+          value={watchedRules}
+          onChange={(key, answer) => setValue(`rules.${key}` as const, answer)}
+          error={fieldErrorMessage(errors.rules)}
+        />
 
         <div className="flex gap-3">
           <button

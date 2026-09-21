@@ -18,7 +18,6 @@ import { resizeImageFiles } from "@/lib/spaces/imageResize";
 import {
   AMENITY_ENTRIES_ALPHABETICAL,
   EVENT_TYPE_LABELS,
-  RULE_LABELS,
   SPACE_TYPE_LABELS,
 } from "@/lib/spaces/labels";
 import {
@@ -26,7 +25,6 @@ import {
   VENUE_FORM_DEFAULT_VALUES,
   STEP_1_FIELDS,
   STEP_2_FIELDS,
-  RULE_KEYS,
   SPACE_TYPE_VALUES,
   BOOKING_INCREMENT_OPTIONS,
   MIN_PHOTOS,
@@ -41,6 +39,7 @@ import {
   VENUE_SUBSCRIPTION_PLACEHOLDER_COPY,
 } from "@/lib/spaces/venueBilling";
 import VenueListingReview from "./VenueListingReview";
+import PolicyAnswers, { fieldErrorMessage } from "./PolicyAnswers";
 import LoadingState from "@/components/ui/LoadingState";
 import type {
   AmenityKey,
@@ -117,6 +116,7 @@ export default function VenueSubmissionForm() {
 
   const selectedAmenities = useWatch({ control, name: "amenities" });
   const amenityNotes = useWatch({ control, name: "amenityNotes" });
+  const watchedRules = useWatch({ control, name: "rules" });
 
   function toggleAmenity(value: AmenityKey) {
     const next = selectedAmenities.includes(value)
@@ -430,12 +430,18 @@ export default function VenueSubmissionForm() {
                   {...register("spaceType")}
                   className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
                 >
+                  {/* Empty placeholder, so nothing is chosen on the owner's
+                      behalf — planners filter on this. */}
+                  <option value="">Select a space type…</option>
                   {SPACE_TYPE_VALUES.map((value) => (
                     <option key={value} value={value}>
                       {SPACE_TYPE_LABELS[value]}
                     </option>
                   ))}
                 </select>
+                {errors.spaceType && (
+                  <p className="mt-1 text-xs text-wine">{errors.spaceType.message}</p>
+                )}
               </div>
             </div>
 
@@ -823,21 +829,11 @@ export default function VenueSubmissionForm() {
               </div>
             </div>
 
-            <div>
-              <p className="text-sm font-medium text-ink">Venue rules & requirements</p>
-              <div className="mt-2 grid gap-2.5">
-                {RULE_KEYS.map((key) => (
-                  <label key={key} className="flex items-center gap-2.5 text-sm text-ink">
-                    <input
-                      type="checkbox"
-                      {...register(`rules.${key}` as const)}
-                      className="h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
-                    />
-                    {RULE_LABELS[key]}
-                  </label>
-                ))}
-              </div>
-            </div>
+            <PolicyAnswers
+              value={watchedRules}
+              onChange={(key, answer) => setValue(`rules.${key}` as const, answer)}
+              error={fieldErrorMessage(errors.rules)}
+            />
 
             <div className="flex gap-3">
               <button

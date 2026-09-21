@@ -5,7 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useOwnedVenuesData } from "@/hooks/useOwnedVenuesData";
-import { acceptBookingRequest, declineBookingRequest, startBookingConversation } from "@/lib/spaces/bookingWorkflow";
+import {
+  acceptBookingRequest,
+  declineBookingRequest,
+  startBookingConversation,
+  startBookingInquiry,
+} from "@/lib/spaces/bookingWorkflow";
 import { formatEventDate } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getBillingActivationForOwner } from "@/lib/spaces/venueBilling";
@@ -23,6 +28,7 @@ export default function VenueDashboardPage() {
   const router = useRouter();
   const { loaded, venues, bookingsByVenue, threadIdByBooking, unreadByBooking, refresh } = useOwnedVenuesData(user?.id);
   const [reviewing, setReviewing] = useState<{ booking: Booking; venue: Venue } | null>(null);
+  const [inquiryError, setInquiryError] = useState<string | null>(null);
 
   const billingActivation = user ? getBillingActivationForOwner(user.id) : undefined;
 
@@ -46,6 +52,19 @@ export default function VenueDashboardPage() {
     declineBookingRequest(reviewing.booking.id);
     refresh();
     setReviewing(null);
+  }
+
+  /** Opens the booking thread with the host's question; the request stays pending. */
+  function handleAskQuestion(question: string) {
+    if (!reviewing || !user) return;
+    setInquiryError(null);
+    try {
+      const { thread } = startBookingInquiry(reviewing.booking.id, user.id, question);
+      setReviewing(null);
+      router.push(`/dashboard/messages/${thread.id}`);
+    } catch (error) {
+      setInquiryError(error instanceof Error ? error.message : "Couldn't send that question.");
+    }
   }
 
   function handleGoToMessages(bookingId: string) {
@@ -238,12 +257,15 @@ export default function VenueDashboardPage() {
       </div>
 
       <BookingRequestReviewModal
+        key={reviewing?.booking.id ?? "none"}
         booking={reviewing?.booking ?? null}
         venue={reviewing?.venue ?? null}
         open={reviewing !== null}
         onClose={() => setReviewing(null)}
         onAccept={handleAccept}
         onDecline={handleDecline}
+        onAskQuestion={handleAskQuestion}
+        inquiryError={inquiryError}
       />
     </div>
   );

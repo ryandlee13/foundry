@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSpacesFilters } from "@/hooks/useSpacesFilters";
 import { applyFilters, countActiveFilters } from "@/lib/spaces/filters";
+import { computeFacetCounts } from "@/lib/spaces/facets";
 import { sortVenues } from "@/lib/spaces/sort";
 import { RADIUS_OPTIONS_MILES, type Venue } from "@/lib/types/spaces";
 import { VENUES } from "@/lib/spaces/venues";
@@ -35,28 +36,34 @@ export default function SpacesPageClient() {
     return sortVenues(filtered, filters.sort);
   }, [allVenues, filters]);
 
+  // Faceted counts for the panel — each dimension counted with its own
+  // selections lifted, so the numbers predict what ticking a box would give.
+  const facetCounts = useMemo(() => computeFacetCounts(allVenues, filters), [allVenues, filters]);
+
   const activeFilterCount = countActiveFilters(filters);
   const maxRadius = RADIUS_OPTIONS_MILES[RADIUS_OPTIONS_MILES.length - 1];
 
   return (
-    <div className="mx-auto max-w-[1680px] px-4 py-10 sm:px-6 lg:px-10 xl:px-16">
-      {/* Header */}
-      <div className="max-w-2xl">
-        <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
-          Discover spaces for your next event
-        </h1>
-        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-          Browse San Francisco venues by location, capacity, price, and the amenities your
-          event actually needs.
-        </p>
-      </div>
+    <div className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6 lg:px-10 xl:px-16">
+      {/* Header: title left, location/radius control right, one row. */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+            Discover spaces for your next event
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+            Browse San Francisco venues by location, capacity, price, and the amenities your
+            event actually needs.
+          </p>
+        </div>
 
-      <div className="mt-6">
-        <LocationSearch
-          locationLabel={filters.location.label}
-          radiusMiles={filters.radiusMiles}
-          onOpen={() => setLocationModalOpen(true)}
-        />
+        <div className="shrink-0">
+          <LocationSearch
+            locationLabel={filters.location.label}
+            radiusMiles={filters.radiusMiles}
+            onOpen={() => setLocationModalOpen(true)}
+          />
+        </div>
       </div>
 
       <LocationMapModal
@@ -68,7 +75,7 @@ export default function SpacesPageClient() {
       />
 
       {/* Toolbar */}
-      <div className="mt-8 border-t border-line pt-6">
+      <div className="mt-5 border-t border-line pt-5">
         <ResultsToolbar
           resultCount={results.length}
           locationLabel={filters.location.label}
@@ -81,20 +88,28 @@ export default function SpacesPageClient() {
           activeFilterCount={activeFilterCount}
         />
 
+        {/*
+          Below lg the sidebar is gone and the drawer is closed, so this is the
+          only place the active filters are visible. At lg and up the sidebar
+          shows the same chips at the top of the panel — rendering both would
+          put the identical row on screen twice.
+        */}
         {activeFilterCount > 0 && (
-          <div className="mt-4">
+          <div className="mt-4 lg:hidden">
             <ActiveFilterChips filters={filters} onChange={updateFilters} onClearAll={clearAll} />
           </div>
         )}
       </div>
 
       {/* Filters + results */}
-      <div className="mt-6 flex gap-8">
+      <div className="mt-5 flex gap-8">
         <FilterSidebar
           filters={filters}
           onChange={updateFilters}
           onClearAll={clearAll}
           hasActiveFilters={activeFilterCount > 0}
+          facetCounts={facetCounts}
+          resultCount={results.length}
         />
 
         <div className="min-w-0 flex-1">
@@ -122,6 +137,7 @@ export default function SpacesPageClient() {
         onClearAll={clearAll}
         hasActiveFilters={activeFilterCount > 0}
         resultCount={results.length}
+        facetCounts={facetCounts}
       />
     </div>
   );

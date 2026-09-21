@@ -21,6 +21,8 @@ export default function BookingRequestReviewModal({
   onClose,
   onAccept,
   onDecline,
+  onAskQuestion,
+  inquiryError,
 }: {
   booking: Booking | null;
   venue: Venue | null;
@@ -28,10 +30,16 @@ export default function BookingRequestReviewModal({
   onClose: () => void;
   onAccept: () => void;
   onDecline: () => void;
+  onAskQuestion: (question: string) => void;
+  inquiryError?: string | null;
 }) {
   const titleId = useId();
   const [organizer, setOrganizer] = useState<Account | null>(null);
   const [pastRentals, setPastRentals] = useState<Booking[]>([]);
+  // The parent keys this modal by booking id, so opening a different request
+  // remounts it and these start fresh — no reset-on-close effect needed.
+  const [askOpen, setAskOpen] = useState(false);
+  const [question, setQuestion] = useState("");
 
   useEffect(() => {
     if (!open || !booking) return;
@@ -144,7 +152,61 @@ export default function BookingRequestReviewModal({
         </div>
       )}
 
-      <div className="mt-6 flex gap-3">
+      {/*
+        A third way out of accept-or-decline: ask first. Sending a question
+        opens the booking thread and leaves the request pending — asking is
+        not a decision, so it deliberately doesn't confirm the booking just to
+        unlock chat (see startBookingInquiry in bookingWorkflow.ts).
+      */}
+      <div className="mt-6 rounded-xl border border-line bg-paper-dim p-4">
+        {askOpen ? (
+          <>
+            <label htmlFor="booking-inquiry" className="block text-sm font-medium text-ink">
+              Ask the planner a question
+            </label>
+            <textarea
+              id="booking-inquiry"
+              rows={3}
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="How many guests are you expecting to stay past midnight? Are you bringing your own sound?"
+              className="mt-1.5 w-full resize-none rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+            />
+            {inquiryError && <p className="mt-1 text-xs text-wine">{inquiryError}</p>}
+            <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+              This opens a message thread and leaves the request pending — you can still accept or
+              decline afterwards.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAskOpen(false)}
+                className="rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-paper"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onAskQuestion(question)}
+                disabled={!question.trim()}
+                className="flex-1 rounded-full bg-wine px-4 py-2 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Send question
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAskOpen(true)}
+            className="w-full rounded-full border border-line bg-paper px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            Inquire further information
+          </button>
+        )}
+      </div>
+
+      <div className="mt-4 flex gap-3">
         <button
           type="button"
           onClick={onDecline}

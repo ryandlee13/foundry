@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BADGE_LABELS, SPACE_TYPE_LABELS } from "@/lib/spaces/labels";
 import { formatDistanceMiles } from "@/lib/spaces/distance";
+import { getEventsDoneForVenue } from "@/lib/spaces/reviews";
 import VenueAmenityList from "./VenueAmenityList";
 import VenueImagePlaceholder from "./VenueImagePlaceholder";
 import type { VenueWithDistance } from "@/lib/types/spaces";
@@ -14,6 +15,17 @@ function formatPriceRange(min: number, max: number): string {
 
 export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
   const [saved, setSaved] = useState(false);
+
+  /*
+   * Events-hosted is invented filler (getEventsDoneForVenue is a hash, not a
+   * count of real bookings), so it is gated to seed venues exactly the way
+   * VenueReviews is — a real owner's freshly-submitted listing must never
+   * claim events it hasn't had. Same gate, same reason: see CLAUDE.md's
+   * placeholder-copy rule. Replace with a real booking count, don't widen
+   * the gate.
+   */
+  const isSeedVenue = venue.ownerId === null;
+  const eventsHosted = isSeedVenue ? getEventsDoneForVenue(venue.id) : null;
 
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
@@ -78,6 +90,12 @@ export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
             </span>
           </span>
         </div>
+
+        {eventsHosted !== null && (
+          <p className="mt-2 text-xs text-ink-soft">
+            <span className="font-semibold text-ink">{eventsHosted}</span> events hosted here
+          </p>
+        )}
       </div>
 
       <Link href={`/spaces/${venue.slug}`} className="absolute inset-0" aria-label={`View ${venue.name}`} />
