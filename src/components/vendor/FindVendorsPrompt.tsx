@@ -19,7 +19,21 @@ export default function FindVendorsPrompt({
   booking: Booking;
   onOpenBuilder: () => void;
 }) {
-  if (booking.status !== "confirmed") return null;
+  /*
+   * Vendor requests are anchored to a confirmed booking, so an unconfirmed
+   * one explains itself rather than rendering nothing. This panel is now the
+   * page's only way into the builder — returning null here would leave an
+   * organizer on a page with no action and no reason given.
+   */
+  if (booking.status !== "confirmed") {
+    return (
+      <div className="rounded-2xl border border-dashed border-line px-8 py-8 text-center">
+        <p className="text-sm text-ink-soft">
+          You can post vendor requests once {booking.venueName} confirms this booking.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-line bg-gradient-to-br from-paper to-paper-dim p-8 text-center">

@@ -157,20 +157,14 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
         ← Back to organizer dashboard
       </Link>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Find vendors</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {formatEventLabel(booking)} · {formatTimeRange(booking.startTime, booking.endTime)}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setFormOpen(true)}
-          className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-        >
-          Looking for a ___
-        </button>
+      {/* Single entry point: the Find Vendors panel below. This row used to
+          carry a duplicate "Looking for a ___" button sitting directly above
+          it, which offered the same action twice under two different names. */}
+      <div className="mt-4">
+        <h1 className="font-display text-2xl font-semibold text-ink">Find vendors</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          {formatEventLabel(booking)} · {formatTimeRange(booking.startTime, booking.endTime)}
+        </p>
       </div>
 
       <div className="mt-6">
@@ -181,7 +175,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
         {needs.length === 0 ? (
           <EmptyState
             title="No vendor requests yet"
-            description={`Post "Looking for a ___" to start receiving proposals from matching vendors.`}
+            description="Post what you need to start receiving proposals from matching vendors."
           />
         ) : (
           <ul className="space-y-3">
