@@ -64,7 +64,23 @@ export type VenueBadge = "new" | "popular" | "nightlife";
 export interface Venue {
   id: string;
   slug: string;
+  /**
+   * The PUBLIC listing title — a description of the space ("Sunlit Mission
+   * loft with a rooftop deck"), deliberately not the operating name. Keeping
+   * the trading name off the listing is what stops a planner from finding the
+   * venue on Google and booking around Foundry. The slug derives from this, so
+   * the URL doesn't leak the real name either.
+   */
   name: string;
+  /**
+   * The venue's actual operating name. Private, on the same footing as
+   * `exactAddress`: never rendered on a public or anonymous-reachable surface.
+   * Disclosed to a planner only once their booking is confirmed — go through
+   * resolveVenueDisclosure() in venueIdentity.ts, never read this field
+   * directly in a component. Undefined on seed venues and on listings that
+   * predate this field.
+   */
+  realName?: string;
   tagline: string;
   description: string;
   neighborhood: string;
@@ -95,7 +111,9 @@ export interface Venue {
   /**
    * Collected at submission but never rendered on any public page or card —
    * see docs/SECURITY.md #5. Only the derived `neighborhood` above is shown
-   * publicly.
+   * publicly. Disclosed to the planner on a *confirmed* booking (and always to
+   * the owner) via resolveVenueDisclosure() in venueIdentity.ts — that
+   * function is the only place allowed to hand this value to a view.
    */
   exactAddress: string;
   /** Real uploaded photo data URLs (compressed client-side). Undefined for seed venues, which use the gradient placeholder instead. Minimum 7 enforced at submission. */

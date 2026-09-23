@@ -154,6 +154,13 @@ export function adoptSeedVenues(ownerId: string, seedVenueIds: string[], publish
     return submitted.filter((venue) => seedVenueIds.includes(venue.id));
   }
 
+  /*
+   * Deliberately no `realName`: the seed listings predate the public-title /
+   * private-name split and their names are already the public-facing ones.
+   * Inventing an operating name here would be fiction presented as the venue's
+   * real identity. A planner with a confirmed booking still gets the address
+   * reveal; only listings submitted through the form carry a real name.
+   */
   const adopted = toAdopt.map((seed) => ({ ...seed, ownerId, publishedAt }));
   saveSubmittedVenues([...submitted, ...adopted]);
   return adopted;

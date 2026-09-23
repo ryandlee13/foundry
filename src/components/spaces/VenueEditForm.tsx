@@ -63,6 +63,10 @@ function CheckboxGrid<T extends string>({
 
 function venueToFormValues(venue: Venue): VenueFormInput {
   return {
+    // Listings that predate the private-name split have no realName. Seeding
+    // the field with the public title would republish the leak the split
+    // exists to prevent, so it starts blank and the owner has to state it.
+    realName: venue.realName ?? "",
     name: venue.name,
     tagline: venue.tagline,
     description: venue.description,
@@ -187,6 +191,7 @@ export default function VenueEditForm({ venue }: { venue: Venue }) {
 
     try {
       updateSubmittedVenue(venue.id, {
+        realName: values.realName,
         name: values.name,
         tagline: values.tagline,
         description: values.description,
@@ -240,8 +245,24 @@ export default function VenueEditForm({ venue }: { venue: Venue }) {
         {saveError && <p className="rounded-lg bg-wine/10 px-3.5 py-2.5 text-sm text-wine">{saveError}</p>}
 
         <div>
+          <label htmlFor="realName" className="block text-sm font-medium text-ink">
+            Venue&apos;s real name<Required />
+          </label>
+          <input
+            id="realName"
+            type="text"
+            {...register("realName")}
+            className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+          />
+          {errors.realName && <p className="mt-1 text-xs text-wine">{errors.realName.message}</p>}
+          <p className="mt-1 text-xs text-ink-soft">
+            Private. Shared with a planner only once you confirm their booking.
+          </p>
+        </div>
+
+        <div>
           <label htmlFor="name" className="block text-sm font-medium text-ink">
-            Space name<Required />
+            Public listing title<Required />
           </label>
           <input
             id="name"
@@ -250,6 +271,10 @@ export default function VenueEditForm({ venue }: { venue: Venue }) {
             className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
           />
           {errors.name && <p className="mt-1 text-xs text-wine">{errors.name.message}</p>}
+          <p className="mt-1 text-xs text-ink-soft">
+            Describe the space rather than naming it. Editing this doesn&apos;t change your listing&apos;s web
+            address.
+          </p>
         </div>
 
         <div>
@@ -290,7 +315,9 @@ export default function VenueEditForm({ venue }: { venue: Venue }) {
               className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
             />
             {errors.address && <p className="mt-1 text-xs text-wine">{errors.address.message}</p>}
-            <p className="mt-1 text-xs text-ink-soft">Never shown publicly — organizers only see the general area.</p>
+            <p className="mt-1 text-xs text-ink-soft">
+              Never shown publicly — planners see only the district until you confirm their booking.
+            </p>
           </div>
           <div>
             <label htmlFor="spaceType" className="block text-sm font-medium text-ink">

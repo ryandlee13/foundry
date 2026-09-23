@@ -9,7 +9,8 @@ import { getProposalsForNeed } from "@/lib/vendors/proposals";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { finalizeDeal, declineProposalWithNotification, startConversation } from "@/lib/vendors/engagements";
 import { shortlistProposal } from "@/lib/vendors/proposals";
-import { getThreadForProposal } from "@/lib/vendors/messages";
+import { getThreadForProposal, getDealProposalsForThread } from "@/lib/vendors/messages";
+import { resolveEffectiveDealTerms } from "@/lib/vendors/dealProposals";
 import { getSkillName } from "@/lib/vendors/skills";
 import { PRICING_MODEL_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
 import { formatExpiration, formatDeadlineDate, getEffectiveProposalStatus } from "@/lib/vendors/expiration";
@@ -66,6 +67,24 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
   const [confirmingAccept, setConfirmingAccept] = useState<VendorProposal | null>(null);
   const [decliningProposal, setDecliningProposal] = useState<VendorProposal | null>(null);
   const [declineReason, setDeclineReason] = useState("");
+
+  /*
+   * Finalizing from this list has to honour anything negotiated in the
+   * proposal log, not just the vendor's original bid — otherwise accepting
+   * here silently throws away the terms both sides agreed to in the thread.
+   */
+  const finalizeTerms = useMemo(() => {
+    if (!confirmingAccept) return null;
+    const thread = getThreadForProposal(confirmingAccept.id);
+    return resolveEffectiveDealTerms(
+      {
+        amount: confirmingAccept.proposedAmount,
+        pricingModel: confirmingAccept.pricingModel,
+        deliverables: confirmingAccept.deliverables,
+      },
+      thread ? getDealProposalsForThread(thread.id) : []
+    );
+  }, [confirmingAccept]);
 
   const refresh = useCallback(() => {
     const found = getEventNeedById(needId);
@@ -326,6 +345,12 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
       <FinalizeDealDialog
         open={confirmingAccept !== null}
         proposal={confirmingAccept}
+        currentTerms={{
+          amount: finalizeTerms?.amount ?? confirmingAccept?.proposedAmount ?? 0,
+          pricingModel: finalizeTerms?.pricingModel ?? confirmingAccept?.pricingModel ?? "flat_fee",
+          deliverables: finalizeTerms?.deliverables ?? confirmingAccept?.deliverables ?? "",
+        }}
+        negotiated={finalizeTerms?.negotiated ?? false}
         counterpartyName={confirmingAccept ? (vendorsById[confirmingAccept.vendorProfileId]?.displayName ?? "this vendor") : "this vendor"}
         onClose={() => setConfirmingAccept(null)}
         onFinalize={confirmAccept}

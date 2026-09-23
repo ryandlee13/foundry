@@ -8,6 +8,7 @@ import {
   getThreadsForParticipant,
   getMessagesForThread,
   getUnreadMessageCount,
+  isEventThread,
   isProposalThread,
 } from "@/lib/vendors/messages";
 import { groupThreadsByBooking } from "@/lib/vendors/threadGrouping";
@@ -40,6 +41,17 @@ interface EventGroup {
   mostRecentAt: string;
 }
 
+/** "Priya, Marcus + 1 more" — the room's other members from this viewer's seat. */
+function describeRoomMembers(participantIds: string[], viewerId: string, organizerId: string): string {
+  const names = [organizerId, ...participantIds]
+    .filter((id, index, all) => id !== viewerId && all.indexOf(id) === index)
+    .map((id) => findAccountById(id)?.name.split(" ")[0] ?? "Foundry user");
+
+  if (names.length === 0) return "Just you so far";
+  if (names.length <= 2) return names.join(" & ");
+  return `${names.slice(0, 2).join(", ")} + ${names.length - 2} more`;
+}
+
 export default function MessagesInboxPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [loaded, setLoaded] = useState(false);
@@ -50,17 +62,29 @@ export default function MessagesInboxPage() {
     const threads = getThreadsForParticipant(user.id);
 
     const resolved = threads.map((thread) => {
-      const otherId = thread.organizerId === user.id ? thread.counterpartyId : thread.organizerId;
-      const otherAccount = findAccountById(otherId);
       const messages = getMessagesForThread(thread.id);
       const last = messages[messages.length - 1];
+
+      // An event room has no single "other person" — name the room by who's in
+      // it instead of arbitrarily picking one participant.
+      const otherName = isEventThread(thread)
+        ? describeRoomMembers(thread.participantIds, user.id, thread.organizerId)
+        : (findAccountById(thread.organizerId === user.id ? thread.counterpartyId : thread.organizerId)?.name.split(
+            " "
+          )[0] ?? "Foundry user");
 
       let contextLabel: string;
       let statusLabel: string;
       let bookingId: string | null;
       let eventLabel: string;
 
-      if (isProposalThread(thread)) {
+      if (isEventThread(thread)) {
+        const booking = getBookingById(thread.bookingId);
+        statusLabel = booking ? BOOKING_STATUS_LABELS[booking.status] : "";
+        contextLabel = "Event room";
+        bookingId = thread.bookingId;
+        eventLabel = booking ? formatEventLabel(booking) : "Event room";
+      } else if (isProposalThread(thread)) {
         const need = getEventNeedById(thread.eventNeedId);
         const engagement = thread.engagementId ? getEngagementById(thread.engagementId) : undefined;
         const proposal = getProposalById(thread.proposalId);
@@ -84,7 +108,7 @@ export default function MessagesInboxPage() {
       const summary: ThreadSummary = {
         id: thread.id,
         thread,
-        otherName: otherAccount?.name.split(" ")[0] ?? "Foundry user",
+        otherName,
         contextLabel,
         statusLabel,
         lastMessage: last?.body ?? "No messages yet",
@@ -129,7 +153,8 @@ export default function MessagesInboxPage() {
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink">Messages</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        Grouped by event — start a conversation with a vendor from their proposal, or a venue host from an accepted booking.
+        Grouped by event. Talk to a vendor from their proposal or a venue host from an accepted booking — or open an
+        event room to get everyone working your event into one conversation.
       </p>
 
       <div className="mt-8 space-y-6">

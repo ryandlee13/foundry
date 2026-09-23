@@ -27,6 +27,7 @@ import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
+import EventRoomPanel from "./EventRoomPanel";
 import FindVendorsPrompt from "./FindVendorsPrompt";
 import VendorNeedsBuilder from "./VendorNeedsBuilder";
 import type { Booking } from "@/lib/types/spaces";
@@ -169,6 +170,10 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
 
       <div className="mt-6">
         <FindVendorsPrompt booking={booking} onOpenBuilder={() => setFormOpen(true)} />
+      </div>
+
+      <div className="mt-4">
+        <EventRoomPanel bookingId={booking.id} userId={user.id} />
       </div>
 
       <div className="mt-8">

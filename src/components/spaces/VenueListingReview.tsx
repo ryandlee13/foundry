@@ -23,11 +23,12 @@ function ReviewSection({ title, onEdit, children }: { title: string; onEdit: () 
 }
 
 /**
- * Read-only pre-publish summary. Renders `values.address` (the exact street
- * address) deliberately — this is the owner reviewing their own submission
- * before it's geocoded down to a public neighborhood, not a public-facing
- * component, so it's exempt from the "exact address never rendered publicly"
- * rule (docs/SECURITY.md #5). Don't copy this pattern into a public component.
+ * Read-only pre-publish summary. Renders `values.realName` and `values.address`
+ * deliberately — this is the owner reviewing their own submission, not a
+ * public-facing component, so it's exempt from the "real name and exact address
+ * are never rendered publicly" rule (docs/SECURITY.md #5). Everywhere else,
+ * go through resolveVenueDisclosure(). Don't copy this pattern into a public
+ * component.
  */
 export default function VenueListingReview({
   values,
@@ -55,9 +56,12 @@ export default function VenueListingReview({
         <p className="mt-1 text-ink-soft">{values.description}</p>
       </ReviewSection>
 
-      <ReviewSection title="Location" onEdit={() => onEditStep(1)}>
+      <ReviewSection title="Private — shared only after you confirm a booking" onEdit={() => onEditStep(1)}>
+        <p>{values.realName}</p>
         <p>{values.address}</p>
-        <p className="text-xs text-ink-soft">Shown to organizers as: {resolvedNeighborhood}</p>
+        <p className="mt-1 text-xs text-ink-soft">
+          Planners browsing Discover Spaces see your listing title and {resolvedNeighborhood} — not this.
+        </p>
       </ReviewSection>
 
       <ReviewSection title="Capacity & pricing" onEdit={() => onEditStep(1)}>

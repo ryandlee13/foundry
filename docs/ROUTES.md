@@ -98,7 +98,7 @@ header nav (For Planners / For Venues / For Vendors / About) is hidden on all
 | `/dashboard/vendor/reviews` | `vendor` | Real (prototype) — received reviews, respond/flag, toggle public Foundry event history |
 | `/dashboard/vendor/settings` *(future)* | `vendor` | Notification preferences currently only editable during onboarding, not standalone |
 | `/dashboard/messages` | any authenticated user | Real (prototype) — conversation list grouped by event/booking; covers two thread kinds: proposal threads (organizer-created, via "Start Conversation" or finalizing a deal — do not require acceptance) and booking threads (venue-owner-created only, via "Go to messages" on a confirmed booking) |
-| `/dashboard/messages/[threadId]` | thread participant only | Real (prototype) — chat, gated by `isThreadParticipant()`; header branches on thread kind (`ProposalThreadHeader`/`BookingThreadHeader`) |
+| `/dashboard/messages/[threadId]` | thread participant only | Real (prototype) — two columns: chat left, `DealLogPanel` (proposals, deal rounds, contracts) right. Gated by `isThreadParticipant()`, which resolves membership via `getThreadParticipantIds()` so N-participant event rooms work. Header branches on thread kind (`ProposalThreadHeader`/`BookingThreadHeader`/`EventThreadHeader`) |
 | `/dashboard/notifications` | any authenticated user | Real (prototype) — in-app notification list, mark read/all read |
 | `/dashboard/admin` | `admin` | Real (prototype) — vendor profile approval queue, event-need moderation, flagged-review moderation, audit log. No self-serve way to become admin (by design, mirrors `docs/DATABASE.md` §2 — grant manually) |
 | `/dashboard/admin/venues` *(future)* | `admin` | Venue approval queue |

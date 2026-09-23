@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { normalizeStoredThread, isProposalThread, isBookingThread } from "../messages";
+import {
+  normalizeStoredThread,
+  isProposalThread,
+  isBookingThread,
+  isEventThread,
+  getThreadParticipantIds,
+} from "../messages";
 
 describe("normalizeStoredThread", () => {
   it("backfills a legacy record (no kind, has proposalId + vendorOwnerId) as a proposal thread", () => {
@@ -52,6 +58,53 @@ describe("normalizeStoredThread", () => {
     expect(normalizeStoredThread(booking)).toEqual(booking);
   });
 
+  it("round-trips an event thread", () => {
+    const event = {
+      kind: "event",
+      id: "t3",
+      organizerId: "org-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      bookingId: "b1",
+      venueId: "v1",
+      participantIds: ["venue-owner-1", "dj-owner-1"],
+    };
+    expect(normalizeStoredThread(event)).toEqual(event);
+  });
+
+  it("keeps an event thread even though it has no counterpartyId", () => {
+    // The counterpartyId check runs for the two 1:1 kinds only — if it ran
+    // first, every event room would be dropped from the inbox on load.
+    const event = normalizeStoredThread({
+      kind: "event",
+      id: "t3",
+      organizerId: "org-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      bookingId: "b1",
+      venueId: "v1",
+      participantIds: ["venue-owner-1"],
+    });
+    expect(event).not.toBeNull();
+  });
+
+  it("tolerates a malformed participant list rather than dropping the room", () => {
+    const event = normalizeStoredThread({
+      kind: "event",
+      id: "t3",
+      organizerId: "org-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      bookingId: "b1",
+      venueId: "v1",
+      participantIds: ["venue-owner-1", 42, null],
+    });
+    expect(event).toMatchObject({ participantIds: ["venue-owner-1"] });
+  });
+
+  it("returns null for an event thread with no booking anchor", () => {
+    expect(
+      normalizeStoredThread({ kind: "event", id: "t3", organizerId: "org-1", createdAt: "2026-01-01", venueId: "v1" })
+    ).toBeNull();
+  });
+
   it("returns null for an unrecognizable record", () => {
     expect(normalizeStoredThread({})).toBeNull();
     expect(normalizeStoredThread(null)).toBeNull();
@@ -81,10 +134,46 @@ describe("isProposalThread / isBookingThread", () => {
     venueId: "v1",
   };
 
-  it("distinguishes proposal vs booking threads", () => {
+  const event = {
+    kind: "event" as const,
+    id: "t3",
+    organizerId: "org-1",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    bookingId: "b1",
+    venueId: "v1",
+    participantIds: ["venue-owner-1", "dj-owner-1"],
+  };
+
+  it("distinguishes all three thread kinds", () => {
     expect(isProposalThread(proposal)).toBe(true);
     expect(isProposalThread(booking)).toBe(false);
     expect(isBookingThread(booking)).toBe(true);
     expect(isBookingThread(proposal)).toBe(false);
+    expect(isEventThread(event)).toBe(true);
+    expect(isEventThread(booking)).toBe(false);
+    expect(isEventThread(proposal)).toBe(false);
+  });
+
+  describe("getThreadParticipantIds", () => {
+    it("returns both sides of a 1:1 thread, organizer first", () => {
+      expect(getThreadParticipantIds(proposal)).toEqual(["org-1", "vendor-owner-1"]);
+      expect(getThreadParticipantIds(booking)).toEqual(["org-1", "venue-owner-1"]);
+    });
+
+    it("returns the whole room for an event thread", () => {
+      expect(getThreadParticipantIds(event)).toEqual(["org-1", "venue-owner-1", "dj-owner-1"]);
+    });
+
+    it("never lists the organizer twice, even if stored in participantIds", () => {
+      // Delivery iterates this list, so a duplicate would double-notify.
+      expect(getThreadParticipantIds({ ...event, participantIds: ["org-1", "dj-owner-1"] })).toEqual([
+        "org-1",
+        "dj-owner-1",
+      ]);
+    });
+
+    it("handles a room nobody has joined yet", () => {
+      expect(getThreadParticipantIds({ ...event, participantIds: [] })).toEqual(["org-1"]);
+    });
   });
 });

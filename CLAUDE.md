@@ -35,7 +35,15 @@ choice:
    resolves it to a public neighborhood + coordinates via
    `src/lib/spaces/geocode.ts` (a heuristic stand-in for a real geocoding API — no token
    configured, see that file's header). `exactAddress` must never be rendered in any
-   component reachable from a public page.
+   component reachable from a public page. **`Venue.realName` follows the identical rule.**
+   A listing carries a public *descriptive title* (`Venue.name`) and a private *operating
+   name* (`Venue.realName`) — a listing that names the venue lets a planner search it, find
+   the venue's own site, and book off-platform. Both unlock together, and only through
+   `resolveVenueDisclosure()` in `src/lib/spaces/venueIdentity.ts`: the owner always, the
+   organizer of a **confirmed** booking at that venue, nobody else. No component reads
+   either field off a `Venue` directly (the two exceptions — the owner's own submission
+   review and edit form — say so in-file). `slug` is generated from the descriptive title so
+   the URL doesn't leak the name either.
 6. Private documents (COI, IDs, contracts, permits, security plans) live in a private
    Storage bucket and are only ever accessed via short-lived signed URLs.
 7. Never describe an uploaded document as "verified" or "approved" in a legal sense. Use
@@ -204,9 +212,45 @@ now rather than waiting.
   throws unless the caller is the venue owner on a `confirmed` booking — the mirror of "a
   vendor can never create a thread" (see `docs/SECURITY.md`'s "Chat unlock timing"). The
   planner is notified their request "moved forward" on accept but gets no thread link
-  until the owner actually clicks "Go to messages." This is the only place
-  `src/lib/spaces/*` imports from `src/lib/vendors/*` (messages + notifications); keep
-  `bookings.ts` itself free of that import so the dependency edge stays one-directional.
+  until the owner actually clicks "Go to messages." `bookingWorkflow.ts` and
+  `eventRoom.ts` are the only places `src/lib/spaces/*` imports from `src/lib/vendors/*`;
+  keep `bookings.ts` itself free of that import so the dependency edge stays
+  one-directional.
+- **The three-way event room is organizer-created — the one thread kind that is.**
+  `EventMessageThread` (`kind: "event"`) puts the planner, the venue operator, and every
+  confirmed vendor in one conversation, created only by `openEventRoom()` in
+  `src/lib/spaces/eventRoom.ts`. It requires a `confirmed` booking **and** at least one
+  confirmed vendor: a room with only the venue in it duplicates the booking thread that
+  already exists, and the three-way introduction is the whole point. Introducing a vendor
+  to a venue is the planner's call, so neither supplier can create one or add themselves.
+  Membership is additive only — `addEventThreadParticipants()` never removes anyone.
+  `EventMessageThread` deliberately has **no `counterpartyId`** (that field lives on the
+  1:1 variants); resolve membership and delivery through `getThreadParticipantIds()`, or
+  a comparison against `counterpartyId` silently excludes everyone but the venue operator.
+- **Deal terms go back and forth; committing is still one deliberate action.** Either side
+  can send a `DealProposalAttachment` on a proposal thread (composed by
+  `src/lib/vendors/dealProposals.ts`, pure), and either side can answer — the planner is no
+  longer limited to a single edit at finalize time. Sending a new round supersedes any
+  still-open one, so two sets of terms can never both read as agreed. Accepting a round
+  records agreement on numbers only: `finalizeDeal()` remains the only thing that creates
+  an engagement, and it reads `resolveEffectiveDealTerms()` so finalizing can't silently
+  revert to the vendor's original bid. Both finalize entry points (the thread and
+  `OrganizerProposalsPage`) must pass the effective terms.
+- **Venue operators can send formal contracts in-thread.** `BookingContractAttachment`
+  (composed by `src/lib/spaces/bookingContracts.ts`, pure) is written and signed by the
+  host and countersigned by the planner via `signContract()` (organizer-only, one-way).
+  Signatures are typed names. This records that two people put their names to a text on a
+  date — it is **not** a claim of legal enforceability and Foundry is not a party to it
+  (rule #7's spirit, same line `AgreedTerms` holds). `formatContractFootnote()` must render
+  on every state of every contract, and carries a `TODO(legal)`. No money moves — don't add
+  a `paidAt`.
+- **Conversations are two columns: chat left, offers right.** `MessageThreadView` renders
+  the message stream beside `DealLogPanel`, which holds every proposal, deal round, and
+  contract for that thread. Offers are message *attachments*, so the log is derived from
+  the conversation and can't drift from it. Chat bubbles show a pointer to the log rather
+  than repeating the card — numbers exist in exactly one place on screen. Mixed inline,
+  offers scroll away and people re-state figures in prose, which is the behaviour this
+  layout exists to remove.
 - None of this is real. Before a real launch, all of it needs: a real Supabase project,
   the `docs/DATABASE.md` schema (extended with space type/amenities/rules/photos columns
   and real Storage-backed uploads — see `docs/ROUTES.md`), RLS policies per
@@ -291,17 +335,21 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   records — the same limitation the whole prototype already has for venues/bookings, not a
   new risk introduced here. Real RLS-backed proposal privacy is a Phase 5 requirement, not
   optional polish.
-- **`MessageThread` (`src/lib/vendors/messages.ts`) is a discriminated union**, not one
-  shape with optional fields: `ProposalMessageThread` (`kind: "proposal"`, anchored to
-  `proposalId`/`eventNeedId`, `engagementId` starting `null` and upgraded in place once
-  finalized) or `BookingMessageThread` (`kind: "booking"`, anchored to
-  `bookingId`/`venueId`, see the host-initiated-messaging bullet above). Narrow with
-  `isProposalThread()`/`isBookingThread()` — never compare optional fields for equality to
-  tell the two apart, since `undefined === undefined` silently matches the wrong kind. The
-  shared participant field is `counterpartyId` (renamed from `vendorOwnerId`, since it can
-  now hold a venue operator's id too). `normalizeStoredThread()` backfills `kind` onto
-  threads written before this union existed — don't remove it while any local test data
-  from before this change might still be loaded. A proposal thread can only be created via
+- **`MessageThread` (`src/lib/vendors/messages.ts`) is a three-way discriminated union**,
+  not one shape with optional fields: `ProposalMessageThread` (`kind: "proposal"`, anchored
+  to `proposalId`/`eventNeedId`, `engagementId` starting `null` and upgraded in place once
+  finalized), `BookingMessageThread` (`kind: "booking"`, anchored to `bookingId`/`venueId`,
+  see the host-initiated-messaging bullet above), or `EventMessageThread` (`kind: "event"`,
+  the N-participant room — see the event-room bullet above). Narrow with
+  `isProposalThread()`/`isBookingThread()`/`isEventThread()` — never compare optional
+  fields for equality to tell them apart, since `undefined === undefined` silently matches
+  the wrong kind. `counterpartyId` (renamed from `vendorOwnerId`, since it can hold a venue
+  operator's id too) lives on the two 1:1 variants only, so a `thread.counterpartyId` read
+  that would be wrong in a room is a compile error rather than a silent bug.
+  `normalizeStoredThread()` backfills `kind` onto threads written before this union
+  existed — don't remove it while any local test data from before this change might still
+  be loaded, and keep its `kind === "event"` check ahead of the `counterpartyId`
+  requirement or every room gets dropped on load. A proposal thread can only be created via
   `getOrCreateThreadForProposal()`, called from exactly two places in `engagements.ts`:
   `startConversation()` (the organizer's pre-commitment "let's talk" action — moves the
   proposal to `in_discussion`, doesn't touch competing proposals, doesn't create an

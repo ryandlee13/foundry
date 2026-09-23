@@ -358,7 +358,11 @@ export type NotificationType =
   | "venue_booking_accepted"
   | "venue_booking_declined"
   | "terms_confirmed_by_vendor"
-  | "terms_declined_by_vendor";
+  | "terms_declined_by_vendor"
+  | "event_room_opened"
+  | "deal_terms_proposed"
+  | "contract_sent"
+  | "contract_signed";
 
 export interface AppNotification {
   id: string;
@@ -374,13 +378,23 @@ export interface AppNotification {
 interface MessageThreadBase {
   id: string;
   organizerId: string;
-  /** The other participant: a vendor profile's ownerId on a proposal thread, or the venue operator's account id on a booking thread. */
-  counterpartyId: string;
   createdAt: string;
 }
 
+/**
+ * The two-party thread shape. Deliberately NOT on MessageThreadBase: the event
+ * room has N participants and no single "other side", and a `counterpartyId`
+ * inherited by all three kinds would be read as "the other person" on a thread
+ * where that question has no answer. Always resolve participants through
+ * getThreadParticipantIds() in messages.ts.
+ */
+interface OneToOneThreadBase extends MessageThreadBase {
+  /** The other participant: a vendor profile's ownerId on a proposal thread, or the venue operator's account id on a booking thread. */
+  counterpartyId: string;
+}
+
 /** A conversation about a vendor proposal. Created only by the organizer, via startConversation() or finalizeDeal() (engagements.ts). */
-export interface ProposalMessageThread extends MessageThreadBase {
+export interface ProposalMessageThread extends OneToOneThreadBase {
   kind: "proposal";
   /** Anchors the thread — a thread exists once an organizer starts a conversation on a proposal, independent of whether it's ever finalized. */
   proposalId: string;
@@ -390,13 +404,31 @@ export interface ProposalMessageThread extends MessageThreadBase {
 }
 
 /** A conversation about a confirmed venue booking. Created only by the venue owner, via startBookingConversation() (bookingWorkflow.ts). */
-export interface BookingMessageThread extends MessageThreadBase {
+export interface BookingMessageThread extends OneToOneThreadBase {
   kind: "booking";
   bookingId: string;
   venueId: string;
 }
 
-export type MessageThread = ProposalMessageThread | BookingMessageThread;
+/**
+ * The three-way (or more) event room: the planner, the venue operator, and
+ * every vendor with a confirmed engagement on this booking, in one conversation.
+ *
+ * Created only by the organizer, via openEventRoom() in eventRoom.ts, and only
+ * once the booking is confirmed AND at least one vendor engagement is confirmed
+ * — the point at which the planner is otherwise forced into a group text off
+ * Foundry. Unlike the 1:1 kinds this has no counterpartyId; `participantIds`
+ * holds every non-organizer member and grows as more vendors confirm.
+ */
+export interface EventMessageThread extends MessageThreadBase {
+  kind: "event";
+  bookingId: string;
+  venueId: string;
+  /** Every non-organizer account in the room: the venue operator, plus each confirmed vendor's owner account. Never includes organizerId. */
+  participantIds: string[];
+}
+
+export type MessageThread = ProposalMessageThread | BookingMessageThread | EventMessageThread;
 
 export type BookingProposalKind = "revised_terms" | "deposit_request";
 
@@ -433,6 +465,74 @@ export interface BookingProposalAttachment {
   respondedAt: string | null;
 }
 
+/**
+ * "superseded" exists because either side can send a fresh counter while an
+ * older one is still open. Without it, a stale round of terms stays acceptable
+ * forever and two different sets of terms can both read as "agreed".
+ */
+export type DealProposalStatus = "sent" | "accepted" | "declined" | "superseded";
+
+/**
+ * A round of vendor deal terms, attached to a message on a proposal thread.
+ * Either side may send one, so a planner is no longer limited to a single
+ * take-it-or-leave-it edit at finalize time.
+ *
+ * Accepting one records agreement on the terms; it does NOT create the
+ * engagement. finalizeDeal() (engagements.ts) is still the only thing that
+ * does, and it reads the latest accepted round as its starting point — so the
+ * back-and-forth stays a negotiation log and the commitment stays a single
+ * deliberate action. No money moves here either (Phase 7).
+ */
+export interface DealProposalAttachment {
+  amount: number;
+  pricingModel: PricingModel;
+  deliverables: string;
+  note: string;
+  /** Which side sent this round. The log renders "You proposed" vs "{name} countered" from it. */
+  senderRole: "organizer" | "vendor";
+  status: DealProposalStatus;
+  /** ISO — when the other side accepted or declined. Null while "sent" or "superseded". */
+  respondedAt: string | null;
+}
+
+export type BookingContractStatus = "sent" | "signed" | "declined" | "withdrawn";
+
+/**
+ * A formal written agreement a venue operator sends through Foundry and the
+ * planner countersigns in-app, so the two of them never have to move to email
+ * to paper a booking.
+ *
+ * NOT legal advice and NOT a claim of enforceability — same rule as AgreedTerms
+ * (CLAUDE.md #7, docs/SECURITY.md). It records that both parties put their name
+ * to this text on Foundry on a date. `formatContractFootnote()` carries that
+ * qualification and must render with every contract. TODO(legal): real contract
+ * templates and e-signature need counsel review before any real launch.
+ *
+ * Signatures are typed names, not cryptographic signatures, and nothing here
+ * collects or moves money.
+ */
+export interface BookingContractAttachment {
+  title: string;
+  /** What the venue is providing — free text written by the operator. */
+  scope: string;
+  /** Whole dollars. Null when the contract states no figure. */
+  totalAmount: number | null;
+  depositAmount: number | null;
+  /** "YYYY-MM-DD" — when the operator asks for the balance. Settled off-platform. */
+  balanceDueDate: string | null;
+  cancellationPolicy: string;
+  additionalTerms: string;
+  /** Typed full name the venue operator signed with. */
+  hostSignature: string;
+  hostSignedAt: string;
+  /** Typed full name the planner countersigned with. Null until signed. */
+  organizerSignature: string | null;
+  organizerSignedAt: string | null;
+  status: BookingContractStatus;
+  declinedAt: string | null;
+  declineReason: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   threadId: string;
@@ -442,6 +542,10 @@ export interface ChatMessage {
   readBy: string[];
   /** Present only on booking threads, and only on messages the venue owner sent. */
   proposal?: BookingProposalAttachment;
+  /** Present only on proposal threads. Either side may send one — see DealProposalAttachment. */
+  dealProposal?: DealProposalAttachment;
+  /** Present only on booking threads, and only on messages the venue owner sent. */
+  contract?: BookingContractAttachment;
 }
 
 export interface VendorGigFilters {

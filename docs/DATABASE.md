@@ -60,7 +60,11 @@ One row per Supabase Auth user. This is the single identity — roles are layere
 ## 3. `venues`
 
 - **Purpose:** A rentable space listed by a venue operator.
-- **Key columns:** `id`, `owner_id`, `name`, `description`, `neighborhood`, `city`
+- **Key columns:** `id`, `owner_id`, `name` (the **public descriptive title**, e.g.
+  "Sunlit Mission loft with a rooftop deck" — the public `slug` derives from this),
+  `real_name` (**private**, the operating name; never sent to public API responses, on
+  exactly the same footing as `exact_address` — a listing that names the venue lets a
+  planner find its own site and book off-platform), `description`, `neighborhood`, `city`
   (`'San Francisco'` for MVP), `exact_address` (**private**, never sent to public API
   responses), `approx_location` (public — neighborhood name only, no street address or
   coordinates precise enough to pinpoint the building), `capacity_min`, `capacity_max`,
@@ -79,8 +83,11 @@ One row per Supabase Auth user. This is the single identity — roles are layere
   admin) → `approved` (public) / `rejected` (returned with reason, editable back to
   `pending_review`) → `archived` (operator took it down).
 - **RLS:**
-  - `select`: anyone can read `approved` rows through a **public view that excludes
-    `exact_address`**; owner and admins can read the full row including `exact_address`.
+  - `select`: anyone can read `approved` rows through a **public view that excludes both
+    `exact_address` and `real_name`**; owner and admins can read the full row. The two
+    private columns unlock together, through one server-side resolver, for the organizer of
+    a **confirmed** booking at that venue and nobody else (the prototype's
+    `resolveVenueDisclosure()` in `src/lib/spaces/venueIdentity.ts` is the rule to port).
   - `insert`: authenticated users with the `venue_operator` role, `owner_id = auth.uid()`.
   - `update`: owner may edit listing content (description, photos, amenities, booking
     window/increment/negotiability, etc.) even after `approved` — the prototype validated
@@ -498,12 +505,15 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
   - **RLS:** `select`/`update` (mark read): owner (`recipient_id = auth.uid()`) only.
     `insert`: server-side only, as a side effect of the action that triggered it.
 - **`message_threads` / `messages`** (extends §16/§17): the prototype's
-  `MessageThread` is two distinct row shapes, matching §16's existing polymorphic
+  `MessageThread` is three distinct row shapes, matching §16's existing polymorphic
   `context_type` design — a real migration should use `context_type` in
-  (`'proposal'`,`'booking'`) rather than inventing a new table. The shared participant
-  column is `counterparty_id` (the non-organizer party — a vendor on a proposal thread, a
-  venue owner on a booking thread; named generically since one column now serves both
-  contexts). **Proposal threads**: anchored to `proposal_id` → `vendor_proposals.id` (not
+  (`'proposal'`,`'booking'`,`'event'`) rather than inventing new tables. `counterparty_id`
+  (the non-organizer party — a vendor on a proposal thread, a venue owner on a booking
+  thread; named generically since one column serves both contexts) is **nullable**, because
+  an event room has N participants and no single counterparty; those live in a
+  `message_thread_participants` join table (`thread_id`, `profile_id`, `added_at`), which is
+  also what RLS should join against for membership rather than comparing two columns.
+  **Proposal threads**: anchored to `proposal_id` → `vendor_proposals.id` (not
   `engagement_id`) plus a denormalized `event_need_id` for grouping/headers.
   `engagement_id` is nullable — null until that proposal is finalized, at which point the
   existing thread row is updated in place (never a second thread created for the same
@@ -517,10 +527,28 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
   `confirmed` booking, via `startBookingConversation()` in
   `src/lib/spaces/bookingWorkflow.ts` — the organizer/planner is notified their booking
   "moved forward" on acceptance but gets no thread to reply in until the venue owner
-  initiates one; the planner can never create a booking thread either. This dual rule (no
-  vendor-initiated proposal thread, no planner-initiated booking thread) is the concrete
-  mechanism behind `docs/SECURITY.md`'s "chat unlock timing" rules — see that doc for the
-  up-to-date statement of both.
+  initiates one; the planner can never create a booking thread either. **Event rooms**:
+  anchored to `booking_id` → `bookings.id` plus a denormalized `venue_id`, with membership
+  in `message_thread_participants`. The one kind the **organizer** creates — via
+  `openEventRoom()` in `src/lib/spaces/eventRoom.ts`, which requires a `confirmed` booking,
+  a venue with an owner account, and at least one confirmed vendor engagement. Neither a
+  venue nor a vendor may create one or add themselves; membership is additive only (a
+  vendor confirming later is added, nobody is ever removed). This trio of rules (no
+  vendor-initiated proposal thread, no planner-initiated booking thread, no
+  supplier-initiated event room) is the concrete mechanism behind `docs/SECURITY.md`'s
+  "chat unlock timing" rules — see that doc for the up-to-date statement of all three.
+- **Message attachments** (extends §17): `messages` carries three nullable structured
+  payloads, each a `jsonb` column in the prototype and a candidate for its own table in a
+  real migration. `proposal` — a venue owner's revised terms or deposit request on a
+  booking thread. `deal_proposal` — a round of vendor deal terms on a proposal thread,
+  sendable and answerable by **either** side, with a `superseded` status so a stale counter
+  can't still be accepted after a newer one is sent. `contract` — a formal agreement on a
+  booking thread, signed by the host on send and countersigned by the organizer
+  (`organizer_signature`/`organizer_signed_at`), signatures being typed names. None of the
+  three moves money and none may gain a `paid_at`; the effective state of each is **derived
+  by replaying the log** (`resolveEffectiveBookingTerms`, `resolveEffectiveDealTerms`,
+  `resolveContractState`) rather than written back onto the booking or proposal row, so a
+  decline can never leave a half-applied change behind.
 
 ---
 
@@ -586,10 +614,10 @@ venue / vendor_profiles listing_status:
    directly on the row being accessed wherever possible, to keep policies simple and fast.
    Where the relationship is indirect (e.g., `message_threads`), a `security definer`
    helper function resolves participancy instead of a deep join in the policy itself.
-3. Public read policies never expose `exact_address` (venues) or private contact fields —
-   those are only ever returned by server-side code after an authorization check, and
-   ideally via a dedicated public view/RPC that excludes the sensitive columns entirely
-   rather than relying on clients to not request them.
+3. Public read policies never expose `exact_address` or `real_name` (venues) or private
+   contact fields — those are only ever returned by server-side code after an authorization
+   check, and ideally via a dedicated public view/RPC that excludes the sensitive columns
+   entirely rather than relying on clients to not request them.
 4. Anything that mutates cross-row state (accepting a quote creates a booking; accepting a
    proposal fills an event need) is done via a server-side function/RPC running with
    elevated privileges after re-validating the request — not a client-side chain of three

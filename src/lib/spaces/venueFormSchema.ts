@@ -5,6 +5,7 @@ import {
   RULE_LABELS,
   SPACE_TYPE_LABELS,
 } from "@/lib/spaces/labels";
+import { publicTitleLeaksRealName } from "@/lib/spaces/venueIdentity";
 import type { AmenityKey, EventType, SpaceType, VenueRules } from "@/lib/types/spaces";
 
 /**
@@ -26,6 +27,7 @@ export const AMENITY_VALUES = AMENITY_ENTRIES_ALPHABETICAL.map(([key]) => key) a
 export const RULE_KEYS = Object.keys(RULE_LABELS) as (keyof VenueRules)[];
 
 export const STEP_1_FIELDS = [
+  "realName",
   "name",
   "tagline",
   "description",
@@ -50,7 +52,14 @@ const TIME_FIELD = z
 
 export const venueFormSchema = z
   .object({
-    name: z.string().min(2, "Enter a name for your space"),
+    /**
+     * The operating name. Private — see Venue.realName. Collected so the host
+     * can be identified to the planner once a booking is confirmed, and so
+     * Foundry knows what the space actually is, but never published.
+     */
+    realName: z.string().min(2, "Enter your venue's real name"),
+    /** The public listing title. Descriptive on purpose — see the leak refine below. */
+    name: z.string().min(10, "Describe the space in a few words, e.g. “Sunlit Mission loft with a rooftop deck”"),
     tagline: z.string().min(5, "Add a short one-line tagline"),
     description: z.string().min(20, "Tell organizers a bit more about the space"),
     address: z.string().min(5, "Enter the venue's street address"),
@@ -111,12 +120,25 @@ export const venueFormSchema = z
   .refine((data) => Boolean(data.earliestStartTime) === Boolean(data.latestEndTime), {
     message: "Set both a start and an end time, or leave both blank",
     path: ["latestEndTime"],
+  })
+  /*
+   * The descriptive title only protects the host if it doesn't contain the
+   * name. A title that does defeats the whole mechanism — a planner searches
+   * it, finds the venue's own site, and books around Foundry. See
+   * publicTitleLeaksRealName() for what counts as a leak and why generic words
+   * like "loft" are deliberately allowed through.
+   */
+  .refine((data) => !publicTitleLeaksRealName(data.name, data.realName), {
+    message:
+      "Your public title gives away the venue's name. Describe the space instead — planners see the real name once they book.",
+    path: ["name"],
   });
 
 export type VenueFormInput = z.input<typeof venueFormSchema>;
 export type VenueFormValues = z.output<typeof venueFormSchema>;
 
 export const VENUE_FORM_DEFAULT_VALUES: VenueFormInput = {
+  realName: "",
   name: "",
   tagline: "",
   description: "",

@@ -12,20 +12,30 @@ export interface FinalizeDealTerms {
 }
 
 /**
- * The organizer's finalize step: keep the vendor's proposal terms verbatim,
- * or negotiate different ones. Either way the vendor must then separately
+ * The organizer's finalize step: commit to the terms currently on the table,
+ * or change them one more time. Either way the vendor must then separately
  * confirm via confirmEngagementTerms() — this dialog only sends the offer,
  * it does not finalize anything by itself.
+ *
+ * `currentTerms` is the *effective* deal, not the vendor's original bid: once
+ * the two sides have accepted a round in the proposal log, that's what
+ * finalizing should lock in. Showing the original bid here after a negotiation
+ * would quietly discard everything they agreed to.
  */
 export default function FinalizeDealDialog({
   open,
   proposal,
+  currentTerms,
+  negotiated,
   counterpartyName,
   onClose,
   onFinalize,
 }: {
   open: boolean;
   proposal: VendorProposal | null;
+  currentTerms: FinalizeDealTerms;
+  /** True when an accepted round in the log has superseded the original bid. */
+  negotiated: boolean;
   counterpartyName: string;
   onClose: () => void;
   onFinalize: (terms?: FinalizeDealTerms) => void;
@@ -36,10 +46,9 @@ export default function FinalizeDealDialog({
   const [deliverables, setDeliverables] = useState("");
 
   function openEditTerms() {
-    if (!proposal) return;
-    setAmount(String(proposal.proposedAmount));
-    setPricingModel(proposal.pricingModel);
-    setDeliverables(proposal.deliverables);
+    setAmount(String(currentTerms.amount));
+    setPricingModel(currentTerms.pricingModel);
+    setDeliverables(currentTerms.deliverables);
     setMode("editTerms");
   }
 
@@ -47,7 +56,10 @@ export default function FinalizeDealDialog({
     if (mode === "editTerms") {
       onFinalize({ amount: Number(amount) || 0, pricingModel, deliverables });
     } else {
-      onFinalize();
+      // Omitting terms keeps the proposal verbatim, which is only correct when
+      // nothing was negotiated. After an accepted round, pass the agreed terms
+      // explicitly or finalizing silently reverts to the original bid.
+      onFinalize(negotiated ? currentTerms : undefined);
     }
     setMode("asProposed");
   }
@@ -80,7 +92,7 @@ export default function FinalizeDealDialog({
             mode === "asProposed" ? "border-wine bg-wine text-paper" : "border-line text-ink-soft hover:bg-paper-dim"
           }`}
         >
-          Finalize as proposed
+          {negotiated ? "Finalize as agreed" : "Finalize as proposed"}
         </button>
         <button
           type="button"
@@ -96,9 +108,15 @@ export default function FinalizeDealDialog({
       {mode === "asProposed" ? (
         <div className="mt-4 rounded-lg bg-paper-dim px-3.5 py-3 text-sm">
           <p className="font-semibold text-ink">
-            ${proposal.proposedAmount} {PRICING_MODEL_LABELS[proposal.pricingModel]}
+            ${currentTerms.amount} {PRICING_MODEL_LABELS[currentTerms.pricingModel]}
           </p>
-          {proposal.deliverables && <p className="mt-1 text-ink-soft">{proposal.deliverables}</p>}
+          {currentTerms.deliverables && <p className="mt-1 text-ink-soft">{currentTerms.deliverables}</p>}
+          {negotiated && (
+            <p className="mt-2 text-xs text-brass-dark">
+              These are the terms you both accepted in the proposal log, not the original bid of $
+              {proposal.proposedAmount}.
+            </p>
+          )}
         </div>
       ) : (
         <div className="mt-4 space-y-3">

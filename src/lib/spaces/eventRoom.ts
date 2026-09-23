@@ -1,0 +1,199 @@
+import { getBookingById, getBookingVenueOwnerId, formatEventLabel } from "./bookings";
+import { getVenueBySlugAnywhere } from "./submittedVenues";
+import {
+  addEventThreadParticipants,
+  getEventThreadForBooking,
+  getOrCreateEventThread,
+} from "@/lib/vendors/messages";
+import { createNotification } from "@/lib/vendors/notifications";
+import { getEngagementsForBooking } from "@/lib/vendors/engagements";
+import { getVendorProfileById } from "@/lib/vendors/profiles";
+import type { Booking } from "@/lib/types/spaces";
+import type { EventMessageThread, EngagementStatus } from "@/lib/types/vendors";
+
+/**
+ * The three-way event room: planner + venue operator + every confirmed vendor,
+ * in one conversation about one event.
+ *
+ * Why it exists: once a planner has booked a space and hired a DJ, the next
+ * thing that has to happen is load-in time, power, and who gets there when —
+ * and with only 1:1 threads the planner relays that by hand or starts a group
+ * text. Either way the coordination leaves Foundry and doesn't come back.
+ *
+ * Who may open it: the ORGANIZER only. This is the one thread kind the
+ * organizer creates rather than receives, and the asymmetry is deliberate —
+ * it's their event, and introducing a vendor to a venue is their call, not
+ * something either supplier should be able to do unilaterally. See
+ * docs/SECURITY.md's "Chat unlock timing".
+ *
+ * Same import-direction note as bookingWorkflow.ts: this lives under
+ * src/lib/spaces (a booking is a spaces concept) and imports from
+ * src/lib/vendors. bookings.ts itself stays vendor-free so the existing
+ * vendors/seed.ts -> spaces/bookings.ts edge stays acyclic.
+ */
+
+/** The engagement statuses that mean a vendor is actually working this event. */
+const ACTIVE_ENGAGEMENT_STATUSES: EngagementStatus[] = ["confirmed", "in_progress", "completed"];
+
+/**
+ * Pure: who belongs in the room, organizer excluded (they're the thread's
+ * organizerId, not a participant entry). Deduped and order-stable so repeated
+ * syncs don't churn the stored array.
+ */
+export function computeEventRoomParticipants(input: {
+  venueOwnerId: string | null;
+  vendorOwnerIds: string[];
+  organizerId: string;
+}): string[] {
+  const candidates = [...(input.venueOwnerId ? [input.venueOwnerId] : []), ...input.vendorOwnerIds];
+  return [...new Set(candidates)].filter((id) => id !== input.organizerId);
+}
+
+export type EventRoomBlockReason =
+  | "not_organizer"
+  | "booking_not_confirmed"
+  | "no_venue_host"
+  | "no_confirmed_vendor";
+
+export interface EventRoomReadiness {
+  ready: boolean;
+  reason: EventRoomBlockReason | null;
+}
+
+/**
+ * Pure: may this actor open the room for this booking yet?
+ *
+ * Requires a confirmed booking AND at least one confirmed vendor, because the
+ * room's whole value is the three-way introduction — opening it with only a
+ * venue in it duplicates the booking thread that already exists.
+ *
+ * A seed venue with no owner account (`venueOwnerId: null`) has nobody to
+ * introduce, so it's blocked rather than silently opening a two-person room.
+ */
+export function evaluateEventRoomReadiness(input: {
+  booking: Pick<Booking, "organizerId" | "status">;
+  venueOwnerId: string | null;
+  vendorOwnerIds: string[];
+  actorAccountId: string;
+}): EventRoomReadiness {
+  if (input.booking.organizerId !== input.actorAccountId) return { ready: false, reason: "not_organizer" };
+  if (input.booking.status !== "confirmed") return { ready: false, reason: "booking_not_confirmed" };
+  if (!input.venueOwnerId) return { ready: false, reason: "no_venue_host" };
+  if (input.vendorOwnerIds.length === 0) return { ready: false, reason: "no_confirmed_vendor" };
+  return { ready: true, reason: null };
+}
+
+export const EVENT_ROOM_BLOCK_COPY: Record<EventRoomBlockReason, string> = {
+  not_organizer: "Only the event organizer can open the event room.",
+  booking_not_confirmed: "Open the event room once your venue confirms this booking.",
+  no_venue_host: "This listing has no host account to bring into the room.",
+  no_confirmed_vendor: "Add a confirmed vendor and you can introduce them to your venue here.",
+};
+
+/** Owner accounts of every vendor actively working this booking. Reads storage. */
+export function getActiveVendorOwnerIdsForBooking(bookingId: string): string[] {
+  return getEngagementsForBooking(bookingId)
+    .filter((engagement) => ACTIVE_ENGAGEMENT_STATUSES.includes(engagement.status))
+    .map((engagement) => getVendorProfileById(engagement.vendorProfileId)?.ownerId)
+    .filter((ownerId): ownerId is string => Boolean(ownerId));
+}
+
+export function getEventRoomReadiness(bookingId: string, actorAccountId: string): EventRoomReadiness {
+  const booking = getBookingById(bookingId);
+  if (!booking) return { ready: false, reason: "booking_not_confirmed" };
+  return evaluateEventRoomReadiness({
+    booking,
+    venueOwnerId: getBookingVenueOwnerId(booking),
+    vendorOwnerIds: getActiveVendorOwnerIdsForBooking(bookingId),
+    actorAccountId,
+  });
+}
+
+export interface OpenEventRoomResult {
+  booking: Booking;
+  thread: EventMessageThread;
+  /** Participants added by this call — empty when the room already existed and nobody new had confirmed. */
+  addedParticipantIds: string[];
+}
+
+/**
+ * ORGANIZER-ONLY. Throws when the actor isn't the organizer, the booking isn't
+ * confirmed, the venue has no host account, or no vendor has confirmed yet.
+ *
+ * Idempotent: called again it reuses the existing room and syncs in any vendor
+ * who has confirmed since — which is exactly what a planner who hires a second
+ * vendor a week later expects to happen.
+ */
+export function openEventRoom(bookingId: string, actorAccountId: string): OpenEventRoomResult {
+  const booking = getBookingById(bookingId);
+  if (!booking) throw new Error("Booking not found.");
+
+  const venueOwnerId = getBookingVenueOwnerId(booking);
+  const vendorOwnerIds = getActiveVendorOwnerIdsForBooking(bookingId);
+  const readiness = evaluateEventRoomReadiness({ booking, venueOwnerId, vendorOwnerIds, actorAccountId });
+  if (!readiness.ready) {
+    throw new Error(EVENT_ROOM_BLOCK_COPY[readiness.reason ?? "not_organizer"]);
+  }
+
+  const venue = getVenueBySlugAnywhere(booking.venueSlug);
+  if (!venue) throw new Error("Venue not found.");
+
+  const participantIds = computeEventRoomParticipants({
+    venueOwnerId,
+    vendorOwnerIds,
+    organizerId: booking.organizerId,
+  });
+
+  const existing = getEventThreadForBooking(bookingId);
+  if (existing) {
+    const addedParticipantIds = addEventThreadParticipants(existing.id, participantIds);
+    notifyParticipants(addedParticipantIds, existing.id, booking);
+    // Re-read so the caller gets the grown participant list, not the stale one.
+    return { booking, thread: getEventThreadForBooking(bookingId) ?? existing, addedParticipantIds };
+  }
+
+  const thread = getOrCreateEventThread({
+    bookingId: booking.id,
+    venueId: venue.id,
+    organizerId: booking.organizerId,
+    participantIds,
+  });
+  notifyParticipants(participantIds, thread.id, booking);
+
+  return { booking, thread, addedParticipantIds: participantIds };
+}
+
+/**
+ * Brings newly-confirmed vendors into an existing room. No-op when no room has
+ * been opened — a vendor confirming does not itself create the room, since
+ * opening it stays the organizer's decision.
+ */
+export function syncEventRoomParticipants(bookingId: string): string[] {
+  const thread = getEventThreadForBooking(bookingId);
+  if (!thread) return [];
+
+  const booking = getBookingById(bookingId);
+  if (!booking) return [];
+
+  const participantIds = computeEventRoomParticipants({
+    venueOwnerId: getBookingVenueOwnerId(booking),
+    vendorOwnerIds: getActiveVendorOwnerIdsForBooking(bookingId),
+    organizerId: booking.organizerId,
+  });
+
+  const added = addEventThreadParticipants(thread.id, participantIds);
+  notifyParticipants(added, thread.id, booking);
+  return added;
+}
+
+function notifyParticipants(recipientIds: string[], threadId: string, booking: Booking): void {
+  for (const recipientId of recipientIds) {
+    createNotification({
+      recipientId,
+      type: "event_room_opened",
+      title: "You've been added to an event room",
+      body: `The organizer opened a shared conversation for ${formatEventLabel(booking)} — the venue and vendors are all in it.`,
+      link: `/dashboard/messages/${threadId}`,
+    });
+  }
+}

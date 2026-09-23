@@ -1,9 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useActiveRole } from "@/hooks/useActiveRole";
 import { SPACE_TYPE_LABELS, EVENT_TYPE_LABELS, RULE_LABELS } from "@/lib/spaces/labels";
 import { formatBookingWindow, formatBookingIncrement } from "@/lib/spaces/bookingConstraints";
+import { getBookingsForOrganizer } from "@/lib/spaces/bookings";
+import {
+  VENUE_PRIVACY_NOTICE,
+  resolveVenueDisclosure,
+  type VenueDisclosure,
+} from "@/lib/spaces/venueIdentity";
 import VenueAmenityList from "@/components/spaces/VenueAmenityList";
 import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
 import VenueHostLine from "@/components/spaces/VenueHostLine";
@@ -14,6 +21,25 @@ import type { Venue } from "@/lib/types/spaces";
 export default function VenueDetailView({ venue }: { venue: Venue }) {
   const { user } = useAuth();
   const { activeRole } = useActiveRole();
+  const [disclosure, setDisclosure] = useState<VenueDisclosure | null>(null);
+
+  /*
+   * Bookings live in localStorage, so this has to run in an effect or the
+   * server render and the first client render disagree. Until it resolves the
+   * page shows the withheld state, which is the safe direction to be wrong in.
+   */
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDisclosure(
+      resolveVenueDisclosure({
+        venue,
+        viewerId: user?.id ?? null,
+        viewerBookings: user ? getBookingsForOrganizer(user.id) : [],
+      })
+    );
+  }, [venue, user]);
+
+  const revealed = disclosure !== null && disclosure.reason !== "withheld";
 
   const allowedRules = (Object.keys(RULE_LABELS) as (keyof typeof RULE_LABELS)[]).filter(
     (key) => venue.rules[key]
@@ -73,6 +99,30 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
             {venue.neighborhood}, {venue.city} · {SPACE_TYPE_LABELS[venue.spaceType]}
           </p>
           <VenueHostLine ownerId={venue.ownerId} />
+
+          {/*
+            The listing is deliberately anonymous: a descriptive title and a
+            district, so a planner can't search the name, find the venue's own
+            site, and book around Foundry. Everything shown here comes from
+            resolveVenueDisclosure() — never read realName/exactAddress off the
+            Venue in a component (docs/SECURITY.md #5).
+          */}
+          {revealed && disclosure ? (
+            <div className="mt-4 rounded-xl border border-brass/40 bg-brass/5 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">
+                {disclosure.reason === "owner" ? "Private — only you see this" : "Unlocked for your confirmed booking"}
+              </p>
+              {disclosure.realName && (
+                <p className="mt-1 font-display text-base font-semibold text-ink">{disclosure.realName}</p>
+              )}
+              {disclosure.exactAddress && <p className="mt-0.5 text-sm text-ink">{disclosure.exactAddress}</p>}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-line bg-paper-dim px-4 py-3 text-sm leading-relaxed text-ink-soft">
+              {VENUE_PRIVACY_NOTICE}
+            </p>
+          )}
+
           <p className="mt-4 text-base leading-relaxed text-ink-soft">{venue.description}</p>
 
           <div className="mt-8">

@@ -56,6 +56,26 @@ workaround.
   operationally necessary (post-confirmation), and even then only to the organizer and
   venue owner on that specific booking — resolved server-side, not shipped in a public API
   payload with a "just don't render it" client-side omission.
+- **`venues.real_name` follows the identical rule.** A listing carries two names: a public
+  descriptive title (`venues.name`, e.g. "Sunlit Mission loft with a rooftop deck") and the
+  operating name (`venues.real_name`), which is private on exactly the same footing as
+  `exact_address`. This is not cosmetic — a listing that names the venue lets a planner
+  search it, find the venue's own site, and take the booking off-platform, which is the
+  disintermediation risk the marketplace exists to avoid. The `slug` is generated from the
+  descriptive title, so the public URL doesn't leak the name either.
+- Both unlock together, at the same moment, for the same people. In the prototype the one
+  and only gate is `resolveVenueDisclosure()` in `src/lib/spaces/venueIdentity.ts`: the
+  owner always, the organizer on a `confirmed` booking at that venue, nobody else. **No
+  component may read `realName` or `exactAddress` off a `Venue` directly** — the two
+  documented exceptions are the owner's own submission review (`VenueListingReview.tsx`)
+  and edit form, both of which say so in-file. In the real backend this becomes a
+  server-resolved payload, not a client-side filter.
+- `publicTitleLeaksRealName()` (same module) rejects a public title that gives away the
+  operating name, either verbatim or by containing all of its distinctive words. Generic
+  words ("loft", "bar") and San Francisco neighborhood names are deliberately exempt: a
+  title is *supposed* to say what and where the space is, and a validator people route
+  around protects nothing. It is advisory input validation, not the security boundary —
+  the boundary is that `real_name` is never published.
 
 ## 6. Private document storage
 
@@ -186,6 +206,47 @@ workaround.
   organizer/planner can never create a booking thread, only reply once the venue owner has
   created one. A `declined` booking is excluded from both: once the host says no, the
   channel doesn't open.
+- **Chat unlock timing (event rooms)**: the three-way room (`EventMessageThread`, the third
+  kind in the union) is the one thread kind the **organizer** creates rather than receives,
+  and that asymmetry is the rule, not an inconsistency. Introducing a vendor to a venue is
+  the planner's call; neither supplier may pull the other into a conversation. Creation
+  routes through one gate, `openEventRoom()` in `src/lib/spaces/eventRoom.ts`, which throws
+  unless **all four** hold: the actor is the booking's organizer, the booking is
+  `confirmed`, the venue has a host account, and at least one vendor engagement is
+  `confirmed`/`in_progress`/`completed`. The pure core, `evaluateEventRoomReadiness()`,
+  checks the actor *first*, so a non-organizer never learns the booking's state from the
+  refusal.
+
+  Membership is **additive only**. `addEventThreadParticipants()` can add a vendor who
+  confirms later but never removes anyone — removal is a separate decision with its own
+  consequences for who can read the existing history, and nothing asks for it yet. A vendor
+  confirming cannot push themselves into a room; the sync runs when the organizer opens the
+  room or when a participant loads it.
+
+  Because a room has N participants, membership is resolved through
+  `getThreadParticipantIds()` — never by comparing against `counterpartyId`, which
+  `EventMessageThread` deliberately does not have (that field lives on the 1:1 variants
+  only, so the type system rejects the wrong comparison rather than silently excluding
+  everyone but the venue operator). `isThreadParticipant()` and message delivery both go
+  through it.
+- **Deal proposals are symmetric; committing is not.** Either side may send a
+  `DealProposalAttachment` on a proposal thread and either side may answer one — that
+  symmetry is the feature (a planner can counter a vendor, and back). Two guards hold:
+  `respondToDealProposal()` requires thread participation and refuses to let anyone respond
+  to their own round. Sending a new round supersedes any still-open one, so two different
+  sets of terms can never both read as agreed. **Accepting a round is not a booking** — it
+  records agreement on numbers; `finalizeDeal()` remains the only thing that creates an
+  engagement, and the vendor must still separately confirm. No money moves (Phase 7).
+- **Contracts record signatures, not enforceability.** `BookingContractAttachment`
+  (composed by `src/lib/spaces/bookingContracts.ts`) is sent by the venue operator, signed
+  by them as they send, and countersigned by the planner via `signContract()` —
+  organizer-only, one-way, and refusing an already-decided contract. Signatures are typed
+  names, not cryptographic signatures. `formatContractFootnote()` must render on every
+  state of every contract; it is the only thing preventing a typed name on a
+  contract-shaped page from reading as an executed legal instrument. Foundry is not a party
+  to the agreement, gives no legal advice, and collects none of the amounts stated — there
+  is deliberately no `paidAt`. **TODO(legal): real contract templates and e-signature need
+  counsel review before any real launch.**
 - **Booking proposals carry no payment authority.** A venue owner can attach structured
   revised terms or a deposit request to a booking-thread message
   (`BookingProposalAttachment`, composed by `src/lib/spaces/bookingProposals.ts`). Nothing
@@ -195,12 +256,14 @@ workaround.
   records agreement only; it does not mutate the `Booking`. Do not add a `paidAt` field or
   rename toward "charged"/"processed" — that would assert a transaction that never
   happened. `respondToBookingProposal()` is ownership-guarded to the thread's organizer and
-  refuses to touch an already-decided proposal. `MessageThread` is now a discriminated
-  union (`ProposalMessageThread | BookingMessageThread` in
+  refuses to touch an already-decided proposal. `MessageThread` is a discriminated union
+  (`ProposalMessageThread | BookingMessageThread | EventMessageThread` in
   `src/lib/vendors/messages.ts`); `isThreadParticipant()` still gates every read
   regardless of kind, and `normalizeStoredThread()` must keep backfilling `kind` onto any
   thread persisted before this union existed so old local data doesn't silently fail to
-  narrow to either branch.
+  narrow to a branch. It checks `kind === "event"` *before* requiring a `counterpartyId`,
+  since an event room legitimately has none — reversing that order drops every room from
+  the inbox on load.
 - **Exact venue address stays private through the vendor flow too**: `EventNeed`'s
   `public_location` is the venue's neighborhood, resolved server-side (or, in the
   prototype, at need-creation time from the venue record) — never the booking's/venue's

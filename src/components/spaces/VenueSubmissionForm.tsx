@@ -265,6 +265,9 @@ export default function VenueSubmissionForm() {
       id: `v-${slug}-${Date.now()}`,
       slug,
       name: values.name,
+      // Private — see Venue.realName. Never published; the slug above is
+      // generated from the descriptive title so the URL doesn't leak it either.
+      realName: values.realName,
       tagline: values.tagline,
       description: values.description,
       neighborhood: resolved.neighborhood,
@@ -356,18 +359,40 @@ export default function VenueSubmissionForm() {
               <p className="rounded-lg bg-wine/10 px-3.5 py-2.5 text-sm text-wine">{step1Error}</p>
             )}
             <div>
+              <label htmlFor="realName" className="block text-sm font-medium text-ink">
+                Venue&apos;s real name
+                <Required />
+              </label>
+              <input
+                id="realName"
+                type="text"
+                placeholder="The Redline Room"
+                {...register("realName")}
+                className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+              />
+              {errors.realName && <p className="mt-1 text-xs text-wine">{errors.realName.message}</p>}
+              <p className="mt-1 text-xs text-ink-soft">
+                Private. Shared with a planner only once you confirm their booking.
+              </p>
+            </div>
+
+            <div>
               <label htmlFor="name" className="block text-sm font-medium text-ink">
-                Space name
+                Public listing title
                 <Required />
               </label>
               <input
                 id="name"
                 type="text"
-                placeholder="Redline Loft"
+                placeholder="Sunlit SoMa loft with exposed brick and a freight elevator"
                 {...register("name")}
                 className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
               />
               {errors.name && <p className="mt-1 text-xs text-wine">{errors.name.message}</p>}
+              <p className="mt-1 text-xs text-ink-soft">
+                Describe the space rather than naming it, so planners can&apos;t look you up and book around
+                Foundry. Don&apos;t include your venue&apos;s real name.
+              </p>
             </div>
 
             <div>
@@ -417,7 +442,7 @@ export default function VenueSubmissionForm() {
                 />
                 {errors.address && <p className="mt-1 text-xs text-wine">{errors.address.message}</p>}
                 <p className="mt-1 text-xs text-ink-soft">
-                  Never shown publicly — organizers only see the general area.
+                  Never shown publicly — planners see only the district until you confirm their booking.
                 </p>
               </div>
               <div>

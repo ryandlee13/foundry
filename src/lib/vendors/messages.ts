@@ -1,15 +1,18 @@
 import type {
+  BookingContractAttachment,
   BookingMessageThread,
   BookingProposalAttachment,
   BookingProposalStatus,
   ChatMessage,
+  DealProposalAttachment,
+  EventMessageThread,
   MessageThread,
   ProposalMessageThread,
 } from "@/lib/types/vendors";
 import { createNotification } from "./notifications";
 
 /**
- * Browser-local message threads. Two kinds, sharing one store:
+ * Browser-local message threads. Three kinds, sharing one store:
  *  - ProposalMessageThread: anchored to a vendor proposal, created only via
  *    getOrCreateThreadForProposal — called from exactly two places,
  *    startConversation() and finalizeDeal() (see engagements.ts). A vendor
@@ -18,7 +21,12 @@ import { createNotification } from "./notifications";
  *    only via getOrCreateThreadForBooking — called from exactly one place,
  *    startBookingConversation() (see bookingWorkflow.ts). An organizer can
  *    never create one — only the venue owner initiates.
- * Both are idempotent by their anchor id and never duplicated.
+ *  - EventMessageThread: the three-way room for one event, created only via
+ *    getOrCreateEventThread — called from exactly one place, openEventRoom()
+ *    (see spaces/eventRoom.ts), which is organizer-only and requires both a
+ *    confirmed booking and a confirmed vendor. Neither a venue nor a vendor
+ *    can create one.
+ * All three are idempotent by their anchor id and never duplicated.
  */
 const THREADS_KEY = "foundry.messages.threads";
 const MESSAGES_KEY = "foundry.messages.messages";
@@ -42,6 +50,24 @@ export function normalizeStoredThread(raw: unknown): MessageThread | null {
 
   if (typeof record.id !== "string" || typeof record.organizerId !== "string" || typeof record.createdAt !== "string") {
     return null;
+  }
+
+  // Checked before counterpartyId, which an event thread deliberately doesn't have.
+  if (record.kind === "event") {
+    if (typeof record.bookingId !== "string" || typeof record.venueId !== "string") return null;
+    const participantIds = Array.isArray(record.participantIds)
+      ? record.participantIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const thread: EventMessageThread = {
+      kind: "event",
+      id: record.id,
+      organizerId: record.organizerId,
+      createdAt: record.createdAt,
+      bookingId: record.bookingId,
+      venueId: record.venueId,
+      participantIds,
+    };
+    return thread;
   }
 
   const counterpartyId =
@@ -88,6 +114,26 @@ export function isProposalThread(thread: MessageThread): thread is ProposalMessa
 
 export function isBookingThread(thread: MessageThread): thread is BookingMessageThread {
   return thread.kind === "booking";
+}
+
+export function isEventThread(thread: MessageThread): thread is EventMessageThread {
+  return thread.kind === "event";
+}
+
+/**
+ * Pure: every account in a thread, organizer first.
+ *
+ * The single place that answers "who is in this conversation". Two-party
+ * threads have exactly two; the event room has N and grows as vendors confirm.
+ * Read membership, delivery, and unread counts through this — comparing
+ * against `counterpartyId` directly silently excludes everyone in an event
+ * room except the venue operator.
+ */
+export function getThreadParticipantIds(thread: MessageThread): string[] {
+  if (thread.kind === "event") {
+    return [thread.organizerId, ...thread.participantIds.filter((id) => id !== thread.organizerId)];
+  }
+  return [thread.organizerId, thread.counterpartyId];
 }
 
 function getThreadsRaw(): MessageThread[] {
@@ -144,8 +190,14 @@ export function getThreadForBooking(bookingId: string): BookingMessageThread | u
   );
 }
 
+export function getEventThreadForBooking(bookingId: string): EventMessageThread | undefined {
+  return getThreadsRaw().find(
+    (thread): thread is EventMessageThread => isEventThread(thread) && thread.bookingId === bookingId
+  );
+}
+
 export function getThreadsForParticipant(accountId: string): MessageThread[] {
-  return getThreadsRaw().filter((thread) => thread.organizerId === accountId || thread.counterpartyId === accountId);
+  return getThreadsRaw().filter((thread) => getThreadParticipantIds(thread).includes(accountId));
 }
 
 /**
@@ -206,6 +258,69 @@ export function getOrCreateThreadForBooking(input: {
 }
 
 /**
+ * Idempotent by bookingId. The three-way room for one event.
+ *
+ * Callers are responsible for the "organizer only, confirmed booking with at
+ * least one confirmed vendor" gate — see openEventRoom() in
+ * spaces/eventRoom.ts and docs/SECURITY.md's "Chat unlock timing". This is the
+ * only kind of thread the organizer creates rather than receives, and that's
+ * deliberate: it's their event, and the alternative is the group text off
+ * Foundry that this exists to replace.
+ */
+export function getOrCreateEventThread(input: {
+  bookingId: string;
+  venueId: string;
+  organizerId: string;
+  participantIds: string[];
+}): EventMessageThread {
+  const existing = getEventThreadForBooking(input.bookingId);
+  if (existing) return existing;
+
+  const thread: EventMessageThread = {
+    kind: "event",
+    id: crypto.randomUUID(),
+    bookingId: input.bookingId,
+    venueId: input.venueId,
+    organizerId: input.organizerId,
+    participantIds: dedupeExcludingOrganizer(input.participantIds, input.organizerId),
+    createdAt: new Date().toISOString(),
+  };
+  saveThreads([...getThreadsRaw(), thread]);
+  return thread;
+}
+
+function dedupeExcludingOrganizer(ids: string[], organizerId: string): string[] {
+  return [...new Set(ids)].filter((id) => id !== organizerId);
+}
+
+/**
+ * Adds accounts to an existing event room, returning the ids actually added.
+ *
+ * Additive only — a vendor who confirmed later joins the room, but nobody is
+ * ever silently removed from a conversation they've already been reading.
+ * Removing a participant is a separate decision with its own consequences for
+ * message history, and no UI asks for it yet.
+ */
+export function addEventThreadParticipants(threadId: string, accountIds: string[]): string[] {
+  const threads = getThreadsRaw();
+  const index = threads.findIndex((thread) => thread.id === threadId);
+  if (index === -1) return [];
+
+  const target = threads[index];
+  if (!isEventThread(target)) return [];
+
+  const existing = new Set(getThreadParticipantIds(target));
+  const added = dedupeExcludingOrganizer(accountIds, target.organizerId).filter((id) => !existing.has(id));
+  if (added.length === 0) return [];
+
+  const updated: EventMessageThread = { ...target, participantIds: [...target.participantIds, ...added] };
+  const next = [...threads];
+  next[index] = updated;
+  saveThreads(next);
+  return added;
+}
+
+/**
  * Upgrades an existing proposal-anchored thread in place once that proposal
  * is finalized — never creates a new thread. Narrows via isProposalThread()
  * before comparing proposalId so a booking thread (which has no proposalId)
@@ -227,7 +342,7 @@ export function attachEngagementToThread(proposalId: string, engagementId: strin
 }
 
 export function isThreadParticipant(thread: MessageThread, accountId: string): boolean {
-  return thread.organizerId === accountId || thread.counterpartyId === accountId;
+  return getThreadParticipantIds(thread).includes(accountId);
 }
 
 export function getMessagesForThread(threadId: string): ChatMessage[] {
@@ -242,7 +357,26 @@ export function sendMessage(input: {
   body: string;
   /** Booking threads only — a venue owner's structured terms or deposit request. */
   proposal?: BookingProposalAttachment;
+  /** Proposal threads only — a round of vendor deal terms from either side. */
+  dealProposal?: DealProposalAttachment;
+  /** Booking threads only — a formal agreement from the venue operator. */
+  contract?: BookingContractAttachment;
 }): ChatMessage {
+  let stored = getMessagesRaw();
+
+  /*
+   * A new round of terms closes any still-open round on this thread. Without
+   * this, an old counter stays acceptable forever and both sides can accept
+   * different numbers, each believing theirs is the agreement.
+   */
+  if (input.dealProposal) {
+    stored = stored.map((message) =>
+      message.threadId === input.threadId && message.dealProposal?.status === "sent"
+        ? { ...message, dealProposal: { ...message.dealProposal, status: "superseded" as const } }
+        : message
+    );
+  }
+
   const message: ChatMessage = {
     id: crypto.randomUUID(),
     threadId: input.threadId,
@@ -251,22 +385,35 @@ export function sendMessage(input: {
     createdAt: new Date().toISOString(),
     readBy: [input.senderId],
     ...(input.proposal ? { proposal: input.proposal } : {}),
+    ...(input.dealProposal ? { dealProposal: input.dealProposal } : {}),
+    ...(input.contract ? { contract: input.contract } : {}),
   };
-  saveMessages([...getMessagesRaw(), message]);
+  saveMessages([...stored, message]);
 
   const thread = getThreadById(input.threadId);
   if (thread) {
-    const recipientId = thread.organizerId === input.senderId ? thread.counterpartyId : thread.organizerId;
-    createNotification({
-      recipientId,
-      type: "new_message",
-      title: "New message",
-      body: input.body.length > 80 ? `${input.body.slice(0, 80)}…` : input.body,
-      link: `/dashboard/messages/${input.threadId}`,
-    });
+    // Every other participant, not "the counterparty" — an event room has
+    // several, and notifying only one of them is how someone misses the
+    // message that moved their event.
+    for (const recipientId of getThreadParticipantIds(thread).filter((id) => id !== input.senderId)) {
+      createNotification({
+        recipientId,
+        type: "new_message",
+        title: "New message",
+        body: input.body.length > 80 ? `${input.body.slice(0, 80)}…` : input.body,
+        link: `/dashboard/messages/${input.threadId}`,
+      });
+    }
   }
 
   return message;
+}
+
+/** Every round of deal terms on a thread, oldest first. Feed to resolveEffectiveDealTerms() (dealProposals.ts). */
+export function getDealProposalsForThread(threadId: string): DealProposalAttachment[] {
+  return getMessagesForThread(threadId)
+    .map((message) => message.dealProposal)
+    .filter((proposal): proposal is DealProposalAttachment => Boolean(proposal));
 }
 
 export function markThreadRead(threadId: string, readerId: string): void {
@@ -312,12 +459,150 @@ export function respondToBookingProposal(
   saveMessages(messages.map((message) => (message.id === messageId ? updated : message)));
 
   createNotification({
-    recipientId: thread.counterpartyId,
+    // Whoever sent the proposal, rather than the thread's counterparty: same
+    // account on a booking thread, but reading it off the message can't pick
+    // the wrong participant if this ever renders on another thread kind.
+    recipientId: target.senderId,
     type: "new_message",
     title: status === "accepted" ? "Your proposal was accepted" : "Your proposal was declined",
     body: proposal.note,
     link: `/dashboard/messages/${target.threadId}`,
   });
 
+  return updated;
+}
+
+/**
+ * Records either side's answer to a round of vendor deal terms.
+ *
+ * Unlike respondToBookingProposal (organizer-only, because only a venue owner
+ * sends those), either party may answer here — that symmetry is the point: a
+ * planner can now counter a vendor and a vendor can counter back. Two guards
+ * hold it together: you must be in the thread, and you can never respond to
+ * your own round.
+ *
+ * Accepting records agreement on the numbers. It does NOT create the
+ * engagement — finalizeDeal() still does, and reads the accepted round as its
+ * starting point (see dealProposals.ts).
+ */
+export function respondToDealProposal(
+  messageId: string,
+  actorAccountId: string,
+  status: Extract<DealProposalAttachment["status"], "accepted" | "declined">
+): ChatMessage | undefined {
+  const messages = getMessagesRaw();
+  const target = messages.find((message) => message.id === messageId);
+  if (!target?.dealProposal || target.dealProposal.status !== "sent") return undefined;
+  if (target.senderId === actorAccountId) return undefined;
+
+  const thread = getThreadById(target.threadId);
+  if (!thread || !isThreadParticipant(thread, actorAccountId)) return undefined;
+
+  const dealProposal: DealProposalAttachment = {
+    ...target.dealProposal,
+    status,
+    respondedAt: new Date().toISOString(),
+  };
+  const updated: ChatMessage = { ...target, dealProposal };
+  saveMessages(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  createNotification({
+    recipientId: target.senderId,
+    type: "deal_terms_proposed",
+    title: status === "accepted" ? "Your terms were accepted" : "Your terms were declined",
+    body: dealProposal.note,
+    link: `/dashboard/messages/${target.threadId}`,
+  });
+
+  return updated;
+}
+
+/**
+ * The planner countersigns a contract the host sent.
+ *
+ * Organizer-only and one-way: a signed contract is the record of what both
+ * parties put their names to, not a toggle. Re-read bookingContracts.ts on
+ * what this does and doesn't assert before changing anything here.
+ */
+export function signContract(
+  messageId: string,
+  actorAccountId: string,
+  signature: string
+): ChatMessage | undefined {
+  const trimmed = signature.trim();
+  if (trimmed.length < 2) return undefined;
+
+  const messages = getMessagesRaw();
+  const target = messages.find((message) => message.id === messageId);
+  if (!target?.contract || target.contract.status !== "sent") return undefined;
+
+  const thread = getThreadById(target.threadId);
+  if (!thread || thread.organizerId !== actorAccountId) return undefined;
+
+  const contract: BookingContractAttachment = {
+    ...target.contract,
+    status: "signed",
+    organizerSignature: trimmed,
+    organizerSignedAt: new Date().toISOString(),
+  };
+  const updated: ChatMessage = { ...target, contract };
+  saveMessages(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  createNotification({
+    recipientId: target.senderId,
+    type: "contract_signed",
+    title: "Your agreement was signed",
+    body: `${trimmed} signed "${contract.title}".`,
+    link: `/dashboard/messages/${target.threadId}`,
+  });
+
+  return updated;
+}
+
+/** The planner declines a contract, with an optional reason so the host can revise and resend. */
+export function declineContract(
+  messageId: string,
+  actorAccountId: string,
+  reason?: string
+): ChatMessage | undefined {
+  const messages = getMessagesRaw();
+  const target = messages.find((message) => message.id === messageId);
+  if (!target?.contract || target.contract.status !== "sent") return undefined;
+
+  const thread = getThreadById(target.threadId);
+  if (!thread || thread.organizerId !== actorAccountId) return undefined;
+
+  const contract: BookingContractAttachment = {
+    ...target.contract,
+    status: "declined",
+    declinedAt: new Date().toISOString(),
+    declineReason: reason?.trim() || null,
+  };
+  const updated: ChatMessage = { ...target, contract };
+  saveMessages(messages.map((message) => (message.id === messageId ? updated : message)));
+
+  createNotification({
+    recipientId: target.senderId,
+    type: "contract_sent",
+    title: "Your agreement wasn't signed",
+    body: reason?.trim()
+      ? `The planner declined "${contract.title}": ${reason.trim()}`
+      : `The planner declined "${contract.title}". You can revise it and send a new one.`,
+    link: `/dashboard/messages/${target.threadId}`,
+  });
+
+  return updated;
+}
+
+/** The host pulls back an unsigned contract — e.g. to correct a figure before the planner acts on it. */
+export function withdrawContract(messageId: string, actorAccountId: string): ChatMessage | undefined {
+  const messages = getMessagesRaw();
+  const target = messages.find((message) => message.id === messageId);
+  if (!target?.contract || target.contract.status !== "sent") return undefined;
+  if (target.senderId !== actorAccountId) return undefined;
+
+  const contract: BookingContractAttachment = { ...target.contract, status: "withdrawn" };
+  const updated: ChatMessage = { ...target, contract };
+  saveMessages(messages.map((message) => (message.id === messageId ? updated : message)));
   return updated;
 }
