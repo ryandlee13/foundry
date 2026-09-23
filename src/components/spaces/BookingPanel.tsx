@@ -33,6 +33,7 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [attendees, setAttendees] = useState("");
+  const [organizerNote, setOrganizerNote] = useState("");
   const [coiAgreed, setCoiAgreed] = useState(false);
   const [depositAgreed, setDepositAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +74,9 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       depositAgreed: venue.rules.securityDepositRequired ? depositAgreed : true,
       eventName: eventName.trim() || null,
       eventType: eventType || null,
+      // Omitted entirely when blank, so an empty note never renders as an
+      // empty "Notes from the planner" block in the host's review modal.
+      ...(organizerNote.trim() ? { organizerNote: organizerNote.trim() } : {}),
     });
     setRequestedId(booking.id);
     setConfirmDialogOpen(false);
@@ -160,7 +164,8 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
               {formatEventDate(eventDate)} · {formatTimeRange(startTime, endTime)} · {attendees} guests
             </p>
             <p className="mt-2 text-xs text-ink-soft">
-              Waiting on the host to accept — you&apos;ll see it confirmed on your dashboard.
+              Waiting on the host to accept. As soon as they do, your conversation with them opens in
+              Messages and the venue&apos;s name and address unlock.
             </p>
             <Link
               href="/dashboard/organizer"
@@ -258,6 +263,24 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
                   value={attendees}
                   onChange={(event) => setAttendees(event.target.value)}
                   className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                />
+              </div>
+              {/*
+                The one place a planner can say something the form doesn't ask
+                about. Optional on purpose — making it required would turn a
+                useful aside into a box people fill with "n/a".
+              */}
+              <div className="col-span-2">
+                <label htmlFor="booking-note" className="block text-xs font-medium text-ink-soft">
+                  Notes for the host (optional)
+                </label>
+                <textarea
+                  id="booking-note"
+                  rows={3}
+                  value={organizerNote}
+                  onChange={(event) => setOrganizerNote(event.target.value)}
+                  placeholder="Anything the host should know — it's a 40th, we'd want the patio for a toast around 9, and we're bringing our own DJ."
+                  className="mt-1 w-full resize-none rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
                 />
               </div>
             </div>

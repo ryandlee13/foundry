@@ -27,9 +27,11 @@ import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
+import { contextFromBooking } from "@/lib/vendors/requestContext";
 import EventRoomPanel from "./EventRoomPanel";
 import FindVendorsPrompt from "./FindVendorsPrompt";
 import VendorNeedsBuilder from "./VendorNeedsBuilder";
+import { organizerProposalsPath } from "@/lib/vendors/organizerRoutes";
 import type { Booking } from "@/lib/types/spaces";
 import type { EngagementStatus, EventNeed, EventNeedPhase, EventNeedStatus, VendorEngagement, VendorProfile } from "@/lib/types/vendors";
 
@@ -207,7 +209,7 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Link
-                    href={`/dashboard/organizer/bookings/${bookingId}/vendors/${need.id}/proposals`}
+                    href={organizerProposalsPath(bookingId, need.id)}
                     className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
                   >
                     View proposals
@@ -324,11 +326,8 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
         </h2>
         <div className="mt-4">
           <VendorNeedsBuilder
-            booking={booking}
+            context={contextFromBooking(booking, publicLocation, coordinates)}
             organizerId={user.id}
-            publicLocation={publicLocation}
-            coordinates={coordinates}
-            eventLabel={formatEventLabel(booking)}
             onDone={() => {
               setFormOpen(false);
               refresh();

@@ -504,6 +504,17 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
     something to bolt onto the prototype.
   - **RLS:** `select`/`update` (mark read): owner (`recipient_id = auth.uid()`) only.
     `insert`: server-side only, as a side effect of the action that triggered it.
+- **`event_needs.booking_id` / `vendor_engagements.booking_id` are NULLABLE** (extends
+  §14/§15). Null means "hired, not yet attached to an event" — a planner can book a vendor
+  before they have a venue, which the original not-null anchor made impossible. Assignment
+  (`assignEngagementToBooking()` in `src/lib/spaces/eventRoom.ts`) sets the column on the
+  engagement and its parent need in one step and is one-way: a row that already has a
+  `booking_id` is refused rather than re-pointed, since moving it would change the
+  membership of an event room mid-conversation. RLS is unaffected — ownership on both
+  tables is `organizer_id`, not the booking.
+- **`bookings.organizer_note`** (extends §8/§10): optional free text the planner attaches
+  to a request. Owned by the organizer and read-only to the venue operator, per §4's
+  column-level ownership rule.
 - **`message_threads` / `messages`** (extends §16/§17): the prototype's
   `MessageThread` is three distinct row shapes, matching §16's existing polymorphic
   `context_type` design — a real migration should use `context_type` in

@@ -5,7 +5,7 @@ import { publishEventNeedAndNotifyVendors } from "@/lib/vendors/publishing";
 import { cancelEventNeed } from "@/lib/vendors/eventNeeds";
 import VendorRequestForm from "./VendorRequestForm";
 import VendorNeedReviewSummary from "./VendorNeedReviewSummary";
-import type { Booking } from "@/lib/types/spaces";
+import type { VendorRequestContext } from "@/lib/vendors/requestContext";
 import type { EventNeed, VendorSkillSlug } from "@/lib/types/vendors";
 
 /**
@@ -34,19 +34,13 @@ const CATEGORY_OPTIONS: { label: string; skillSlug: VendorSkillSlug }[] = [
 type Step = "pick" | "fill" | "review";
 
 export default function VendorNeedsBuilder({
-  booking,
+  context,
   organizerId,
-  publicLocation,
-  coordinates,
-  eventLabel,
   onDone,
   onCancel,
 }: {
-  booking: Booking;
+  context: VendorRequestContext;
   organizerId: string;
-  publicLocation: string;
-  coordinates: { lat: number; lng: number };
-  eventLabel: string;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -147,10 +141,8 @@ export default function VendorNeedsBuilder({
         </p>
         <VendorRequestForm
           key={`${current.label}-${fillIndex}`}
-          booking={booking}
+          context={context}
           organizerId={organizerId}
-          publicLocation={publicLocation}
-          coordinates={coordinates}
           lockSkill
           initialSkillSlug={current.skillSlug}
           initialTitle={current.label}
@@ -167,7 +159,7 @@ export default function VendorNeedsBuilder({
       <p className="text-sm text-ink-soft">Review each request before publishing. Vendors matching each category will be notified.</p>
       <div className="space-y-4">
         {draftedNeeds.map((need) => (
-          <VendorNeedReviewSummary key={need.id} need={need} eventLabel={eventLabel} onEdit={() => handleEdit(need.id)} />
+          <VendorNeedReviewSummary key={need.id} need={need} eventLabel={context.eventLabel} onEdit={() => handleEdit(need.id)} />
         ))}
       </div>
       <div className="flex flex-wrap gap-3">

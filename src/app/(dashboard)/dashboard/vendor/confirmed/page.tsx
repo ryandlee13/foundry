@@ -153,14 +153,27 @@ export default function VendorConfirmedGigsPage() {
                       <p className="font-display text-base font-semibold text-ink">
                         {need?.title ?? (need ? getSkillName(need.skillSlug) : "Engagement")}
                       </p>
+                      {/*
+                        Falls back to the request's own date when the organizer
+                        hasn't attached this to an event yet — the vendor is
+                        booked either way, and showing a blank where the date
+                        goes reads as missing data rather than a pending venue.
+                      */}
                       <p className="mt-0.5 text-xs text-ink-soft">
-                        ${engagement.agreedAmount} ·{" "}
+                        ${engagement.agreedAmount}
                         {booking
-                          ? `${formatEventDate(booking.eventDate)} · ${formatTimeRange(booking.startTime, booking.endTime)}`
-                          : ""}
+                          ? ` · ${formatEventDate(booking.eventDate)} · ${formatTimeRange(booking.startTime, booking.endTime)}`
+                          : need
+                            ? ` · ${formatEventDate(need.eventDate)} · ${formatTimeRange(need.startTime, need.endTime)}`
+                            : ""}
                         {organizer && ` · Organized by ${organizer.name.split(" ")[0]}`}
                         {unread > 0 && ` · ${unread} unread message${unread === 1 ? "" : "s"}`}
                       </p>
+                      {!booking && (
+                        <p className="mt-1 text-xs text-brass-dark">
+                          Venue to be confirmed — the organizer hasn&apos;t attached this to an event yet.
+                        </p>
+                      )}
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[engagement.status]}`}>
                       {ENGAGEMENT_STATUS_LABELS[engagement.status]}

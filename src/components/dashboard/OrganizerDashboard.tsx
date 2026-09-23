@@ -54,14 +54,22 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
     return (
       <EmptyState
         title="No events yet"
-        description="Find a space for your first event — book it, then build out your vendor roster from the same dashboard."
+        description="Find a space for your first event — book it, then build out your vendor roster from the same dashboard. Already know who you want? Hire them first and attach them to an event later."
         action={
-          <Link
-            href="/spaces"
-            className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-          >
-            Discover new spaces
-          </Link>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link
+              href="/spaces"
+              className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+            >
+              Discover new spaces
+            </Link>
+            <Link
+              href="/dashboard/organizer/vendors"
+              className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+            >
+              Hire a vendor first
+            </Link>
+          </div>
         }
       />
     );

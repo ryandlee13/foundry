@@ -99,6 +99,13 @@ export default function BookingRequestReviewModal({
         </p>
       </div>
 
+      {booking.organizerNote?.trim() && (
+        <div className="mt-3 rounded-lg border border-line bg-paper px-3.5 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Notes from the planner</p>
+          <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-ink">{booking.organizerNote}</p>
+        </div>
+      )}
+
       {overriddenConstraints.length > 0 && (
         <div className="mt-3 rounded-lg border border-brass/40 bg-brass/5 px-3.5 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">Outside your usual preferences</p>

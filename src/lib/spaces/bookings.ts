@@ -42,6 +42,7 @@ export function addBooking(input: {
   depositAgreed: boolean;
   eventName?: string | null;
   eventType?: Booking["eventType"];
+  organizerNote?: string;
 }): Booking {
   const venue = getVenueBySlugAnywhere(input.venueSlug);
   const booking: Booking = {
@@ -95,7 +96,14 @@ export function updateBookingStatus(
   return updated;
 }
 
-export function getBookingById(bookingId: string): Booking | undefined {
+/**
+ * Accepts null so callers holding a nullable anchor (`EventNeed.bookingId`,
+ * `VendorEngagement.bookingId` — null until a vendor is assigned to an event)
+ * don't each need their own guard. Every call site already treats "no booking"
+ * as a legitimate state rather than an error.
+ */
+export function getBookingById(bookingId: string | null): Booking | undefined {
+  if (!bookingId) return undefined;
   return getBookings().find((booking) => booking.id === bookingId);
 }
 

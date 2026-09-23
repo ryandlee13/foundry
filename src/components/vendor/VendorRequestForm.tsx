@@ -15,7 +15,7 @@ import {
 import InfoTooltip from "@/components/ui/InfoTooltip";
 import { createDraftEventNeed } from "@/lib/vendors/eventNeeds";
 import { publishEventNeedAndNotifyVendors } from "@/lib/vendors/publishing";
-import type { Booking } from "@/lib/types/spaces";
+import type { VendorRequestContext } from "@/lib/vendors/requestContext";
 import type { EventNeed, PricingModel, VendorSkillSlug } from "@/lib/types/vendors";
 
 type DeadlineQuickOption = "24h" | "3d" | "5d" | "1w" | "custom";
@@ -71,10 +71,8 @@ function TextField({
 }
 
 export default function VendorRequestForm({
-  booking,
+  context,
   organizerId,
-  publicLocation,
-  coordinates,
   onCreated,
   onCancel,
   lockSkill = false,
@@ -82,10 +80,8 @@ export default function VendorRequestForm({
   initialTitle,
   showPublishButton = true,
 }: {
-  booking: Booking;
+  context: VendorRequestContext;
   organizerId: string;
-  publicLocation: string;
-  coordinates: { lat: number; lng: number };
   onCreated: (need: EventNeed) => void;
   onCancel: () => void;
   /** Hides the skill selector when the caller (e.g. the multi-need builder) already chose it. */
@@ -100,8 +96,8 @@ export default function VendorRequestForm({
   const [title, setTitle] = useState(initialTitle ?? "");
   const [description, setDescription] = useState("");
   const [locationType, setLocationType] = useState<"in_person" | "remote">("in_person");
-  const [startTime, setStartTime] = useState(booking.startTime);
-  const [endTime, setEndTime] = useState(booking.endTime);
+  const [startTime, setStartTime] = useState(context.startTime);
+  const [endTime, setEndTime] = useState(context.endTime);
   const [setupTime, setSetupTime] = useState("");
   const [positionsAvailable, setPositionsAvailable] = useState("1");
   const [preferredPricingModel, setPreferredPricingModel] = useState<PricingModel | "">("");
@@ -139,7 +135,7 @@ export default function VendorRequestForm({
   function buildInput() {
     const budget = computeNeedBudget(budgetInput);
     return {
-      bookingId: booking.id,
+      bookingId: context.bookingId,
       organizerId,
       skillSlug,
       title: title.trim(),
@@ -151,13 +147,13 @@ export default function VendorRequestForm({
       // vendor-side readers keep working.
       deliverables: "",
       locationType,
-      publicLocation,
-      coordinates,
-      eventDate: booking.eventDate,
+      publicLocation: context.publicLocation,
+      coordinates: context.coordinates,
+      eventDate: context.eventDate,
       startTime,
       endTime,
       setupTime: setupTime.trim() || null,
-      estimatedAttendance: booking.attendees,
+      estimatedAttendance: context.attendees,
       positionsAvailable: Math.max(1, Number(positionsAvailable) || 1),
       budgetMin: budget.budgetMin,
       budgetMax: budget.budgetMax,
@@ -238,9 +234,7 @@ export default function VendorRequestForm({
         </p>
       </div>
 
-      <div className="rounded-lg bg-paper-dim px-3.5 py-2.5 text-xs text-ink-soft">
-        Event date and expected attendance are pulled from this booking: {booking.eventDate}, {booking.attendees} guests.
-      </div>
+      <div className="rounded-lg bg-paper-dim px-3.5 py-2.5 text-xs text-ink-soft">{context.sourceNote}</div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -251,7 +245,9 @@ export default function VendorRequestForm({
             onChange={(e) => setStartTime(e.target.value)}
             className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
           />
-          <p className="mt-1 text-xs text-ink-soft">Defaults to your booking&apos;s start time — edit if this vendor is needed earlier or later.</p>
+          <p className="mt-1 text-xs text-ink-soft">
+            Defaults to the event&apos;s start time — edit if this vendor is needed earlier or later.
+          </p>
         </div>
         <div>
           <label className="block text-sm font-medium text-ink">Vendor end time</label>
@@ -269,7 +265,7 @@ export default function VendorRequestForm({
         <div className="mt-1.5 flex gap-4">
           <label className="flex items-center gap-2 text-sm text-ink">
             <input type="radio" checked={locationType === "in_person"} onChange={() => setLocationType("in_person")} className="h-4 w-4 border-line text-wine focus:ring-1 focus:ring-brass" />
-            In person ({publicLocation})
+            In person ({context.publicLocation})
           </label>
           <label className="flex items-center gap-2 text-sm text-ink">
             <input type="radio" checked={locationType === "remote"} onChange={() => setLocationType("remote")} className="h-4 w-4 border-line text-wine focus:ring-1 focus:ring-brass" />

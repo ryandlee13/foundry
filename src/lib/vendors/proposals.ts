@@ -3,6 +3,7 @@ import { getEffectiveProposalStatus, formatExpiration } from "./expiration";
 import { getEventNeedById, getEventNeedsForOrganizer } from "./eventNeeds";
 import { getVendorProfileById } from "./profiles";
 import { createNotification, createNotificationsForMany } from "./notifications";
+import { organizerProposalsPath } from "./organizerRoutes";
 
 /** Browser-local vendor proposals (bids). Same prototype caveat as profiles.ts. */
 const PROPOSALS_KEY = "foundry.vendors.proposals";
@@ -112,7 +113,7 @@ export function createProposal(input: {
       type: "new_proposal",
       title: "New proposal received",
       body: `A vendor submitted a proposal for "${need.title}".`,
-      link: `/dashboard/organizer/bookings/${need.bookingId}/vendors/${need.id}/proposals`,
+      link: organizerProposalsPath(need.bookingId, need.id),
     });
   }
 
@@ -154,7 +155,7 @@ export function editProposal(
       type: "proposal_updated",
       title: "A vendor updated their proposal",
       body: `A proposal for "${need.title}" was updated.`,
-      link: `/dashboard/organizer/bookings/${need.bookingId}/vendors/${need.id}/proposals`,
+      link: organizerProposalsPath(need.bookingId, need.id),
     });
   }
   return updated;
@@ -170,7 +171,7 @@ export function withdrawProposal(id: string): VendorProposal | undefined {
       type: "vendor_withdrew",
       title: "A vendor withdrew their proposal",
       body: `A proposal for "${need.title}" was withdrawn.`,
-      link: `/dashboard/organizer/bookings/${need.bookingId}/vendors/${need.id}/proposals`,
+      link: organizerProposalsPath(need.bookingId, need.id),
     });
   }
   return updated;

@@ -14,21 +14,62 @@ import type { BookingMessageThread } from "@/lib/types/vendors";
  * so the existing vendors/seed.ts -> spaces/bookings.ts edge stays acyclic.
  */
 
-export function acceptBookingRequest(bookingId: string): Booking | undefined {
+export interface AcceptBookingResult {
+  booking: Booking;
+  /** Null only when the venue has no owner account to converse with (seed listings). */
+  thread: BookingMessageThread | null;
+}
+
+/**
+ * HOST-ONLY. Accepts the request and opens the conversation in the same step.
+ *
+ * Accepting used to notify the planner and stop there, leaving them with a
+ * confirmed booking and no way to reply until the host separately clicked "Go
+ * to messages" — so the two people who had just agreed to work together had
+ * nowhere to talk, and went to email.
+ *
+ * This does NOT weaken the host-initiated rule (docs/SECURITY.md "Chat unlock
+ * timing"): the thread is still created by the host's own action, and an
+ * organizer still cannot create one. Accepting *is* the host agreeing, so it's
+ * the natural moment for the channel to exist.
+ *
+ * Ordered deliberately: ownership is verified before the status changes, so a
+ * failure can't leave a confirmed booking behind with no thread.
+ */
+export function acceptBookingRequest(bookingId: string, actorAccountId: string): AcceptBookingResult {
+  const booking = getBookingById(bookingId);
+  if (!booking) throw new Error("Booking not found.");
+  if (booking.status !== "pending") throw new Error("This request has already been decided.");
+
+  const venueOwnerId = getBookingVenueOwnerId(booking);
+  if (!venueOwnerId || venueOwnerId !== actorAccountId) {
+    throw new Error("Only the venue owner can accept this request.");
+  }
+
   const updated = updateBookingStatus(bookingId, "confirmed");
-  if (!updated) return undefined;
+  if (!updated) throw new Error("Couldn't accept this request.");
+
+  const venue = getVenueBySlugAnywhere(updated.venueSlug);
+  const thread = venue
+    ? getOrCreateThreadForBooking({
+        bookingId: updated.id,
+        venueId: venue.id,
+        organizerId: updated.organizerId,
+        venueOwnerId,
+      })
+    : null;
 
   createNotification({
     recipientId: updated.organizerId,
     type: "venue_booking_accepted",
     title: "Your booking request was accepted",
-    body: `${updated.venueName} accepted your request for ${updated.eventDate}.`,
-    // Not a thread link — the thread doesn't exist yet; the host still has to
-    // click "Go to messages" to open one. See docs/SECURITY.md "Chat unlock timing".
-    link: "/dashboard/organizer",
+    body: thread
+      ? `${updated.venueName} accepted your request for ${updated.eventDate}. Your conversation with the host is open — say hello.`
+      : `${updated.venueName} accepted your request for ${updated.eventDate}.`,
+    link: thread ? `/dashboard/messages/${thread.id}` : "/dashboard/organizer",
   });
 
-  return updated;
+  return { booking: updated, thread };
 }
 
 export function declineBookingRequest(bookingId: string): Booking | undefined {

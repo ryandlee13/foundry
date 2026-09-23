@@ -6,10 +6,15 @@ import {
   getOrCreateEventThread,
 } from "@/lib/vendors/messages";
 import { createNotification } from "@/lib/vendors/notifications";
-import { getEngagementsForBooking } from "@/lib/vendors/engagements";
+import {
+  getEngagementById,
+  getEngagementsForBooking,
+  setEngagementBooking,
+} from "@/lib/vendors/engagements";
+import { updateEventNeed } from "@/lib/vendors/eventNeeds";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import type { Booking } from "@/lib/types/spaces";
-import type { EventMessageThread, EngagementStatus } from "@/lib/types/vendors";
+import type { EventMessageThread, EngagementStatus, VendorEngagement } from "@/lib/types/vendors";
 
 /**
  * The three-way event room: planner + venue operator + every confirmed vendor,
@@ -184,6 +189,118 @@ export function syncEventRoomParticipants(bookingId: string): string[] {
   const added = addEventThreadParticipants(thread.id, participantIds);
   notifyParticipants(added, thread.id, booking);
   return added;
+}
+
+export type AssignmentBlockReason =
+  | "not_organizer"
+  | "already_assigned"
+  | "engagement_not_active"
+  | "booking_not_confirmed";
+
+export interface AssignmentEligibility {
+  ok: boolean;
+  reason: AssignmentBlockReason | null;
+}
+
+export const ASSIGNMENT_BLOCK_COPY: Record<AssignmentBlockReason, string> = {
+  not_organizer: "Only the organizer who hired this vendor can assign them to an event.",
+  already_assigned: "This vendor is already assigned to an event.",
+  engagement_not_active: "Only a confirmed vendor can be assigned to an event.",
+  booking_not_confirmed: "Pick an event with a confirmed booking.",
+};
+
+/**
+ * Pure: may this vendor be attached to this event?
+ *
+ * Assignment is one-way. Moving a vendor between events would silently change
+ * who is in an event room they've already been talking in, and nothing asks
+ * for that — so an engagement that already has a booking is refused rather
+ * than reassigned.
+ */
+export function evaluateAssignment(input: {
+  engagement: Pick<VendorEngagement, "organizerId" | "bookingId" | "status">;
+  booking: Pick<Booking, "organizerId" | "status">;
+  actorAccountId: string;
+}): AssignmentEligibility {
+  const { engagement, booking, actorAccountId } = input;
+  if (engagement.organizerId !== actorAccountId || booking.organizerId !== actorAccountId) {
+    return { ok: false, reason: "not_organizer" };
+  }
+  if (engagement.bookingId !== null) return { ok: false, reason: "already_assigned" };
+  if (!ACTIVE_ENGAGEMENT_STATUSES.includes(engagement.status)) {
+    return { ok: false, reason: "engagement_not_active" };
+  }
+  if (booking.status !== "confirmed") return { ok: false, reason: "booking_not_confirmed" };
+  return { ok: true, reason: null };
+}
+
+/** Pure: the events a loose vendor could be attached to — the organizer's own confirmed bookings. */
+export function selectAssignableBookings<T extends Pick<Booking, "organizerId" | "status">>(
+  bookings: T[],
+  organizerId: string
+): T[] {
+  return bookings.filter((booking) => booking.organizerId === organizerId && booking.status === "confirmed");
+}
+
+export interface AssignEngagementResult {
+  engagement: VendorEngagement;
+  booking: Booking;
+  /** Null when the event isn't eligible for a room yet (e.g. a seed venue with no host account). */
+  thread: EventMessageThread | null;
+}
+
+/**
+ * Attaches a vendor hired without an event to one of the organizer's confirmed
+ * bookings, and opens the three-way room in the same step.
+ *
+ * The need and the engagement move together — leaving the parent need
+ * unassigned would make the vendor's gig detail page and the organizer's roster
+ * disagree about which event this is. Both are set before the room opens so
+ * getActiveVendorOwnerIdsForBooking() can already see the new vendor.
+ *
+ * Opening the room is a best-effort follow-through, not a precondition: a
+ * booking at a seed venue has no host account to introduce anyone to, and
+ * failing the assignment for that reason would strand the vendor unassigned
+ * forever.
+ */
+export function assignEngagementToBooking(
+  engagementId: string,
+  bookingId: string,
+  actorAccountId: string
+): AssignEngagementResult {
+  const engagement = getEngagementById(engagementId);
+  if (!engagement) throw new Error("Engagement not found.");
+  const booking = getBookingById(bookingId);
+  if (!booking) throw new Error("Booking not found.");
+
+  const eligibility = evaluateAssignment({ engagement, booking, actorAccountId });
+  if (!eligibility.ok) {
+    throw new Error(ASSIGNMENT_BLOCK_COPY[eligibility.reason ?? "not_organizer"]);
+  }
+
+  updateEventNeed(engagement.eventNeedId, { bookingId });
+  const updated = setEngagementBooking(engagementId, bookingId);
+  if (!updated) throw new Error("Couldn't assign this vendor.");
+
+  const vendorProfile = getVendorProfileById(engagement.vendorProfileId);
+  if (vendorProfile) {
+    createNotification({
+      recipientId: vendorProfile.ownerId,
+      type: "event_updated",
+      title: "Your booking now has an event",
+      body: `The organizer attached your confirmed work to ${formatEventLabel(booking)}.`,
+      link: "/dashboard/vendor/confirmed",
+    });
+  }
+
+  let thread: EventMessageThread | null = null;
+  try {
+    thread = openEventRoom(bookingId, actorAccountId).thread;
+  } catch {
+    // See the doc comment: the assignment stands even when no room can open.
+  }
+
+  return { engagement: updated, booking, thread };
 }
 
 function notifyParticipants(recipientIds: string[], threadId: string, booking: Booking): void {

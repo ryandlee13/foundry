@@ -202,9 +202,18 @@ workaround.
     accept-or-decline blind. It deliberately leaves the booking `pending`: asking is not a
     decision, and auto-confirming to unlock chat would make the accept meaningless.
 
+  There is a third host-only entry point, and it is now the usual one:
+  `acceptBookingRequest(bookingId, actorAccountId)` opens the thread **as part of
+  accepting**. Accepting previously left the planner with a confirmed booking and no way to
+  reply until the host separately clicked "Go to messages", so the two people who had just
+  agreed to work together went to email. This does not weaken the rule: the thread is still
+  created by the host's own action, and the actor is verified as the venue owner *before*
+  the status changes, so a failed authorization can't leave a confirmed booking with no
+  thread behind it.
+
   The security-relevant invariant is **host-initiated**, not "confirmed" — an
   organizer/planner can never create a booking thread, only reply once the venue owner has
-  created one. A `declined` booking is excluded from both: once the host says no, the
+  created one. A `declined` booking is excluded from all three: once the host says no, the
   channel doesn't open.
 - **Chat unlock timing (event rooms)**: the three-way room (`EventMessageThread`, the third
   kind in the union) is the one thread kind the **organizer** creates rather than receives,
@@ -216,6 +225,14 @@ workaround.
   `confirmed`/`in_progress`/`completed`. The pure core, `evaluateEventRoomReadiness()`,
   checks the actor *first*, so a non-organizer never learns the booking's state from the
   refusal.
+
+  A room can also be opened as a side effect of `assignEngagementToBooking()` — the
+  organizer attaching a vendor they hired *before* they had a venue to one of their
+  confirmed events. Same gate, same actor: that function runs `evaluateAssignment()`, which
+  requires the actor to be the organizer on **both** the engagement and the booking.
+  Assignment is **one-way** — an engagement that already has a `bookingId` is refused rather
+  than moved, because reassignment would silently change who is in a room people have
+  already been talking in.
 
   Membership is **additive only**. `addEventThreadParticipants()` can add a vendor who
   confirms later but never removes anyone — removal is a separate decision with its own

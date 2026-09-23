@@ -177,8 +177,18 @@ export type EventNeedPhase =
 
 export interface EventNeed {
   id: string;
-  /** Anchors this need to a confirmed venue Booking — this prototype has no separate Event entity, see CLAUDE.md. */
-  bookingId: string;
+  /**
+   * The confirmed venue Booking this need belongs to — this prototype has no
+   * separate Event entity, see CLAUDE.md.
+   *
+   * **Null means "not assigned to an event yet."** A planner who books a DJ
+   * before they've booked a room has a real vendor engagement and no event to
+   * hang it on; forcing a booking first meant that planner couldn't use Foundry
+   * at all until they'd found a venue. Assigning it later (see
+   * assignEngagementToBooking in spaces/eventRoom.ts) sets this on the need and
+   * its engagements together, and opens the three-way room.
+   */
+  bookingId: string | null;
   organizerId: string;
   skillSlug: VendorSkillSlug;
   title: string;
@@ -285,7 +295,8 @@ export interface AgreedTerms {
 export interface VendorEngagement {
   id: string;
   eventNeedId: string;
-  bookingId: string;
+  /** Mirrors the parent need's bookingId — null until the organizer assigns this vendor to an event. */
+  bookingId: string | null;
   organizerId: string;
   vendorProfileId: string;
   acceptedProposalId: string;

@@ -164,6 +164,13 @@ export interface Booking {
   /** Organizer-chosen name for this event, e.g. "Foundry Summer Social". Null falls back to a venue+date label — see formatEventLabel() in bookings.ts. */
   eventName: string | null;
   eventType: EventType | null;
+  /**
+   * Optional free-text the planner attaches to the request — context a form
+   * can't capture ("it's a 40th, we'll want the patio for the toast"). Shown to
+   * the host in the review modal. Optional rather than `| null` because
+   * bookings written before this field existed have no value for it.
+   */
+  organizerNote?: string;
   createdAt: string;
   /** Denormalized venue.ownerId at request time, so a booking can route to its host without a venue lookup; null when the venue had no owner (seed venues). Optional because bookings written before this field exists in a browser predate it — always read via getBookingVenueOwnerId(). */
   venueOwnerId?: string | null;

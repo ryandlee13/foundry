@@ -14,6 +14,7 @@ import { getOrCreateThreadForProposal, attachEngagementToThread } from "./messag
 import { createNotification } from "./notifications";
 import { createPortfolioItem } from "./eventPortfolio";
 import { getSkillName } from "./skills";
+import { organizerProposalsPath, organizerVendorsPath } from "./organizerRoutes";
 
 /** Browser-local vendor engagements, created only via finalizeDeal() below (initially "pending_vendor_confirmation" until the vendor confirms via confirmEngagementTerms()). */
 const ENGAGEMENTS_KEY = "foundry.vendors.engagements";
@@ -51,6 +52,24 @@ export function getEngagementsForVendor(vendorProfileId: string): VendorEngageme
 
 export function getEngagementsForBooking(bookingId: string): VendorEngagement[] {
   return getAll().filter((engagement) => engagement.bookingId === bookingId);
+}
+
+/** Vendors this organizer has hired who aren't attached to an event yet. */
+export function getUnassignedEngagementsForOrganizer(organizerId: string): VendorEngagement[] {
+  return getAll().filter(
+    (engagement) => engagement.organizerId === organizerId && engagement.bookingId === null
+  );
+}
+
+/**
+ * Attaches an engagement to a booking. Deliberately narrow: it only ever sets
+ * the anchor, never clears or moves it — reassignment would change who is in
+ * an event room mid-conversation. Callers go through
+ * assignEngagementToBooking() in spaces/eventRoom.ts, which owns the
+ * eligibility rules and the matching update to the parent need.
+ */
+export function setEngagementBooking(id: string, bookingId: string): VendorEngagement | undefined {
+  return updateEngagementRaw(id, { bookingId });
 }
 
 export function getEngagementForProposal(proposalId: string): VendorEngagement | undefined {
@@ -246,7 +265,7 @@ export function confirmEngagementTerms(engagementId: string, actorAccountId: str
     type: "terms_confirmed_by_vendor",
     title: "Vendor confirmed the deal",
     body: `${vendorProfile.displayName} confirmed the final terms.`,
-    link: `/dashboard/organizer/bookings/${engagement.bookingId}/vendors`,
+    link: organizerVendorsPath(engagement.bookingId),
   });
 
   const need = getEventNeedById(engagement.eventNeedId);
@@ -303,7 +322,7 @@ export function declineEngagementTerms(engagementId: string, actorAccountId: str
     type: "terms_declined_by_vendor",
     title: "Vendor declined the final terms",
     body: `${vendorProfile.displayName} declined the final terms${reason ? `: "${reason}"` : "."}`,
-    link: `/dashboard/organizer/bookings/${engagement.bookingId}/vendors/${engagement.eventNeedId}/proposals`,
+    link: organizerProposalsPath(engagement.bookingId, engagement.eventNeedId),
   });
 
   return updated;
@@ -384,7 +403,7 @@ export function cancelEngagementByVendor(id: string): VendorEngagement | undefin
       type: "vendor_canceled",
       title: "A vendor canceled",
       body: "A confirmed vendor canceled their engagement on your event.",
-      link: `/dashboard/organizer/bookings/${engagement.bookingId}/vendors`,
+      link: organizerVendorsPath(engagement.bookingId),
     });
   }
   return updated;

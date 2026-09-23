@@ -6,6 +6,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { getBookingsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getThreadForBooking, getUnreadMessageCount } from "@/lib/vendors/messages";
+import { getUnassignedEngagementsForOrganizer } from "@/lib/vendors/engagements";
 import { BOOKING_STATUS_LABELS } from "@/lib/spaces/labels";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
@@ -23,6 +24,7 @@ export default function OrganizerDashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [threadIdByBooking, setThreadIdByBooking] = useState<Record<string, string>>({});
   const [unreadByBooking, setUnreadByBooking] = useState<Record<string, number>>({});
+  const [unassignedCount, setUnassignedCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -38,6 +40,7 @@ export default function OrganizerDashboardPage() {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBookings(owned);
+    setUnassignedCount(getUnassignedEngagementsForOrganizer(user.id).length);
     setThreadIdByBooking(threadIds);
     setUnreadByBooking(unread);
     setLoaded(true);
@@ -45,8 +48,26 @@ export default function OrganizerDashboardPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
-      <p className="mt-1 text-sm text-ink-soft">Your venue booking requests.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
+          <p className="mt-1 text-sm text-ink-soft">Your venue booking requests.</p>
+        </div>
+        {/* Vendors hired before a venue existed live off to the side until
+            they're assigned to an event — the badge is how a planner finds
+            them again. */}
+        <Link
+          href="/dashboard/organizer/vendors"
+          className="flex shrink-0 items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+        >
+          Vendors without an event
+          {unassignedCount > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-wine px-1.5 text-[11px] font-bold text-paper">
+              {unassignedCount}
+            </span>
+          )}
+        </Link>
+      </div>
 
       <div className="mt-8">
         {!loaded ? (
@@ -89,7 +110,7 @@ export default function OrganizerDashboardPage() {
                       href={`/dashboard/messages/${threadIdByBooking[booking.id]}`}
                       className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
                     >
-                      Messages
+                      Go to messages
                       {(unreadByBooking[booking.id] ?? 0) > 0 && (
                         <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-wine px-1 text-[10px] font-bold text-paper">
                           {unreadByBooking[booking.id]}

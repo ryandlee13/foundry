@@ -207,12 +207,15 @@ now rather than waiting.
   "List another space" CTA, which made an owner who already has listings land on a page
   asking them to create more, when the work waiting on them is the requests.
 - **Host-initiated messaging.** A booking thread (`BookingMessageThread`, part of the
-  `MessageThread` discriminated union in `src/lib/vendors/messages.ts`) can only be
-  created by `startBookingConversation()` in `src/lib/spaces/bookingWorkflow.ts`, which
-  throws unless the caller is the venue owner on a `confirmed` booking — the mirror of "a
-  vendor can never create a thread" (see `docs/SECURITY.md`'s "Chat unlock timing"). The
-  planner is notified their request "moved forward" on accept but gets no thread link
-  until the owner actually clicks "Go to messages." `bookingWorkflow.ts` and
+  `MessageThread` discriminated union in `src/lib/vendors/messages.ts`) can only be created
+  by the venue owner — the mirror of "a vendor can never create a thread" (see
+  `docs/SECURITY.md`'s "Chat unlock timing"). **`acceptBookingRequest()` now opens the
+  thread as part of accepting**, and notifies the planner with a link straight to it;
+  accepting and then leaving the planner unable to reply is what pushed both sides to
+  email. That's still host-initiated — an organizer can never create one — and the actor is
+  verified as the venue owner *before* the status changes, so a rejected accept can't leave
+  a confirmed booking with no thread. `startBookingConversation()` and
+  `startBookingInquiry()` remain for the pre-accept and re-entry paths. `bookingWorkflow.ts` and
   `eventRoom.ts` are the only places `src/lib/spaces/*` imports from `src/lib/vendors/*`;
   keep `bookings.ts` itself free of that import so the dependency edge stays
   one-directional.
@@ -285,6 +288,19 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   requests. `EventNeed.bookingId` points at a `Booking`, not a separate `Event` row.
   Organizer vendor-request UI lives at
   `/dashboard/organizer/bookings/[bookingId]/vendors`, not `/organizer/events/...`.
+- **…but that anchor is nullable, because vendors can be hired before a venue.**
+  `EventNeed.bookingId` and `VendorEngagement.bookingId` are `string | null`; null means
+  "not assigned to an event yet". A planner who locks in a DJ before finding a room posts
+  the request from `/dashboard/organizer/vendors`, supplying date/time/location themselves
+  via `VendorRequestContext` (`src/lib/vendors/requestContext.ts`) instead of reading them
+  off a `Booking` — that indirection is why `VendorRequestForm`/`VendorNeedsBuilder` take a
+  `context` rather than a `booking`. Later, `assignEngagementToBooking()`
+  (`src/lib/spaces/eventRoom.ts`) attaches the engagement **and its parent need together**
+  to one of the organizer's confirmed bookings and opens the three-way room. Assignment is
+  one-way: an already-assigned engagement is refused, never moved. Build organizer vendor
+  URLs with `organizerVendorsPath()`/`organizerProposalsPath()`
+  (`src/lib/vendors/organizerRoutes.ts`) — hand-built template strings produced
+  `/dashboard/organizer/bookings/null/vendors` for unassigned requests.
 - **Vendor *discovery* deliberately does not require a booking.** `VendorSearchBrief`
   (`src/lib/vendors/vendorSearch.ts`) is a URL-only, never-persisted search brief — category,
   date, location, guest count, budget, description — so a planner who already has a space can

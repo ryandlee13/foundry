@@ -19,6 +19,7 @@ import ErrorState from "@/components/ui/ErrorState";
 import EmptyState from "@/components/ui/EmptyState";
 import Dialog from "@/components/ui/Dialog";
 import FinalizeDealDialog, { type FinalizeDealTerms } from "./FinalizeDealDialog";
+import { organizerVendorsPath } from "@/lib/vendors/organizerRoutes";
 import type { EventNeed, ProposalStatus, VendorProfile, VendorProposal } from "@/lib/types/vendors";
 
 type SortOption =
@@ -53,7 +54,7 @@ const STATUS_STYLES: Record<ProposalStatus, string> = {
   closed_opportunity_filled: "bg-paper-dim text-ink-soft",
 };
 
-export default function OrganizerProposalsPage({ bookingId, needId }: { bookingId: string; needId: string }) {
+export default function OrganizerProposalsPage({ bookingId, needId }: { bookingId: string | null; needId: string }) {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [loaded, setLoaded] = useState(false);
@@ -201,7 +202,7 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
 
   return (
     <div>
-      <Link href={`/dashboard/organizer/bookings/${bookingId}/vendors`} className="text-sm font-medium text-ink-soft hover:text-ink">
+      <Link href={organizerVendorsPath(bookingId)} className="text-sm font-medium text-ink-soft hover:text-ink">
         ← Back to vendor requests
       </Link>
 

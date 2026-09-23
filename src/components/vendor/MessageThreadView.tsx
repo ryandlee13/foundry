@@ -47,6 +47,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 import FinalizeDealDialog, { type FinalizeDealTerms } from "./FinalizeDealDialog";
 import AgreedTermsCard from "./AgreedTermsCard";
+import { organizerProposalsPath } from "@/lib/vendors/organizerRoutes";
 import type { Account } from "@/lib/auth/types";
 import type { Booking, Venue } from "@/lib/types/spaces";
 import type {
@@ -97,7 +98,7 @@ function ProposalThreadHeader({
       <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold">
         {need && (
           <Link
-            href={`/dashboard/organizer/bookings/${need.bookingId}/vendors/${need.id}/proposals`}
+            href={organizerProposalsPath(need.bookingId, need.id)}
             className="text-brass-dark hover:underline"
           >
             View proposal
