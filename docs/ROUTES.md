@@ -79,7 +79,7 @@ header nav (For Planners / For Venues / For Vendors / About) is hidden on all
 
 | Route | Role required | Purpose |
 |---|---|---|
-| `/dashboard/organizer` | `organizer` | Organizer home ("Event Details"): bookings list, Messages link, "Find vendors" link gated on `status === "confirmed"` |
+| `/dashboard/organizer` | `organizer` | Organizer home ("Event Details"): bookings list, "Go to messages" per confirmed booking (the thread is ensured on load, so a confirmed booking's conversation is always present), "Find vendors" link gated on `status === "confirmed"` |
 | `/dashboard/organizer/events/new` *(future)* | `organizer` | Create event brief |
 | `/dashboard/organizer/events/[id]` *(future)* | `organizer` | Manage one event end-to-end |
 | `/dashboard/organizer/bookings/[bookingId]/vendors` | `organizer` (owner of the booking) | Real (prototype) — list/create/publish vendor requests ("Looking for a ___") for one booking, plus the Vendor Roster (per-need "N of M found" count, vendor profile photo, price, running total via `computeRosterSpend()`) of confirmed engagements. Anchored to a `Booking`, not an `Event` row — see `CLAUDE.md` |
@@ -98,7 +98,7 @@ header nav (For Planners / For Venues / For Vendors / About) is hidden on all
 | `/dashboard/vendor/reviews` | `vendor` | Real (prototype) — received reviews, respond/flag, toggle public Foundry event history |
 | `/dashboard/vendor/settings` *(future)* | `vendor` | Notification preferences currently only editable during onboarding, not standalone |
 | `/dashboard/messages` | any authenticated user | Real (prototype) — conversation list grouped by event/booking; covers two thread kinds: proposal threads (organizer-created, via "Start Conversation" or finalizing a deal — do not require acceptance) and booking threads (venue-owner-created only, via "Go to messages" on a confirmed booking) |
-| `/dashboard/organizer/vendors` | organizer only | Real (prototype) — vendors hired before a venue existed (`EventNeed.bookingId: null`), plus the "Assign to event" control that attaches one to a confirmed booking and opens the event room |
+| `/dashboard/organizer/vendors` *(built, currently unlinked)* | organizer only | Vendors hired before a venue existed (`EventNeed.bookingId: null`), plus the "Assign to event" control that attaches one to a confirmed booking and opens the event room. **Hidden at user direction** — no nav entry points to it; the route and component are kept working so it can be restored by re-adding the two links (see `CLAUDE.md`) |
 | `/dashboard/organizer/vendors/[needId]/proposals` | organizer who owns the need | Real (prototype) — same `OrganizerProposalsPage` as the booking-anchored route, with `bookingId={null}` so its back-link resolves correctly |
 | `/dashboard/messages/[threadId]` | thread participant only | Real (prototype) — two columns: chat left, `DealLogPanel` (proposals, deal rounds, contracts) right. Gated by `isThreadParticipant()`, which resolves membership via `getThreadParticipantIds()` so N-participant event rooms work. Header branches on thread kind (`ProposalThreadHeader`/`BookingThreadHeader`/`EventThreadHeader`) |
 | `/dashboard/notifications` | any authenticated user | Real (prototype) — in-app notification list, mark read/all read |

@@ -8,7 +8,7 @@ import { useOwnedVenuesData } from "@/hooks/useOwnedVenuesData";
 import {
   acceptBookingRequest,
   declineBookingRequest,
-  startBookingConversation,
+  openBookingConversation,
   startBookingInquiry,
 } from "@/lib/spaces/bookingWorkflow";
 import { formatEventDate } from "@/lib/spaces/bookings";
@@ -81,7 +81,7 @@ export default function VenueDashboardPage() {
       return;
     }
     try {
-      const { thread } = startBookingConversation(bookingId, user.id);
+      const { thread } = openBookingConversation(bookingId, user.id);
       router.push(`/dashboard/messages/${thread.id}`);
     } catch {
       // Swallow — the button is only rendered for confirmed bookings the

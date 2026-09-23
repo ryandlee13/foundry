@@ -206,16 +206,20 @@ now rather than waiting.
   events → your venues → subscription. Listing management used to sit at the top with a
   "List another space" CTA, which made an owner who already has listings land on a page
   asking them to create more, when the work waiting on them is the requests.
-- **Host-initiated messaging.** A booking thread (`BookingMessageThread`, part of the
-  `MessageThread` discriminated union in `src/lib/vendors/messages.ts`) can only be created
-  by the venue owner — the mirror of "a vendor can never create a thread" (see
-  `docs/SECURITY.md`'s "Chat unlock timing"). **`acceptBookingRequest()` now opens the
-  thread as part of accepting**, and notifies the planner with a link straight to it;
-  accepting and then leaving the planner unable to reply is what pushed both sides to
-  email. That's still host-initiated — an organizer can never create one — and the actor is
-  verified as the venue owner *before* the status changes, so a rejected accept can't leave
-  a confirmed booking with no thread. `startBookingConversation()` and
-  `startBookingInquiry()` remain for the pre-accept and re-entry paths. `bookingWorkflow.ts` and
+- **Booking messaging is host-only until the host says yes, then two-way.** A booking
+  thread (`BookingMessageThread`, part of the `MessageThread` discriminated union in
+  `src/lib/vendors/messages.ts`) routes through one gate, `openBookingThread` in
+  `src/lib/spaces/bookingWorkflow.ts`. While the booking is `pending` it is **host-only**
+  (`startBookingInquiry()`) — a planner may not open a line to a host who hasn't agreed to
+  anything. Once `confirmed`, **either party** may open it
+  (`openBookingConversation()` / the non-throwing `ensureBookingConversation()`): the host
+  agreeing is what makes the planner a legitimate correspondent, and a one-way channel
+  between two people who have already committed just sent the planner to email.
+  `acceptBookingRequest()` opens the thread as part of accepting and is the usual way one
+  appears; the organizer dashboard and Event details page additionally call
+  `ensureBookingConversation()` on load so a confirmed booking's conversation is simply
+  *there* in Messages rather than waiting on someone to click. A `declined` booking never
+  opens a channel in either direction. `bookingWorkflow.ts` and
   `eventRoom.ts` are the only places `src/lib/spaces/*` imports from `src/lib/vendors/*`;
   keep `bookings.ts` itself free of that import so the dependency edge stays
   one-directional.
@@ -290,7 +294,15 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   `/dashboard/organizer/bookings/[bookingId]/vendors`, not `/organizer/events/...`.
 - **…but that anchor is nullable, because vendors can be hired before a venue.**
   `EventNeed.bookingId` and `VendorEngagement.bookingId` are `string | null`; null means
-  "not assigned to an event yet". A planner who locks in a DJ before finding a room posts
+  "not assigned to an event yet". **The UI for this is currently hidden at user direction**
+  ("hide vendors without an event for now") — nothing links to
+  `/dashboard/organizer/vendors`, so no new unassigned request can be created through the
+  app. The routes, `UnassignedVendorsPage.tsx`, and all the supporting logic are kept
+  intact and working, the same way `TriangleDiagram.tsx` is kept unreferenced: restoring it
+  means re-adding the two entry points (the badge link on `/dashboard/organizer` and the
+  empty-state action in `OrganizerDashboard.tsx`). Don't unwind the nullable anchor to
+  "clean up" — it's load-bearing for the assignment flow and for any request already
+  created. A planner who locks in a DJ before finding a room posts
   the request from `/dashboard/organizer/vendors`, supplying date/time/location themselves
   via `VendorRequestContext` (`src/lib/vendors/requestContext.ts`) instead of reading them
   off a `Booking` — that indirection is why `VendorRequestForm`/`VendorNeedsBuilder` take a

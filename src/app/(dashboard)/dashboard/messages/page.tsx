@@ -153,15 +153,15 @@ export default function MessagesInboxPage() {
     <div>
       <h1 className="font-display text-2xl font-semibold text-ink">Messages</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        Grouped by event. Talk to a vendor from their proposal or a venue host from an accepted booking — or open an
-        event room to get everyone working your event into one conversation.
+        Grouped by event. Once a booking is confirmed, you and the venue can message each other here — plus any
+        vendor you&apos;ve started a conversation with.
       </p>
 
       <div className="mt-8 space-y-6">
         {groups.length === 0 ? (
           <EmptyState
             title="No conversations yet"
-            description="Start a conversation with a vendor from their proposal, or accept a booking to message a planner, to begin."
+            description="Book a venue — the conversation with your host opens as soon as they confirm. Vendor conversations start from their proposal."
           />
         ) : (
           groups.map((group) => (

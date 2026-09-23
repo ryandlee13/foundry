@@ -190,31 +190,32 @@ workaround.
   until the vendor separately calls `confirmEngagementTerms()`, at which point the
   competing-proposal-closing sweep runs (deliberately not at finalize time — see
   `CLAUDE.md`).
-- **Chat unlock timing (booking threads)**: the same invariant, mirrored for venue
-  bookings — a thread between an organizer and a venue owner must not be creatable by
-  anyone but the venue owner on that specific booking. Both entry points route through one
-  host-only gate (`openBookingThreadAsHost` in `src/lib/spaces/bookingWorkflow.ts`), which
-  throws unless the actor owns the venue:
-  - `startBookingConversation(bookingId, actorAccountId)` — `confirmed` bookings only; the
-    post-accept "Go to messages" action.
-  - `startBookingInquiry(bookingId, actorAccountId, question)` — also allows a `pending`
-    booking, so a host can ask for detail *before* deciding rather than being forced to
-    accept-or-decline blind. It deliberately leaves the booking `pending`: asking is not a
-    decision, and auto-confirming to unlock chat would make the accept meaningless.
+- **Chat unlock timing (booking threads)**: the rule here is **status-dependent**, and the
+  pivot is the host's decision. All entry points route through one gate,
+  `openBookingThread` in `src/lib/spaces/bookingWorkflow.ts`:
+  - **While `pending`, the channel is HOST-ONLY.** A planner may not open a line to a host
+    who hasn't agreed to anything — that is the anti-spam invariant the original design was
+    built around, and it is unchanged. `startBookingInquiry(bookingId, actorAccountId,
+    question)` is the only `pending` entry point, so a host can ask for detail *before*
+    deciding rather than being forced to accept-or-decline blind. It deliberately leaves
+    the booking `pending`: asking is not a decision, and auto-confirming to unlock chat
+    would make the accept meaningless.
+  - **Once `confirmed`, EITHER PARTY may open it.** `openBookingConversation(bookingId,
+    actorAccountId)` accepts the venue owner or the booking's organizer and nobody else.
+    The host agreeing is precisely what makes the planner a legitimate correspondent, and a
+    one-directional channel between two people who have already committed to each other
+    only pushes the planner to email for anything the host didn't think to ask about.
+    `ensureBookingConversation()` is the same gate, non-throwing, for callers that want the
+    thread to simply exist rather than acting on a click.
+  - `acceptBookingRequest(bookingId, actorAccountId)` opens the thread **as part of
+    accepting**, and is the usual way one comes into being. The actor is verified as the
+    venue owner *before* the status changes, so a failed authorization can't leave a
+    confirmed booking with no thread behind it.
 
-  There is a third host-only entry point, and it is now the usual one:
-  `acceptBookingRequest(bookingId, actorAccountId)` opens the thread **as part of
-  accepting**. Accepting previously left the planner with a confirmed booking and no way to
-  reply until the host separately clicked "Go to messages", so the two people who had just
-  agreed to work together went to email. This does not weaken the rule: the thread is still
-  created by the host's own action, and the actor is verified as the venue owner *before*
-  the status changes, so a failed authorization can't leave a confirmed booking with no
-  thread behind it.
-
-  The security-relevant invariant is **host-initiated**, not "confirmed" — an
-  organizer/planner can never create a booking thread, only reply once the venue owner has
-  created one. A `declined` booking is excluded from all three: once the host says no, the
-  channel doesn't open.
+  What is still absolutely true: a thread only ever exists between the two parties **on
+  that specific booking**, `isThreadParticipant()` gates every read, and a `declined`
+  booking is excluded from every path — once the host says no, the channel doesn't open,
+  in either direction.
 - **Chat unlock timing (event rooms)**: the three-way room (`EventMessageThread`, the third
   kind in the union) is the one thread kind the **organizer** creates rather than receives,
   and that asymmetry is the rule, not an inconsistency. Introducing a vendor to a venue is

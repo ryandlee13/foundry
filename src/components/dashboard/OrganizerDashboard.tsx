@@ -6,6 +6,8 @@ import { getBookingsForOrganizer } from "@/lib/spaces/bookings";
 import { getVenueById } from "@/lib/spaces/submittedVenues";
 import { selectUpcomingBookings } from "@/lib/spaces/venueEarnings";
 import { getEngagementsForOrganizer } from "@/lib/vendors/engagements";
+import { ensureBookingConversation } from "@/lib/spaces/bookingWorkflow";
+import { getThreadForBooking, getUnreadMessageCount } from "@/lib/vendors/messages";
 import KpiCard from "./KpiCard";
 import UpcomingEventCard from "./UpcomingEventCard";
 import EmptyState from "@/components/ui/EmptyState";
@@ -18,13 +20,25 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
   const [venuesById, setVenuesById] = useState<Record<string, Venue>>({});
   const [vendorsPartneredCount, setVendorsPartneredCount] = useState(0);
   const [todayIso, setTodayIso] = useState("");
+  const [threadIdByBooking, setThreadIdByBooking] = useState<Record<string, string>>({});
+  const [unreadByBooking, setUnreadByBooking] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const owned = getBookingsForOrganizer(accountId);
     const venues: Record<string, Venue> = {};
+    const threadIds: Record<string, string> = {};
+    const unread: Record<string, number> = {};
     for (const booking of owned) {
       const venue = getVenueById(booking.venueId);
       if (venue) venues[booking.venueId] = venue;
+      // Either party may open the conversation on a confirmed booking, so the
+      // planner's copy is simply there rather than waiting on the host.
+      if (booking.status === "confirmed") ensureBookingConversation(booking.id, accountId);
+      const thread = getThreadForBooking(booking.id);
+      if (thread) {
+        threadIds[booking.id] = thread.id;
+        unread[booking.id] = getUnreadMessageCount(thread.id, accountId);
+      }
     }
 
     // A "partner" is a distinct vendor who actually committed to one of this
@@ -40,6 +54,8 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
     setBookings(owned);
     setVenuesById(venues);
     setVendorsPartneredCount(new Set(engagements.map((e) => e.vendorProfileId)).size);
+    setThreadIdByBooking(threadIds);
+    setUnreadByBooking(unread);
     setTodayIso(new Date().toISOString().slice(0, 10));
     setLoaded(true);
   }, [accountId]);
@@ -54,22 +70,14 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
     return (
       <EmptyState
         title="No events yet"
-        description="Find a space for your first event — book it, then build out your vendor roster from the same dashboard. Already know who you want? Hire them first and attach them to an event later."
+        description="Find a space for your first event — book it, then build out your vendor roster from the same dashboard."
         action={
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link
-              href="/spaces"
-              className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-            >
-              Discover new spaces
-            </Link>
-            <Link
-              href="/dashboard/organizer/vendors"
-              className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
-            >
-              Hire a vendor first
-            </Link>
-          </div>
+          <Link
+            href="/spaces"
+            className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+          >
+            Discover new spaces
+          </Link>
         }
       />
     );
@@ -119,12 +127,27 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
                 booking={booking}
                 venue={venuesById[booking.venueId]}
                 trailing={
-                  <Link
-                    href={`/dashboard/organizer/bookings/${booking.id}/vendors`}
-                    className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
-                  >
-                    Find vendors
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    {threadIdByBooking[booking.id] && (
+                      <Link
+                        href={`/dashboard/messages/${threadIdByBooking[booking.id]}`}
+                        className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
+                      >
+                        Message host
+                        {(unreadByBooking[booking.id] ?? 0) > 0 && (
+                          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-wine px-1 text-[10px] font-bold text-paper">
+                            {unreadByBooking[booking.id]}
+                          </span>
+                        )}
+                      </Link>
+                    )}
+                    <Link
+                      href={`/dashboard/organizer/bookings/${booking.id}/vendors`}
+                      className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
+                    >
+                      Find vendors
+                    </Link>
+                  </div>
                 }
               />
             ))}

@@ -6,7 +6,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { getBookingsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getThreadForBooking, getUnreadMessageCount } from "@/lib/vendors/messages";
-import { getUnassignedEngagementsForOrganizer } from "@/lib/vendors/engagements";
+import { ensureBookingConversation } from "@/lib/spaces/bookingWorkflow";
 import { BOOKING_STATUS_LABELS } from "@/lib/spaces/labels";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
@@ -24,7 +24,6 @@ export default function OrganizerDashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [threadIdByBooking, setThreadIdByBooking] = useState<Record<string, string>>({});
   const [unreadByBooking, setUnreadByBooking] = useState<Record<string, number>>({});
-  const [unassignedCount, setUnassignedCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -32,6 +31,14 @@ export default function OrganizerDashboardPage() {
     const threadIds: Record<string, string> = {};
     const unread: Record<string, number> = {};
     for (const booking of owned) {
+      /*
+       * Opening the thread here, rather than only on click, is what makes a
+       * confirmed booking's conversation simply appear in Messages for the
+       * planner. Idempotent and side-effect-light: it creates the row and
+       * notifies nobody (only sendMessage notifies), and it no-ops on a
+       * pending booking or a seed venue with no host account.
+       */
+      if (booking.status === "confirmed") ensureBookingConversation(booking.id, user.id);
       const thread = getThreadForBooking(booking.id);
       if (thread) {
         threadIds[booking.id] = thread.id;
@@ -40,7 +47,6 @@ export default function OrganizerDashboardPage() {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBookings(owned);
-    setUnassignedCount(getUnassignedEngagementsForOrganizer(user.id).length);
     setThreadIdByBooking(threadIds);
     setUnreadByBooking(unread);
     setLoaded(true);
@@ -48,26 +54,8 @@ export default function OrganizerDashboardPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
-          <p className="mt-1 text-sm text-ink-soft">Your venue booking requests.</p>
-        </div>
-        {/* Vendors hired before a venue existed live off to the side until
-            they're assigned to an event — the badge is how a planner finds
-            them again. */}
-        <Link
-          href="/dashboard/organizer/vendors"
-          className="flex shrink-0 items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
-        >
-          Vendors without an event
-          {unassignedCount > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-wine px-1.5 text-[11px] font-bold text-paper">
-              {unassignedCount}
-            </span>
-          )}
-        </Link>
-      </div>
+      <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
+      <p className="mt-1 text-sm text-ink-soft">Your venue booking requests.</p>
 
       <div className="mt-8">
         {!loaded ? (
