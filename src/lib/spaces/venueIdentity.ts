@@ -67,9 +67,23 @@ export function resolveVenueDisclosure(input: {
   return WITHHELD;
 }
 
-/** Copy for the public listing, explaining what's held back and what unlocks it. */
+/**
+ * Tooltip copy for the "i" beside a listing's title, explaining what's held
+ * back and what unlocks it. Lives here, next to the rule it describes, so the
+ * promise the UI makes and the gate that keeps it can't drift apart.
+ *
+ * Both say **confirmed**, not "contract signed": confirmation is what
+ * `resolveVenueDisclosure()` actually keys on. Contracts are optional in the
+ * booking flow, so gating the address on one would leave planners of hosts who
+ * never send a contract without an address at all. Change the copy only
+ * together with the rule above.
+ */
 export const VENUE_PRIVACY_NOTICE =
-  "This host lists their space by description. The venue's name and exact address are shared with you as soon as your booking is confirmed.";
+  "This host lists by description. The venue's name and exact address are shared with you as soon as your booking is confirmed.";
+
+/** The same rule, from the owner's side — they already know their own address. */
+export const VENUE_PRIVACY_NOTICE_OWNER =
+  "Planners see your listing title and district only. Your venue's name and exact address are revealed once you confirm their booking.";
 
 /**
  * Normalizes for comparison: lowercase, punctuation stripped, whitespace

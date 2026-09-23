@@ -43,7 +43,15 @@ choice:
    organizer of a **confirmed** booking at that venue, nobody else. No component reads
    either field off a `Venue` directly (the two exceptions — the owner's own submission
    review and edit form — say so in-file). `slug` is generated from the descriptive title so
-   the URL doesn't leak the name either.
+   the URL doesn't leak the name either. **Only `reason === "confirmed_booking"` actually
+   renders the details** (venue page and booking thread); everyone else, the owner included,
+   gets an `InfoTooltip` beside the venue name carrying `VENUE_PRIVACY_NOTICE` /
+   `VENUE_PRIVACY_NOTICE_OWNER`. The owner is excluded on purpose — `resolveVenueDisclosure()`
+   still returns their own address to them, but printing a venue operator's own street
+   address back at them is noise, not a feature. Both notices say *confirmed*, not "contract
+   signed": confirmation is what the gate keys on, and contracts are optional in the booking
+   flow, so gating on one would leave planners of hosts who never send a contract with no
+   address at all.
 6. Private documents (COI, IDs, contracts, permits, security plans) live in a private
    Storage bucket and are only ever accessed via short-lived signed URLs.
 7. Never describe an uploaded document as "verified" or "approved" in a legal sense. Use

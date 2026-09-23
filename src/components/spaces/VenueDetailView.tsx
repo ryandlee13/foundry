@@ -8,9 +8,11 @@ import { formatBookingWindow, formatBookingIncrement } from "@/lib/spaces/bookin
 import { getBookingsForOrganizer } from "@/lib/spaces/bookings";
 import {
   VENUE_PRIVACY_NOTICE,
+  VENUE_PRIVACY_NOTICE_OWNER,
   resolveVenueDisclosure,
   type VenueDisclosure,
 } from "@/lib/spaces/venueIdentity";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 import VenueAmenityList from "@/components/spaces/VenueAmenityList";
 import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
 import VenueHostLine from "@/components/spaces/VenueHostLine";
@@ -39,7 +41,13 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
     );
   }, [venue, user]);
 
-  const revealed = disclosure !== null && disclosure.reason !== "withheld";
+  /*
+   * Only a planner on a confirmed booking gets the details rendered. The owner
+   * is deliberately excluded: resolveVenueDisclosure() still returns their own
+   * address to them (they're entitled to it), but showing a venue operator
+   * their own street address on their own listing told them nothing.
+   */
+  const addressDisclosed = disclosure?.reason === "confirmed_booking";
 
   const allowedRules = (Object.keys(RULE_LABELS) as (keyof typeof RULE_LABELS)[]).filter(
     (key) => venue.rules[key]
@@ -92,8 +100,27 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
               {venue.badge === "new" ? "New" : venue.badge === "popular" ? "Popular" : "Great for nightlife"}
             </span>
           )}
-          <h1 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">
+          {/*
+            The listing is deliberately anonymous: a descriptive title and a
+            district, so a planner can't search the name, find the venue's own
+            site, and book around Foundry (docs/SECURITY.md #5).
+
+            Until the address is actually disclosed, that's explained by the "i"
+            beside the title rather than a banner — the rule is worth stating
+            once, quietly, not given a block of page weight on every listing.
+            The owner sees the same affordance: they already know their own
+            address, so printing it back to them was pure noise.
+
+            Everything below comes from resolveVenueDisclosure() — never read
+            realName/exactAddress off the Venue in a component.
+          */}
+          <h1 className="mt-2 flex flex-wrap items-center gap-2.5 font-display text-3xl font-semibold text-ink sm:text-4xl">
             {venue.name}
+            {!addressDisclosed && (
+              <InfoTooltip label="Why the venue's name and address aren't shown">
+                {disclosure?.reason === "owner" ? VENUE_PRIVACY_NOTICE_OWNER : VENUE_PRIVACY_NOTICE}
+              </InfoTooltip>
+            )}
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
             {venue.neighborhood}, {venue.city} · {SPACE_TYPE_LABELS[venue.spaceType]}
@@ -101,26 +128,20 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
           <VenueHostLine ownerId={venue.ownerId} />
 
           {/*
-            The listing is deliberately anonymous: a descriptive title and a
-            district, so a planner can't search the name, find the venue's own
-            site, and book around Foundry. Everything shown here comes from
-            resolveVenueDisclosure() — never read realName/exactAddress off the
-            Venue in a component (docs/SECURITY.md #5).
+            Kept for the planner who has earned it — this is the payoff of the
+            whole mechanism, and the one case where the details are genuinely
+            new information to the person reading.
           */}
-          {revealed && disclosure ? (
+          {addressDisclosed && disclosure && (
             <div className="mt-4 rounded-xl border border-brass/40 bg-brass/5 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">
-                {disclosure.reason === "owner" ? "Private — only you see this" : "Unlocked for your confirmed booking"}
+                Unlocked for your confirmed booking
               </p>
               {disclosure.realName && (
                 <p className="mt-1 font-display text-base font-semibold text-ink">{disclosure.realName}</p>
               )}
               {disclosure.exactAddress && <p className="mt-0.5 text-sm text-ink">{disclosure.exactAddress}</p>}
             </div>
-          ) : (
-            <p className="mt-4 rounded-xl border border-line bg-paper-dim px-4 py-3 text-sm leading-relaxed text-ink-soft">
-              {VENUE_PRIVACY_NOTICE}
-            </p>
           )}
 
           <p className="mt-4 text-base leading-relaxed text-ink-soft">{venue.description}</p>

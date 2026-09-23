@@ -32,7 +32,13 @@ import {
   resolveEffectiveBookingTerms,
   type EffectiveBookingTerms,
 } from "@/lib/spaces/bookingProposals";
-import { resolveVenueDisclosure, type VenueDisclosure } from "@/lib/spaces/venueIdentity";
+import {
+  VENUE_PRIVACY_NOTICE,
+  VENUE_PRIVACY_NOTICE_OWNER,
+  resolveVenueDisclosure,
+  type VenueDisclosure,
+} from "@/lib/spaces/venueIdentity";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 import { syncEventRoomParticipants } from "@/lib/spaces/eventRoom";
 import { getVenueById } from "@/lib/spaces/submittedVenues";
 import DealLogPanel from "@/components/dashboard/DealLogPanel";
@@ -124,25 +130,26 @@ function ProposalThreadHeader({
  *
  * A planner who has to email the host for the street address has already left
  * Foundry, so the moment their booking is confirmed the details land in the
- * thread they're already reading. Everything here comes from
- * resolveVenueDisclosure() — never read `realName`/`exactAddress` off a Venue
- * in a component (docs/SECURITY.md #5).
+ * thread they're already reading.
+ *
+ * Renders for the planner who earned it and nobody else. The owner is
+ * deliberately excluded even though resolveVenueDisclosure() returns their own
+ * address to them — printing a venue operator's own street address back at them
+ * is noise; the "i" beside the venue name carries the rule for them instead.
+ * Everything here comes from resolveVenueDisclosure() — never read
+ * `realName`/`exactAddress` off a Venue in a component (docs/SECURITY.md #5).
  */
 function VenueDetailsReveal({ disclosure, venue }: { disclosure: VenueDisclosure; venue: Venue | null }) {
-  if (!venue || disclosure.reason === "withheld") return null;
+  if (!venue || disclosure.reason !== "confirmed_booking") return null;
   if (!disclosure.exactAddress && !disclosure.realName) return null;
 
   return (
     <div className="mt-3 rounded-xl border border-brass/40 bg-brass/5 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">
-        {disclosure.reason === "owner" ? "Private listing details" : "Venue details unlocked"}
-      </p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">Venue details unlocked</p>
       {disclosure.realName && <p className="mt-1 font-display text-base font-semibold text-ink">{disclosure.realName}</p>}
       {disclosure.exactAddress && <p className="mt-0.5 text-sm text-ink">{disclosure.exactAddress}</p>}
       <p className="mt-1.5 text-[11px] leading-relaxed text-ink-soft">
-        {disclosure.reason === "owner"
-          ? "Only you see this. Planners see your listing title and district until their booking is confirmed."
-          : "Shared with you because this booking is confirmed. Please keep it to your team."}
+        Shared with you because this booking is confirmed. Please keep it to your team.
       </p>
     </div>
   );
@@ -154,18 +161,26 @@ function BookingThreadHeader({
   terms,
   rateLabel,
   contractLabel,
+  privacyNotice,
 }: {
   booking: Booking;
   otherAccount: Account | null;
   terms: EffectiveBookingTerms;
   rateLabel: string | null;
   contractLabel: string | null;
+  /** Null once the address is actually on screen — see VenueDetailsReveal. */
+  privacyNotice: string | null;
 }) {
   return (
     <>
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{formatEventLabel(booking)}</p>
-      <p className="font-display text-lg font-semibold text-ink">
-        {booking.venueName} — {otherAccount?.name ?? "Foundry user"}
+      <p className="flex flex-wrap items-center gap-2 font-display text-lg font-semibold text-ink">
+        <span>
+          {booking.venueName} — {otherAccount?.name ?? "Foundry user"}
+        </span>
+        {privacyNotice && (
+          <InfoTooltip label="Why the venue's name and address aren't shown">{privacyNotice}</InfoTooltip>
+        )}
       </p>
       {/*
         Reflects the terms currently in force, not the original request: once
@@ -416,6 +431,18 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
   const isBookingHost = thread.kind === "booking" && thread.counterpartyId === user.id;
 
+  /*
+   * Explains the withheld name/address as an "i" beside the venue name, for
+   * everyone who isn't looking at the details themselves — including the owner,
+   * whose own address is nothing to tell them.
+   */
+  const venuePrivacyNotice =
+    disclosure === null || disclosure.reason === "confirmed_booking"
+      ? null
+      : disclosure.reason === "owner"
+        ? VENUE_PRIVACY_NOTICE_OWNER
+        : VENUE_PRIVACY_NOTICE;
+
   function handleSend() {
     if (!draft.trim() || !user) return;
     sendMessage({ threadId, senderId: user.id, body: draft });
@@ -479,6 +506,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
                 terms={effectiveTerms}
                 rateLabel={rateLabel}
                 contractLabel={contractLabel}
+                privacyNotice={venuePrivacyNotice}
               />
             ) : (
               <p className="font-display text-lg font-semibold text-ink">{otherAccount?.name ?? "Foundry user"}</p>
