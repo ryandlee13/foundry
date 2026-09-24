@@ -96,7 +96,7 @@ export default function VenueDashboardPage() {
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">Event status</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Your listings and the bookings against them. Listings go live immediately in this
             prototype — there&apos;s no admin review step yet.

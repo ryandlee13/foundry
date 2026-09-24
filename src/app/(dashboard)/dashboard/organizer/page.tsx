@@ -6,6 +6,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { getBookingsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getThreadForBooking, getUnreadMessageCount } from "@/lib/vendors/messages";
+import { getUnassignedEngagementsForOrganizer } from "@/lib/vendors/engagements";
 import { ensureBookingConversation } from "@/lib/spaces/bookingWorkflow";
 import { BOOKING_STATUS_LABELS } from "@/lib/spaces/labels";
 import EmptyState from "@/components/ui/EmptyState";
@@ -30,6 +31,7 @@ export default function OrganizerDashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [threadIdByBooking, setThreadIdByBooking] = useState<Record<string, string>>({});
   const [unreadByBooking, setUnreadByBooking] = useState<Record<string, number>>({});
+  const [unassignedCount, setUnassignedCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -55,13 +57,34 @@ export default function OrganizerDashboardPage() {
     setBookings(owned);
     setThreadIdByBooking(threadIds);
     setUnreadByBooking(unread);
+    setUnassignedCount(getUnassignedEngagementsForOrganizer(user.id).length);
     setLoaded(true);
   }, [user]);
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-ink">Event details</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">Event status</h1>
       <p className="mt-1 text-sm text-ink-soft">Your venue booking requests.</p>
+
+      {/*
+        Only when there's actually something waiting to be attached. This page
+        is about bookings; a standing advert for the unassigned flow belongs on
+        the Vendors tab, where it always shows.
+      */}
+      {unassignedCount > 0 && (
+        <Link
+          href="/dashboard/organizer/vendors/unassigned"
+          className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brass/40 bg-brass/5 px-5 py-4 transition-colors hover:bg-brass/10"
+        >
+          <span className="text-sm text-ink">
+            <span className="font-semibold">
+              {unassignedCount} vendor{unassignedCount === 1 ? "" : "s"}
+            </span>{" "}
+            {unassignedCount === 1 ? "isn't" : "aren't"} attached to an event yet.
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-brass-dark">Assign to an event →</span>
+        </Link>
+      )}
 
       <div className="mt-8">
         {!loaded ? (
@@ -112,7 +135,14 @@ export default function OrganizerDashboardPage() {
                       )}
                     </Link>
                   )}
-                  {booking.status === "confirmed" && (
+                  {/*
+                    Every booking except a declined one. This used to require
+                    `confirmed`, which meant a planner waiting on a host saw no
+                    way to start lining up vendors — the wait is exactly when
+                    they want to. Declined stays excluded: there's no event
+                    there to hire for.
+                  */}
+                  {booking.status !== "declined" && (
                     <Link
                       href={`/dashboard/organizer/bookings/${booking.id}/vendors`}
                       className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"

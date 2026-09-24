@@ -11,7 +11,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import type { AppRole } from "@/lib/types/roles";
 
 /**
- * "Event Details" is the active role's own workspace — the page that used to
+ * "Event Status" is the active role's own workspace — the page that used to
  * be linked as "Organizer"/"Venue"/"Vendor". Only the active role's one is
  * shown; switching roles happens from the pill on the dashboard, not by
  * having all three in the sidebar at once.
@@ -73,7 +73,7 @@ export default function DashboardLayout({
       ? [
           {
             href: eventDetailsHref,
-            label: "Event Details",
+            label: "Event Status",
             badge: activeRole === "venue_operator" ? pendingCount : undefined,
           },
         ]

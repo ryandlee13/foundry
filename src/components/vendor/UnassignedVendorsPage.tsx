@@ -132,8 +132,8 @@ export default function UnassignedVendorsPage() {
 
   return (
     <div>
-      <Link href="/dashboard/organizer" className="text-sm font-medium text-ink-soft hover:text-ink">
-        ← Back to organizer dashboard
+      <Link href="/dashboard/organizer/vendors" className="text-sm font-medium text-ink-soft hover:text-ink">
+        ← Back to Vendors
       </Link>
 
       <div className="mt-4">

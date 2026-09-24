@@ -249,7 +249,7 @@ now rather than waiting.
   route renders, with `showHeader={false}` — one component, two entry points, no second copy
   of the screen to keep in sync. Vendor requests are still booking-anchored, which is why
   the tab chooses an event first. The sidebar resolves the active tab by longest matching
-  href (`resolveActiveHref`): Vendors sits under Event Details' path, so a plain prefix test
+  href (`resolveActiveHref`): Vendors sits under Event Status' path, so a plain prefix test
   lights up both at once.
 - **Booking messaging is host-only until the host says yes, then two-way.** A booking
   thread (`BookingMessageThread`, part of the `MessageThread` discriminated union in
@@ -261,7 +261,7 @@ now rather than waiting.
   agreeing is what makes the planner a legitimate correspondent, and a one-way channel
   between two people who have already committed just sent the planner to email.
   `acceptBookingRequest()` opens the thread as part of accepting and is the usual way one
-  appears; the organizer dashboard and Event details page additionally call
+  appears; the organizer dashboard and Event Status page additionally call
   `ensureBookingConversation()` on load so a confirmed booking's conversation is simply
   *there* in Messages rather than waiting on someone to click. A `declined` booking never
   opens a channel in either direction. `bookingWorkflow.ts` and
@@ -356,13 +356,12 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   `/dashboard/organizer/bookings/[bookingId]/vendors`, not `/organizer/events/...`.
 - **…but that anchor is nullable, because vendors can be hired before a venue.**
   `EventNeed.bookingId` and `VendorEngagement.bookingId` are `string | null`; null means
-  "not assigned to an event yet". **The UI for this is currently hidden at user direction**
-  ("hide vendors without an event for now") — nothing links to
-  `/dashboard/organizer/vendors/unassigned`, so no new unassigned request can be created
-  through the app. The routes, `UnassignedVendorsPage.tsx`, and all the supporting logic are kept
-  intact and working, the same way `TriangleDiagram.tsx` is kept unreferenced: restoring it
-  means re-adding the two entry points (the badge link on `/dashboard/organizer` and the
-  empty-state action in `OrganizerDashboard.tsx`). Don't unwind the nullable anchor to
+  "not assigned to an event yet". This UI was hidden for a while at user direction ("hide
+  vendors without an event for now") and is **visible again**, reached from two places: a
+  standing panel on the Vendors tab (`OrganizerVendorsTab`, shown whether or not any
+  unassigned vendors exist, since it's also how you *start* a hire with no venue) and a
+  count-gated banner on `/dashboard/organizer` (shown only when something is actually
+  waiting to be attached — that page is about bookings). Don't unwind the nullable anchor to
   "clean up" — it's load-bearing for the assignment flow and for any request already
   created. A planner who locks in a DJ before finding a room posts
   the request from `/dashboard/organizer/vendors/unassigned`, supplying date/time/location themselves

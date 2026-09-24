@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getBookingsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
+import { getUnassignedEngagementsForOrganizer } from "@/lib/vendors/engagements";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import OrganizerVendorRequestsPage from "./OrganizerVendorRequestsPage";
@@ -12,7 +13,7 @@ import type { Booking } from "@/lib/types/spaces";
 
 /**
  * Find Vendors as a first-class tab rather than a button buried on one row of
- * the Event Details list. Hiring vendors is half of planning an event; it
+ * the Event Status list. Hiring vendors is half of planning an event; it
  * shouldn't take a detour through the bookings list to reach.
  *
  * Vendor requests are still anchored to a confirmed booking (`EventNeed.
@@ -34,6 +35,8 @@ export default function OrganizerVendorsTab() {
   const [loaded, setLoaded] = useState(false);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Vendors hired before there was an event to put them on. */
+  const [unassignedCount, setUnassignedCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -42,6 +45,7 @@ export default function OrganizerVendorsTab() {
     const todayIso = new Date().toISOString().slice(0, 10);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAllBookings(owned);
+    setUnassignedCount(getUnassignedEngagementsForOrganizer(user.id).length);
     setSelectedId((current) =>
       current && confirmed.some((booking) => booking.id === current)
         ? current
@@ -71,6 +75,36 @@ export default function OrganizerVendorsTab() {
         Post what you need, compare proposals, and manage everyone you&apos;ve hired — one confirmed event at a
         time.
       </p>
+
+      {/*
+        The way back to vendors hired before there was a venue, and the way to
+        attach them to an event. Shown whether or not any exist: this is also
+        the entry point for *starting* a hire with no venue yet, which is the
+        whole reason the unassigned flow exists.
+      */}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-paper px-5 py-4">
+        <div className="min-w-0">
+          <p className="font-display text-base font-semibold text-ink">
+            Hired someone before you had a venue?
+          </p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            {unassignedCount > 0
+              ? `${unassignedCount} vendor${unassignedCount === 1 ? " isn't" : "s aren't"} attached to an event yet — assign ${unassignedCount === 1 ? "them" : "each of them"} to one and everybody moves into a shared conversation.`
+              : "Line up vendors without a space, then attach them to an event once it's confirmed."}
+          </p>
+        </div>
+        <Link
+          href="/dashboard/organizer/vendors/unassigned"
+          className="flex shrink-0 items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+        >
+          Vendors without an event
+          {unassignedCount > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-wine px-1.5 text-[11px] font-bold text-paper">
+              {unassignedCount}
+            </span>
+          )}
+        </Link>
+      </div>
 
       {!selected ? (
         <div className="mt-8">
