@@ -79,7 +79,7 @@ header nav (For Planners / For Venues / For Vendors / About) is hidden on all
 
 | Route | Role required | Purpose |
 |---|---|---|
-| `/dashboard/organizer` | `organizer` | Organizer home ("Event Status"): bookings list, "Go to messages" per confirmed booking (the thread is ensured on load, so a confirmed booking's conversation is always present), "Find vendors" link on every booking except a `declined` one, and an "Assign to an event" banner when the organizer has a vendor hired with no event |
+| `/dashboard/organizer` | `organizer` | Organizer home ("Event Status"): bookings list, "Go to messages" per confirmed booking (the thread is ensured on load, so a confirmed booking's conversation is always present), a "Vendors" link on every booking except a `declined` one, and an "Assign to an event" banner when the organizer has a vendor hired with no event. Each row expands (the summary is the toggle) into venue, the planner's note, per-request bid/phase status, and each hired vendor's engagement status — all resolved on load, never during render |
 | `/dashboard/organizer/events/new` *(future)* | `organizer` | Create event brief |
 | `/dashboard/organizer/events/[id]` *(future)* | `organizer` | Manage one event end-to-end |
 | `/dashboard/organizer/bookings/[bookingId]/vendors` | `organizer` (owner of the booking) | Real (prototype) — list/create/publish vendor requests ("Looking for a ___") for one booking, plus the Vendor Roster (per-need "N of M found" count, vendor profile photo, price, running total via `computeRosterSpend()`) of confirmed engagements. Anchored to a `Booking`, not an `Event` row — see `CLAUDE.md` |

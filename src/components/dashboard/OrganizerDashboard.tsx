@@ -133,7 +133,7 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
                         href={`/dashboard/messages/${threadIdByBooking[booking.id]}`}
                         className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
                       >
-                        Message host
+                        Messages
                         {(unreadByBooking[booking.id] ?? 0) > 0 && (
                           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-wine px-1 text-[10px] font-bold text-paper">
                             {unreadByBooking[booking.id]}
@@ -145,7 +145,7 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
                       href={`/dashboard/organizer/bookings/${booking.id}/vendors`}
                       className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim"
                     >
-                      Find vendors
+                      Vendors
                     </Link>
                   </div>
                 }
