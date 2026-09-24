@@ -13,9 +13,10 @@ import { getEventThreadForBooking, getUnreadMessageCount } from "@/lib/vendors/m
 /**
  * The organizer's way into the three-way room for one event.
  *
- * Lives on the Find Vendors page because that's where a planner already is
- * when they've just confirmed a vendor — the moment they'd otherwise start a
- * group text to introduce them to the venue.
+ * The room now opens by itself as soon as a vendor confirms (ensureEventRoom),
+ * so in practice this is a link to a conversation that already exists. The
+ * "Open event room" path is kept for the case where the automatic one hasn't
+ * run in this browser yet — it's idempotent, so clicking it is harmless.
  *
  * Shows why it isn't available yet rather than hiding: "you can do this once a
  * vendor confirms" is useful, a missing button isn't.
@@ -61,7 +62,7 @@ export default function EventRoomPanel({ bookingId, userId }: { bookingId: strin
           <p className="font-display text-base font-semibold text-ink">Event room</p>
           <p className="mt-0.5 text-sm text-ink-soft">
             {threadId
-              ? "Your venue and confirmed vendors, all in one conversation."
+              ? "You, your venue, and every confirmed vendor — load-in, power, and timing in one place."
               : readiness.ready
                 ? "Introduce your venue and your confirmed vendors to each other, so load-in and timing get sorted in one place."
                 : EVENT_ROOM_BLOCK_COPY[readiness.reason ?? "no_confirmed_vendor"]}

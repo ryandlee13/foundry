@@ -28,6 +28,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { contextFromBooking } from "@/lib/vendors/requestContext";
+import { ensureEventRoom } from "@/lib/spaces/eventRoom";
 import EventRoomPanel from "./EventRoomPanel";
 import FindVendorsPrompt from "./FindVendorsPrompt";
 import VendorNeedsBuilder from "./VendorNeedsBuilder";
@@ -113,6 +114,10 @@ export default function OrganizerVendorRequestsPage({
     setBooking(found ?? null);
     if (found) {
       ensureExpiringDiscussionNotificationsForOrganizer(user.id);
+      // Idempotent and quiet: makes sure the three-way room exists whenever a
+      // vendor has confirmed, so the planner finds it already open rather than
+      // having to introduce everyone by hand.
+      ensureEventRoom(bookingId);
       const venue = getVenueBySlugAnywhere(found.venueSlug);
       if (venue) {
         setPublicLocation(venue.neighborhood);

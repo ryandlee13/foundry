@@ -25,11 +25,19 @@ import type { EventMessageThread, EngagementStatus, VendorEngagement } from "@/l
  * and with only 1:1 threads the planner relays that by hand or starts a group
  * text. Either way the coordination leaves Foundry and doesn't come back.
  *
- * Who may open it: the ORGANIZER only. This is the one thread kind the
- * organizer creates rather than receives, and the asymmetry is deliberate —
- * it's their event, and introducing a vendor to a venue is their call, not
- * something either supplier should be able to do unilaterally. See
- * docs/SECURITY.md's "Chat unlock timing".
+ * When it opens: **automatically, as soon as a vendor is confirmed on a
+ * confirmed booking** — see ensureEventRoom(). It used to wait on the organizer
+ * clicking "Open event room", which meant the vendor who needed to ask the
+ * venue about load-in had no way to do it until the planner happened to notice.
+ * The conditions haven't changed (confirmed booking, a venue with a host
+ * account, at least one confirmed vendor); only the trigger has. This is at
+ * explicit user direction and reverses the previous "organizer-created only"
+ * invariant — see docs/SECURITY.md's "Chat unlock timing".
+ *
+ * openEventRoom() is still the organizer-gated explicit action behind the
+ * button. Suppliers still cannot create or join a room themselves: the
+ * automatic path is keyed off the organizer's own hiring decision (they
+ * finalized the deal), not off anything a vendor or venue can do alone.
  *
  * Same import-direction note as bookingWorkflow.ts: this lives under
  * src/lib/spaces (a booking is a spaces concept) and imports from
@@ -92,7 +100,8 @@ export const EVENT_ROOM_BLOCK_COPY: Record<EventRoomBlockReason, string> = {
   not_organizer: "Only the event organizer can open the event room.",
   booking_not_confirmed: "Open the event room once your venue confirms this booking.",
   no_venue_host: "This listing has no host account to bring into the room.",
-  no_confirmed_vendor: "Add a confirmed vendor and you can introduce them to your venue here.",
+  no_confirmed_vendor:
+    "As soon as a vendor confirms, they and your venue are put in one conversation with you here.",
 };
 
 /** Owner accounts of every vendor actively working this booking. Reads storage. */
@@ -136,10 +145,26 @@ export function openEventRoom(bookingId: string, actorAccountId: string): OpenEv
   const venueOwnerId = getBookingVenueOwnerId(booking);
   const vendorOwnerIds = getActiveVendorOwnerIdsForBooking(bookingId);
   const readiness = evaluateEventRoomReadiness({ booking, venueOwnerId, vendorOwnerIds, actorAccountId });
-  if (!readiness.ready) {
-    throw new Error(EVENT_ROOM_BLOCK_COPY[readiness.reason ?? "not_organizer"]);
+  if (!readiness.ready || !venueOwnerId) {
+    // The `!venueOwnerId` half is unreachable — readiness already rejects a
+    // listing with no host — but it's what proves the non-null to the compiler,
+    // and an assertion here would be a worse trade than a redundant branch.
+    throw new Error(EVENT_ROOM_BLOCK_COPY[readiness.reason ?? "no_venue_host"]);
   }
 
+  return createOrSyncEventRoom(booking, venueOwnerId, vendorOwnerIds);
+}
+
+/**
+ * The write half of opening a room, with no authorization in it — every caller
+ * must have decided the actor is allowed first. Shared by openEventRoom() (the
+ * organizer's explicit click) and ensureEventRoom() (the automatic path).
+ */
+function createOrSyncEventRoom(
+  booking: Booking,
+  venueOwnerId: string,
+  vendorOwnerIds: string[]
+): OpenEventRoomResult {
   const venue = getVenueBySlugAnywhere(booking.venueSlug);
   if (!venue) throw new Error("Venue not found.");
 
@@ -149,12 +174,12 @@ export function openEventRoom(bookingId: string, actorAccountId: string): OpenEv
     organizerId: booking.organizerId,
   });
 
-  const existing = getEventThreadForBooking(bookingId);
+  const existing = getEventThreadForBooking(booking.id);
   if (existing) {
     const addedParticipantIds = addEventThreadParticipants(existing.id, participantIds);
     notifyParticipants(addedParticipantIds, existing.id, booking);
     // Re-read so the caller gets the grown participant list, not the stale one.
-    return { booking, thread: getEventThreadForBooking(bookingId) ?? existing, addedParticipantIds };
+    return { booking, thread: getEventThreadForBooking(booking.id) ?? existing, addedParticipantIds };
   }
 
   const thread = getOrCreateEventThread({
@@ -169,9 +194,47 @@ export function openEventRoom(bookingId: string, actorAccountId: string): OpenEv
 }
 
 /**
- * Brings newly-confirmed vendors into an existing room. No-op when no room has
- * been opened — a vendor confirming does not itself create the room, since
- * opening it stays the organizer's decision.
+ * Opens the room the moment it's possible, with no click and no actor.
+ *
+ * Non-throwing by design: callers pass bookings they haven't individually
+ * vetted, and "this event has no confirmed vendor yet" or "this is a seed venue
+ * with no host account" are ordinary states here, not errors. Returns null for
+ * anything it can't open, and is idempotent — calling it repeatedly reuses the
+ * existing room and syncs in whoever has confirmed since.
+ *
+ * Same "make sure it simply exists" pattern as ensureBookingConversation() in
+ * bookingWorkflow.ts. Deliberately not called from confirmEngagementTerms():
+ * engagements.ts (vendors) importing this module (spaces) would close a cycle,
+ * since this module already imports engagements.ts. Call it from the surfaces
+ * that load instead.
+ */
+export function ensureEventRoom(bookingId: string | null): EventMessageThread | null {
+  if (!bookingId) return null;
+
+  const booking = getBookingById(bookingId);
+  if (!booking || booking.status !== "confirmed") return null;
+
+  const venueOwnerId = getBookingVenueOwnerId(booking);
+  if (!venueOwnerId) return null;
+
+  const vendorOwnerIds = getActiveVendorOwnerIdsForBooking(bookingId);
+  if (vendorOwnerIds.length === 0) return null;
+
+  try {
+    return createOrSyncEventRoom(booking, venueOwnerId, vendorOwnerIds).thread;
+  } catch {
+    return null;
+  }
+}
+
+/** ensureEventRoom() for callers holding an engagement rather than a booking. */
+export function ensureEventRoomForEngagement(engagementId: string): EventMessageThread | null {
+  return ensureEventRoom(getEngagementById(engagementId)?.bookingId ?? null);
+}
+
+/**
+ * Brings newly-confirmed vendors into an existing room. No-op when no room
+ * exists — use ensureEventRoom() if one should be created.
  */
 export function syncEventRoomParticipants(bookingId: string): string[] {
   const thread = getEventThreadForBooking(bookingId);

@@ -268,17 +268,34 @@ now rather than waiting.
   `eventRoom.ts` are the only places `src/lib/spaces/*` imports from `src/lib/vendors/*`;
   keep `bookings.ts` itself free of that import so the dependency edge stays
   one-directional.
-- **The three-way event room is organizer-created — the one thread kind that is.**
+- **The three-way event room opens itself once a vendor is booked.**
   `EventMessageThread` (`kind: "event"`) puts the planner, the venue operator, and every
-  confirmed vendor in one conversation, created only by `openEventRoom()` in
-  `src/lib/spaces/eventRoom.ts`. It requires a `confirmed` booking **and** at least one
-  confirmed vendor: a room with only the venue in it duplicates the booking thread that
-  already exists, and the three-way introduction is the whole point. Introducing a vendor
-  to a venue is the planner's call, so neither supplier can create one or add themselves.
+  confirmed vendor in one conversation. It requires a `confirmed` booking **and** at least
+  one confirmed vendor: a room with only the venue in it duplicates the booking thread that
+  already exists, and the three-way introduction is the whole point. `ensureEventRoom()`
+  (`src/lib/spaces/eventRoom.ts`) is the automatic path — actor-free, non-throwing,
+  idempotent — called from the vendor's confirm action and the organizer's Find Vendors
+  page. **This reversed the previous "organizer-created only" invariant, at explicit user
+  direction**: waiting on the planner's click left the vendor who needed to ask the venue
+  about load-in with no way to do it. `openEventRoom()` is still the organizer-gated
+  explicit action behind the button, and `createOrSyncEventRoom()` (shared, private)
+  deliberately holds **no authorization** — every caller decides who's allowed first.
+  Suppliers still can't create a room or add themselves; the automatic path keys off the
+  organizer's own hiring decision. `ensureEventRoom()` is **not** called from
+  `confirmEngagementTerms()` — `engagements.ts` importing `eventRoom.ts` would close an
+  import cycle, so the call sits in the component layer.
   Membership is additive only — `addEventThreadParticipants()` never removes anyone.
   `EventMessageThread` deliberately has **no `counterpartyId`** (that field lives on the
   1:1 variants); resolve membership and delivery through `getThreadParticipantIds()`, or
   a comparison against `counterpartyId` silently excludes everyone but the venue operator.
+- **No thread ever opens empty and silent.** Two things fight the blank-box stall that sends
+  coordination to email. `acceptBookingRequest(bookingId, actorAccountId, message?)` takes an
+  optional note from the host and sends it as the conversation's first message — the host has
+  just read the whole request and is the one person with something specific to say. And an
+  empty thread offers one-tap openers from `src/lib/vendors/conversationStarters.ts` (pure,
+  keyed by thread kind × the viewer's seat *in that thread*, since a venue operator is the
+  host of a booking thread but just a participant in a room). Starters **fill the composer,
+  they never send** — nothing should put words in someone's mouth they haven't read.
 - **Deal terms go back and forth; committing is still one deliberate action.** Either side
   can send a `DealProposalAttachment` on a proposal thread (composed by
   `src/lib/vendors/dealProposals.ts`, pure), and either side can answer — the planner is no

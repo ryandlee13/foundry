@@ -33,10 +33,19 @@ export interface AcceptBookingResult {
  * organizer still cannot create one. Accepting *is* the host agreeing, so it's
  * the natural moment for the channel to exist.
  *
+ * An optional `message` is sent as the thread's first message. A conversation
+ * that opens empty is one nobody starts — the host has just read the whole
+ * request and is the one person with something specific to say, so this is the
+ * cheapest moment to capture it. Blank is fine; the thread still opens.
+ *
  * Ordered deliberately: ownership is verified before the status changes, so a
  * failure can't leave a confirmed booking behind with no thread.
  */
-export function acceptBookingRequest(bookingId: string, actorAccountId: string): AcceptBookingResult {
+export function acceptBookingRequest(
+  bookingId: string,
+  actorAccountId: string,
+  message?: string
+): AcceptBookingResult {
   const booking = getBookingById(bookingId);
   if (!booking) throw new Error("Booking not found.");
   if (booking.status !== "pending") throw new Error("This request has already been decided.");
@@ -59,13 +68,21 @@ export function acceptBookingRequest(bookingId: string, actorAccountId: string):
       })
     : null;
 
+  const note = message?.trim();
+  if (thread && note) {
+    sendMessage({ threadId: thread.id, senderId: actorAccountId, body: note });
+  }
+
   createNotification({
     recipientId: updated.organizerId,
     type: "venue_booking_accepted",
     title: "Your booking request was accepted",
-    body: thread
-      ? `${updated.venueName} accepted your request for ${updated.eventDate}. Your conversation with the host is open — say hello.`
-      : `${updated.venueName} accepted your request for ${updated.eventDate}.`,
+    body:
+      thread && note
+        ? `${updated.venueName} accepted your request for ${updated.eventDate} and sent you a message.`
+        : thread
+          ? `${updated.venueName} accepted your request for ${updated.eventDate}. Your conversation with the host is open — say hello.`
+          : `${updated.venueName} accepted your request for ${updated.eventDate}.`,
     link: thread ? `/dashboard/messages/${thread.id}` : "/dashboard/organizer",
   });
 

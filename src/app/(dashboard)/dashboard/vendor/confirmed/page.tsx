@@ -6,6 +6,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { findAccountById } from "@/lib/auth/storage";
 import { getBookingById, formatEventDate } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
+import { ensureEventRoomForEngagement } from "@/lib/spaces/eventRoom";
 import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import { getEngagementsForVendor, cancelEngagementByVendor, confirmEngagementTerms, declineEngagementTerms } from "@/lib/vendors/engagements";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
@@ -95,6 +96,16 @@ export default function VendorConfirmedGigsPage() {
     setActionError(null);
     try {
       confirmEngagementTerms(engagementId, user.id);
+      /*
+       * Confirming is the last thing that has to happen before the three-way
+       * room is possible, so the room appears here rather than waiting on the
+       * planner to click a button the vendor can't see. Non-throwing: an
+       * engagement with no event yet, or one at a seed venue with no host
+       * account, simply doesn't get a room. Called from the component rather
+       * than confirmEngagementTerms() itself because engagements.ts importing
+       * eventRoom.ts would close an import cycle.
+       */
+      ensureEventRoomForEngagement(engagementId);
       refresh();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Couldn't confirm these terms.");

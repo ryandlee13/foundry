@@ -207,25 +207,41 @@ workaround.
     only pushes the planner to email for anything the host didn't think to ask about.
     `ensureBookingConversation()` is the same gate, non-throwing, for callers that want the
     thread to simply exist rather than acting on a click.
-  - `acceptBookingRequest(bookingId, actorAccountId)` opens the thread **as part of
-    accepting**, and is the usual way one comes into being. The actor is verified as the
+  - `acceptBookingRequest(bookingId, actorAccountId, message?)` opens the thread **as part
+    of accepting**, and is the usual way one comes into being. The actor is verified as the
     venue owner *before* the status changes, so a failed authorization can't leave a
-    confirmed booking with no thread behind it.
+    confirmed booking with no thread behind it. The optional `message` is sent as the
+    thread's first message under the host's own id — it is ordinary chat content, not a
+    privileged channel, and it is trimmed and skipped when blank.
 
   What is still absolutely true: a thread only ever exists between the two parties **on
   that specific booking**, `isThreadParticipant()` gates every read, and a `declined`
   booking is excluded from every path — once the host says no, the channel doesn't open,
   in either direction.
 - **Chat unlock timing (event rooms)**: the three-way room (`EventMessageThread`, the third
-  kind in the union) is the one thread kind the **organizer** creates rather than receives,
-  and that asymmetry is the rule, not an inconsistency. Introducing a vendor to a venue is
-  the planner's call; neither supplier may pull the other into a conversation. Creation
-  routes through one gate, `openEventRoom()` in `src/lib/spaces/eventRoom.ts`, which throws
-  unless **all four** hold: the actor is the booking's organizer, the booking is
-  `confirmed`, the venue has a host account, and at least one vendor engagement is
-  `confirmed`/`in_progress`/`completed`. The pure core, `evaluateEventRoomReadiness()`,
-  checks the actor *first*, so a non-organizer never learns the booking's state from the
-  refusal.
+  kind in the union) **opens automatically as soon as a vendor is confirmed on a confirmed
+  booking**, via `ensureEventRoom()` in `src/lib/spaces/eventRoom.ts`. This changed at
+  explicit user direction: it previously waited on the organizer clicking "Open event room",
+  which left the vendor who needed to ask the venue about load-in with no way to do it until
+  the planner happened to notice.
+
+  The **conditions are unchanged** — the booking is `confirmed`, the venue has a host
+  account, and at least one vendor engagement is `confirmed`/`in_progress`/`completed`. Only
+  the trigger moved. What that costs, stated plainly: a planner no longer gets to decide
+  *whether* to introduce a vendor to their venue, only which vendors they hire. That is the
+  intended trade — hiring someone for an event is the introduction.
+
+  What has **not** changed is who can cause a room to exist: nothing a supplier does alone
+  opens one. The automatic path is keyed to the organizer's own hiring decision (they
+  finalized the deal; the vendor only confirmed terms the organizer sent). A vendor still
+  cannot create a room, add themselves to one, or add anybody else.
+  `openEventRoom()` remains the organizer-gated explicit action behind the button and still
+  throws unless **all four** conditions hold including actor-is-organizer; its pure core,
+  `evaluateEventRoomReadiness()`, checks the actor *first*, so a non-organizer never learns
+  the booking's state from the refusal. `ensureEventRoom()` is deliberately actor-free and
+  non-throwing, and `createOrSyncEventRoom()` — the shared write half — contains **no
+  authorization at all**, so every future caller has to decide who is allowed before
+  reaching it.
 
   A room can also be opened as a side effect of `assignEngagementToBooking()` — the
   organizer attaching a vendor they hired *before* they had a venue to one of their
@@ -238,8 +254,8 @@ workaround.
   Membership is **additive only**. `addEventThreadParticipants()` can add a vendor who
   confirms later but never removes anyone — removal is a separate decision with its own
   consequences for who can read the existing history, and nothing asks for it yet. A vendor
-  confirming cannot push themselves into a room; the sync runs when the organizer opens the
-  room or when a participant loads it.
+  confirming cannot push themselves into a room; the sync runs from `ensureEventRoom()`,
+  `openEventRoom()`, or when a participant loads the room.
 
   Because a room has N participants, membership is resolved through
   `getThreadParticipantIds()` — never by comparing against `counterpartyId`, which

@@ -16,6 +16,7 @@ import {
   markThreadRead,
   isThreadParticipant,
   isProposalThread,
+  isBookingThread,
   isEventThread,
   getThreadParticipantIds,
 } from "@/lib/vendors/messages";
@@ -25,7 +26,18 @@ import { getProposalById } from "@/lib/vendors/proposals";
 import { getEffectiveProposalStatus } from "@/lib/vendors/expiration";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { resolveEffectiveDealTerms, formatDealAmount } from "@/lib/vendors/dealProposals";
-import { getBookingById, getBookingsForOrganizer, formatEventDate, formatEventLabel } from "@/lib/spaces/bookings";
+import {
+  getBookingById,
+  getBookingsForOrganizer,
+  getBookingVenueOwnerId,
+  formatEventDate,
+  formatEventLabel,
+} from "@/lib/spaces/bookings";
+import {
+  getConversationStarters,
+  type StarterRole,
+  type StarterThreadKind,
+} from "@/lib/vendors/conversationStarters";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { resolveContractState } from "@/lib/spaces/bookingContracts";
 import {
@@ -276,6 +288,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
   const [confirmingFinalize, setConfirmingFinalize] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     if (!user) return;
@@ -444,6 +457,37 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
         ? VENUE_PRIVACY_NOTICE_OWNER
         : VENUE_PRIVACY_NOTICE;
 
+  /**
+   * Opening lines for an empty thread, chosen by which seat the viewer is in
+   * *for this thread* — a venue operator is the host of a booking thread and
+   * just another participant in an event room, so it can't be read off their
+   * app-wide role.
+   */
+  function resolveStarters(): string[] {
+    if (!user || !thread || messages.length > 0) return [];
+
+    const kind: StarterThreadKind = isEventThread(thread)
+      ? "event"
+      : isBookingThread(thread)
+        ? "booking"
+        : "proposal";
+
+    const role: StarterRole =
+      thread.organizerId === user.id
+        ? "organizer"
+        : kind === "booking"
+          ? "venue_owner"
+          : kind === "proposal"
+            ? "vendor"
+            : booking && getBookingVenueOwnerId(booking) === user.id
+              ? "venue_owner"
+              : "vendor";
+
+    return getConversationStarters(kind, role);
+  }
+
+  const starters = resolveStarters();
+
   function handleSend() {
     if (!draft.trim() || !user) return;
     sendMessage({ threadId, senderId: user.id, body: draft });
@@ -524,7 +568,38 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
           <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-line bg-paper p-5">
             {messages.length === 0 ? (
-              <p className="text-sm text-ink-soft">No messages yet — say hello.</p>
+              /*
+                An empty thread with a blank composer is where people stall —
+                nobody's sure whether they're meant to speak first, so neither
+                does, and the coordination moves to email. These fill the
+                composer rather than sending, so the first thing anyone says is
+                still something they chose to say.
+              */
+              <div>
+                <p className="text-sm text-ink-soft">No messages yet — say hello.</p>
+                {starters.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+                      Not sure how to start?
+                    </p>
+                    <div className="mt-2 flex flex-col items-start gap-2">
+                      {starters.map((starter) => (
+                        <button
+                          key={starter}
+                          type="button"
+                          onClick={() => {
+                            setDraft(starter);
+                            composerRef.current?.focus();
+                          }}
+                          className="rounded-2xl border border-line bg-paper-dim px-3.5 py-2 text-left text-sm text-ink transition-colors hover:border-brass hover:bg-paper"
+                        >
+                          {starter}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               messages.map((message) => {
                 const isMine = message.senderId === user.id;
@@ -564,6 +639,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
           <div className="mt-3 flex gap-2">
             <input
+              ref={composerRef}
               type="text"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

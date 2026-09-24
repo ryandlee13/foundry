@@ -40,12 +40,15 @@ export default function VenueDashboardPage() {
     entry.pending.map((booking) => ({ booking, venue: entry.venue }))
   );
 
-  /** Accepting opens the conversation too, so the planner can reply immediately. */
-  function handleAccept() {
+  /**
+   * Accepting opens the conversation too, so the planner can reply immediately
+   * — and carries the host's optional note in as its first message.
+   */
+  function handleAccept(message: string) {
     if (!reviewing || !user) return;
     setInquiryError(null);
     try {
-      acceptBookingRequest(reviewing.booking.id, user.id);
+      acceptBookingRequest(reviewing.booking.id, user.id, message);
       refresh();
       setReviewing(null);
     } catch (error) {

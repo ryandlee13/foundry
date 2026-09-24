@@ -28,7 +28,8 @@ export default function BookingRequestReviewModal({
   venue: Venue | null;
   open: boolean;
   onClose: () => void;
-  onAccept: () => void;
+  /** The optional note is sent as the first message of the conversation accepting opens. */
+  onAccept: (message: string) => void;
   onDecline: () => void;
   onAskQuestion: (question: string) => void;
   inquiryError?: string | null;
@@ -40,6 +41,7 @@ export default function BookingRequestReviewModal({
   // remounts it and these start fresh — no reset-on-close effect needed.
   const [askOpen, setAskOpen] = useState(false);
   const [question, setQuestion] = useState("");
+  const [acceptNote, setAcceptNote] = useState("");
 
   useEffect(() => {
     if (!open || !booking) return;
@@ -213,6 +215,28 @@ export default function BookingRequestReviewModal({
         )}
       </div>
 
+      {/*
+        Accepting opens the conversation with this planner. It used to open
+        empty, which left two people who had just agreed to work together
+        staring at a blank box — so the host gets to say the first thing while
+        the request they just read is still in front of them. Optional: a host
+        who has nothing to add shouldn't be made to invent something.
+      */}
+      <div className="mt-4">
+        <label htmlFor="booking-accept-note" className="block text-sm font-medium text-ink">
+          Add a message with your acceptance <span className="font-normal text-ink-soft">(optional)</span>
+        </label>
+        <textarea
+          id="booking-accept-note"
+          rows={2}
+          value={acceptNote}
+          onChange={(event) => setAcceptNote(event.target.value)}
+          placeholder="Thank you for requesting this space! Let's chat details — I'll send over load-in times this week."
+          className="mt-1.5 w-full resize-none rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+        />
+        <p className="mt-1 text-xs text-ink-soft">This becomes the first message in your conversation.</p>
+      </div>
+
       <div className="mt-4 flex gap-3">
         <button
           type="button"
@@ -223,7 +247,7 @@ export default function BookingRequestReviewModal({
         </button>
         <button
           type="button"
-          onClick={onAccept}
+          onClick={() => onAccept(acceptNote)}
           className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
         >
           Accept
