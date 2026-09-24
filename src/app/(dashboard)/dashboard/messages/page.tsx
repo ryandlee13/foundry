@@ -15,7 +15,8 @@ import { groupThreadsByBooking } from "@/lib/vendors/threadGrouping";
 import { getEngagementById } from "@/lib/vendors/engagements";
 import { getProposalById } from "@/lib/vendors/proposals";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
-import { getBookingById, formatEventLabel } from "@/lib/spaces/bookings";
+import { getBookingById, getBookingsForOrganizer, formatEventLabel } from "@/lib/spaces/bookings";
+import { ensureEventRoom } from "@/lib/spaces/eventRoom";
 import { BOOKING_STATUS_LABELS } from "@/lib/spaces/labels";
 import { getEffectiveProposalStatus } from "@/lib/vendors/expiration";
 import { ENGAGEMENT_STATUS_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
@@ -59,6 +60,19 @@ export default function MessagesInboxPage() {
 
   const refresh = useCallback(() => {
     if (!user) return;
+
+    /*
+     * The event room is meant to be simply *there* once a vendor confirms —
+     * there's no button that opens one. Doing it here as well as on the vendor's
+     * confirm action means a planner finds the conversation waiting in their
+     * inbox rather than depending on which page someone happened to load.
+     * Idempotent and quiet: no-ops unless the booking is confirmed, the venue
+     * has a host account, and a vendor has confirmed.
+     */
+    for (const booking of getBookingsForOrganizer(user.id)) {
+      if (booking.status === "confirmed") ensureEventRoom(booking.id);
+    }
+
     const threads = getThreadsForParticipant(user.id);
 
     const resolved = threads.map((thread) => {

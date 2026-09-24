@@ -235,7 +235,8 @@ workaround.
   opens one. The automatic path is keyed to the organizer's own hiring decision (they
   finalized the deal; the vendor only confirmed terms the organizer sent). A vendor still
   cannot create a room, add themselves to one, or add anybody else.
-  `openEventRoom()` remains the organizer-gated explicit action behind the button and still
+  `openEventRoom()` remains the organizer-gated path — there is no longer a button, only
+  `assignEngagementToBooking()` calls it — and still
   throws unless **all four** conditions hold including actor-is-organizer; its pure core,
   `evaluateEventRoomReadiness()`, checks the actor *first*, so a non-organizer never learns
   the booking's state from the refusal. `ensureEventRoom()` is deliberately actor-free and

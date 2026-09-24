@@ -5,6 +5,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useActiveRole } from "@/hooks/useActiveRole";
 import { SPACE_TYPE_LABELS, EVENT_TYPE_LABELS, RULE_LABELS } from "@/lib/spaces/labels";
 import { formatBookingWindow, formatBookingIncrement } from "@/lib/spaces/bookingConstraints";
+import { describeAlcoholService } from "@/lib/spaces/alcoholService";
 import { getBookingsForOrganizer } from "@/lib/spaces/bookings";
 import {
   VENUE_PRIVACY_NOTICE,
@@ -52,8 +53,11 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
   const addressDisclosed = disclosure?.reason === "confirmed_booking";
   const showReveal = addressDisclosed && disclosure !== null && hasDisclosedDetails(disclosure);
 
+  const alcoholService = describeAlcoholService({ rules: venue.rules, amenities: venue.amenities });
+  // `alcoholAllowed` is excluded: it's superseded by the derived line above the
+  // list, which says the same thing and more.
   const allowedRules = (Object.keys(RULE_LABELS) as (keyof typeof RULE_LABELS)[]).filter(
-    (key) => venue.rules[key]
+    (key) => key !== "alcoholAllowed" && venue.rules[key]
   );
 
   /**
@@ -172,16 +176,27 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
             </div>
           </div>
 
-          {allowedRules.length > 0 && (
-            <div className="mt-8">
-              <h2 className="font-display text-lg font-semibold text-ink">Venue rules</h2>
-              <ul className="mt-3 space-y-1.5 text-sm text-ink-soft">
-                {allowedRules.map((key) => (
-                  <li key={key}>{RULE_LABELS[key]}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="mt-8">
+            <h2 className="font-display text-lg font-semibold text-ink">Venue rules</h2>
+            <ul className="mt-3 space-y-1.5 text-sm text-ink-soft">
+              {/*
+                Drinks come first and get their own derived line. "Alcohol
+                allowed" didn't answer the question a planner is actually
+                asking — whether they have to hire bartenders and bring the
+                drinks — and the three fields that do answer it were scattered
+                across two lists. See alcoholService.ts.
+              */}
+              <li>
+                {alcoholService.label}
+                {alcoholService.detail && (
+                  <span className="block text-xs text-ink-soft/80">{alcoholService.detail}</span>
+                )}
+              </li>
+              {allowedRules.map((key) => (
+                <li key={key}>{RULE_LABELS[key]}</li>
+              ))}
+            </ul>
+          </div>
 
           {venue.availabilityExamples.length > 0 && (
             <div className="mt-8">

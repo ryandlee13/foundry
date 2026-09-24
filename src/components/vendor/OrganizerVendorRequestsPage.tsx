@@ -29,7 +29,6 @@ import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import { contextFromBooking } from "@/lib/vendors/requestContext";
 import { ensureEventRoom } from "@/lib/spaces/eventRoom";
-import EventRoomPanel from "./EventRoomPanel";
 import FindVendorsPrompt from "./FindVendorsPrompt";
 import VendorNeedsBuilder from "./VendorNeedsBuilder";
 import { organizerProposalsPath } from "@/lib/vendors/organizerRoutes";
@@ -82,6 +81,7 @@ const ENGAGEMENT_STATUS_STYLES: Record<EngagementStatus, string> = {
 export default function OrganizerVendorRequestsPage({
   bookingId,
   showHeader = true,
+  autoOpenBuilder = false,
 }: {
   bookingId: string;
   /**
@@ -90,6 +90,13 @@ export default function OrganizerVendorRequestsPage({
    * heading it has always had.
    */
   showHeader?: boolean;
+  /**
+   * Opens the post-a-request form immediately. Set from `?post=1` by the route,
+   * which reads it server-side — a `useSearchParams()` here would follow this
+   * component onto the statically-rendered Vendors tab and force it to bail out
+   * of prerendering.
+   */
+  autoOpenBuilder?: boolean;
 }) {
   const { user, isLoading: authLoading } = useAuth();
   const [loaded, setLoaded] = useState(false);
@@ -103,7 +110,7 @@ export default function OrganizerVendorRequestsPage({
   const [vendorsById, setVendorsById] = useState<Record<string, VendorProfile>>({});
   const [unreadByEngagement, setUnreadByEngagement] = useState<Record<string, number>>({});
   const [threadIdByEngagement, setThreadIdByEngagement] = useState<Record<string, string>>({});
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(autoOpenBuilder);
   const [confirmingAction, setConfirmingAction] = useState<{ need: EventNeed; action: DestructiveNeedAction } | null>(
     null
   );
@@ -224,18 +231,22 @@ export default function OrganizerVendorRequestsPage({
         <FindVendorsPrompt booking={booking} onOpenBuilder={() => setFormOpen(true)} />
       </div>
 
-      <div className="mt-4">
-        <EventRoomPanel bookingId={booking.id} userId={user.id} />
-      </div>
-
+      {/*
+        Named sections, because this page is nested under an event title on the
+        Vendors tab — unlabelled lists of cards under a big heading don't say
+        what each list is.
+      */}
       <div className="mt-8">
+        <h2 className="font-display text-lg font-semibold text-ink">Vendor requests</h2>
         {needs.length === 0 ? (
-          <EmptyState
-            title="No vendor requests yet"
-            description="Post what you need to start receiving proposals from matching vendors."
-          />
+          <div className="mt-3">
+            <EmptyState
+              title="No vendor requests yet"
+              description="Post what you need to start receiving proposals from matching vendors."
+            />
+          </div>
         ) : (
-          <ul className="space-y-3">
+          <ul className="mt-3 space-y-3">
             {needs.map((need) => (
               <li key={need.id} className="rounded-2xl border border-line bg-paper px-5 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">

@@ -222,6 +222,22 @@ now rather than waiting.
   events → your venues → subscription. Listing management used to sit at the top with a
   "List another space" CTA, which made an owner who already has listings land on a page
   asking them to create more, when the work waiting on them is the requests.
+- **Agreeing venue terms prompts the next job.** When a planner accepts a `revised_terms`
+  booking proposal (not a deposit request — that isn't settling the booking), a dialog
+  congratulates them and offers "Find a vendor" / "No thanks". Find a vendor goes to the
+  **post-a-request form** (`?post=1` on the booking's vendors route, read server-side so the
+  shared component doesn't drag `useSearchParams()` onto the statically-rendered Vendors
+  tab), **not** `/vendors`: someone who just settled a venue knows what they need, not who
+  they want, and a post gets proposals while browsing gets a list to read.
+- **A venue's drinks policy answers "do I hire a bartender", not "is alcohol allowed".**
+  `describeAlcoholService()` (`src/lib/spaces/alcoholService.ts`, pure) folds the
+  `alcoholAllowed` rule and the `bar`/`bartenders_available` amenities into one line —
+  BYOB vs. bar on site, staff provided vs. bring your own — and `VenueDetailView` renders it
+  at the top of Venue rules *instead of* the `alcoholAllowed` row, which is filtered out so
+  the same fact isn't stated twice. The three underlying fields are unchanged; they were
+  just scattered across two lists, leaving the planner to work out the implication. The
+  filter sidebar keeps the plain "Alcohol allowed" label — there it's a filter, not a
+  description.
 - **A planner never types their event details twice.** `src/lib/spaces/bookingPrefill.ts`
   (pure) carries date / start / end / guest count / event type from the homepage hero and
   the Discover Spaces filters onto every venue link, and `BookingPanel` seeds its fields
@@ -274,11 +290,14 @@ now rather than waiting.
   one confirmed vendor: a room with only the venue in it duplicates the booking thread that
   already exists, and the three-way introduction is the whole point. `ensureEventRoom()`
   (`src/lib/spaces/eventRoom.ts`) is the automatic path — actor-free, non-throwing,
-  idempotent — called from the vendor's confirm action and the organizer's Find Vendors
-  page. **This reversed the previous "organizer-created only" invariant, at explicit user
-  direction**: waiting on the planner's click left the vendor who needed to ask the venue
-  about load-in with no way to do it. `openEventRoom()` is still the organizer-gated
-  explicit action behind the button, and `createOrSyncEventRoom()` (shared, private)
+  idempotent — called from the vendor's confirm action, the organizer's Find Vendors page,
+  and the Messages inbox. **This reversed the previous "organizer-created only" invariant,
+  at explicit user direction**: waiting on the planner's click left the vendor who needed to
+  ask the venue about load-in with no way to do it. There is **no "Open event room" button**
+  — `EventRoomPanel` was deleted, since a panel offering to do something that has already
+  happened is clutter; the room just appears in Messages, grouped under its event like every
+  other thread for that booking. `openEventRoom()` survives as the organizer-gated path
+  `assignEngagementToBooking()` uses, and `createOrSyncEventRoom()` (shared, private)
   deliberately holds **no authorization** — every caller decides who's allowed first.
   Suppliers still can't create a room or add themselves; the automatic path keys off the
   organizer's own hiring decision. `ensureEventRoom()` is **not** called from

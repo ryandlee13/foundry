@@ -152,15 +152,27 @@ export default function OrganizerVendorsTab() {
             </div>
           )}
 
-          <p className="mt-3 text-sm text-ink-soft">
-            {formatEventLabel(selected)} · {formatEventDate(selected.eventDate)} ·{" "}
-            {formatTimeRange(selected.startTime, selected.endTime)}
-          </p>
+          {/*
+            The event is the heading and everything vendor-related sits inside
+            it. With the event name as one more grey line among the request
+            cards, a planner running two events couldn't tell at a glance which
+            one they were looking at — so it's now a large title with the
+            requests, roster, and proposals visibly nested beneath it.
+          */}
+          <section className="mt-6 rounded-2xl border border-line bg-paper-dim/40 p-5 sm:p-6">
+            <h2 className="font-display text-2xl font-semibold text-ink sm:text-3xl">
+              {formatEventLabel(selected)}
+            </h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              {formatEventDate(selected.eventDate)} · {formatTimeRange(selected.startTime, selected.endTime)} ·{" "}
+              {selected.attendees} guests
+            </p>
 
-          <div className="mt-2">
-            {/* key: remount on switch so the embedded page reloads its own data. */}
-            <OrganizerVendorRequestsPage key={selected.id} bookingId={selected.id} showHeader={false} />
-          </div>
+            <div className="mt-5 border-t border-line pt-5">
+              {/* key: remount on switch so the embedded page reloads its own data. */}
+              <OrganizerVendorRequestsPage key={selected.id} bookingId={selected.id} showHeader={false} />
+            </div>
+          </section>
         </>
       )}
     </div>

@@ -15,14 +15,23 @@ const ROLE_OPTIONS: { value: AppRole; label: string; hint: string }[] = [
   { value: "vendor", label: "Vendor", hint: "Offer services" },
 ];
 
-const signUpSchema = z.object({
-  name: z.string().min(1, "Enter your name"),
-  email: z.string().email("Enter a valid email"),
-  // Not persisted anywhere — see src/lib/auth/storage.ts. Still required
-  // here so the form behaves like a real sign-up.
-  password: z.string().min(6, "At least 6 characters"),
-  role: z.enum(["organizer", "venue_operator", "vendor"]),
-});
+const signUpSchema = z
+  .object({
+    name: z.string().min(1, "Enter your name"),
+    email: z.string().email("Enter a valid email"),
+    // Neither field is persisted anywhere — see src/lib/auth/storage.ts, which
+    // never stores or checks a password. They're here so the form behaves like
+    // a real sign-up, and the match check is the same reason: a typo in the
+    // only copy of a password is the classic way to lock yourself out, so the
+    // shape of the real flow has to be right even while the value is discarded.
+    password: z.string().min(6, "At least 6 characters"),
+    confirmPassword: z.string().min(1, "Re-enter your password"),
+    role: z.enum(["organizer", "venue_operator", "vendor"]),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 type SignUpValues = z.infer<typeof signUpSchema>;
 
@@ -47,7 +56,7 @@ export default function SignUpForm() {
     formState: { errors, isSubmitting },
   } = useForm<SignUpValues>({
     resolver: zodResolver(signUpSchema),
-    defaultValues: { name: "", email: "", password: "", role: initialRole },
+    defaultValues: { name: "", email: "", password: "", confirmPassword: "", role: initialRole },
   });
 
   function onSubmit(values: SignUpValues) {
@@ -113,6 +122,22 @@ export default function SignUpForm() {
             className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
           />
           {errors.password && <p className="mt-1 text-xs text-wine">{errors.password.message}</p>}
+        </div>
+        <div>
+          <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink">
+            Confirm password
+          </label>
+          <input
+            id="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            placeholder="••••••••"
+            {...register("confirmPassword")}
+            className="mt-1.5 w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+          />
+          {errors.confirmPassword && (
+            <p className="mt-1 text-xs text-wine">{errors.confirmPassword.message}</p>
+          )}
         </div>
 
         <fieldset>

@@ -345,12 +345,11 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
                   /*
                     "Certificate of Insurance" is the single most alarming
                     phrase in this form for a first-time planner — it reads as
-                    paperwork they've already failed to have. The tooltip says
-                    what it is, that it isn't needed at this step, and that
-                    they won't be left to work it out alone.
-                    TODO: the last clause is a promise with nothing behind it
-                    yet. Build the COI walkthrough (or soften the wording)
-                    before a real launch.
+                    paperwork they've already failed to have. So the tooltip
+                    leads with "not now" and promises help, rather than
+                    explaining the document.
+                    TODO: this promises a walkthrough that doesn't exist yet.
+                    Build it (or soften the wording) before a real launch.
                   */
                   <div className="flex items-start gap-1.5">
                     <label className="flex items-start gap-2 text-xs text-ink">
@@ -363,10 +362,9 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
                       I&apos;ll provide a Certificate of Insurance
                     </label>
                     <span className="mt-0.5">
-                      <InfoTooltip label="What a Certificate of Insurance is">
-                        A one-page document from an insurer showing your event is covered — most venues ask
-                        for one. You don&apos;t need it now, and you won&apos;t be sorting it out alone:
-                        we&apos;ll walk you through it once the booking is confirmed.
+                      <InfoTooltip label="About the Certificate of Insurance">
+                        Don&apos;t worry about getting your certificate of insurance now — we&apos;ll show you
+                        the quickest and cheapest way to get one.
                       </InfoTooltip>
                     </span>
                   </div>

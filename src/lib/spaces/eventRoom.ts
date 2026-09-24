@@ -34,10 +34,12 @@ import type { EventMessageThread, EngagementStatus, VendorEngagement } from "@/l
  * explicit user direction and reverses the previous "organizer-created only"
  * invariant — see docs/SECURITY.md's "Chat unlock timing".
  *
- * openEventRoom() is still the organizer-gated explicit action behind the
- * button. Suppliers still cannot create or join a room themselves: the
- * automatic path is keyed off the organizer's own hiring decision (they
- * finalized the deal), not off anything a vendor or venue can do alone.
+ * There is no "open the event room" button any more — a panel offering to do
+ * something that has already happened is just clutter. openEventRoom() survives
+ * as the organizer-gated path used by assignEngagementToBooking(). Suppliers
+ * still cannot create or join a room themselves: the automatic path is keyed
+ * off the organizer's own hiring decision (they finalized the deal), not off
+ * anything a vendor or venue can do alone.
  *
  * Same import-direction note as bookingWorkflow.ts: this lives under
  * src/lib/spaces (a booking is a spaces concept) and imports from
@@ -100,8 +102,7 @@ export const EVENT_ROOM_BLOCK_COPY: Record<EventRoomBlockReason, string> = {
   not_organizer: "Only the event organizer can open the event room.",
   booking_not_confirmed: "Open the event room once your venue confirms this booking.",
   no_venue_host: "This listing has no host account to bring into the room.",
-  no_confirmed_vendor:
-    "As soon as a vendor confirms, they and your venue are put in one conversation with you here.",
+  no_confirmed_vendor: "An event room opens once a vendor has confirmed for this event.",
 };
 
 /** Owner accounts of every vendor actively working this booking. Reads storage. */
@@ -110,17 +111,6 @@ export function getActiveVendorOwnerIdsForBooking(bookingId: string): string[] {
     .filter((engagement) => ACTIVE_ENGAGEMENT_STATUSES.includes(engagement.status))
     .map((engagement) => getVendorProfileById(engagement.vendorProfileId)?.ownerId)
     .filter((ownerId): ownerId is string => Boolean(ownerId));
-}
-
-export function getEventRoomReadiness(bookingId: string, actorAccountId: string): EventRoomReadiness {
-  const booking = getBookingById(bookingId);
-  if (!booking) return { ready: false, reason: "booking_not_confirmed" };
-  return evaluateEventRoomReadiness({
-    booking,
-    venueOwnerId: getBookingVenueOwnerId(booking),
-    vendorOwnerIds: getActiveVendorOwnerIdsForBooking(bookingId),
-    actorAccountId,
-  });
 }
 
 export interface OpenEventRoomResult {

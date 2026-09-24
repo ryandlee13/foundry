@@ -65,6 +65,8 @@ import { ENGAGEMENT_STATUS_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/
 import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 import FinalizeDealDialog, { type FinalizeDealTerms } from "./FinalizeDealDialog";
+import Dialog from "@/components/ui/Dialog";
+import { organizerVendorsPath } from "@/lib/vendors/organizerRoutes";
 import AgreedTermsCard from "./AgreedTermsCard";
 import { organizerProposalsPath } from "@/lib/vendors/organizerRoutes";
 import type { Account } from "@/lib/auth/types";
@@ -286,6 +288,8 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
   const [draft, setDraft] = useState("");
   const [confirmingFinalize, setConfirmingFinalize] = useState(false);
+  /** Shown once, right after the planner accepts the venue's terms. */
+  const [celebrateTerms, setCelebrateTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLInputElement>(null);
@@ -686,6 +690,16 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
           onSendBookingProposal={(attachment, body) => sendAttachment(body, { proposal: attachment })}
           onRespondToBookingProposal={(messageId, status) => {
             respondToBookingProposal(messageId, user.id, status);
+            /*
+              Agreeing the venue's terms is the point the event stops being a
+              maybe — and the moment a planner's next job (vendors) is most
+              obvious to them and easiest to start. Only `revised_terms`:
+              agreeing to a deposit request isn't settling the booking.
+            */
+            const accepted = messages.find((message) => message.id === messageId);
+            if (status === "accepted" && accepted?.proposal?.kind === "revised_terms") {
+              setCelebrateTerms(true);
+            }
             refresh();
           }}
           onSendContract={(contract, body) => sendAttachment(body, { contract })}
@@ -732,6 +746,44 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
         onClose={() => setConfirmingFinalize(false)}
         onFinalize={handleFinalize}
       />
+
+      <Dialog
+        open={celebrateTerms}
+        onClose={() => setCelebrateTerms(false)}
+        labelledBy="terms-accepted-title"
+        panelClassName="w-full max-w-md p-7 text-center"
+      >
+        <h2
+          id="terms-accepted-title"
+          className="font-display text-2xl font-semibold leading-snug text-green-700 sm:text-3xl"
+        >
+          Congratulations — your venue is settled!
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+          You and {booking?.venueName ?? "the venue"} have agreed on terms. Want to line up the vendors for
+          this event while you&apos;re here?
+        </p>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          {/*
+            Straight to posting a request, not the vendor directory. A planner
+            who just settled a venue knows what they need, not who they want —
+            a post gets them proposals, browsing gets them a list to read.
+          */}
+          <Link
+            href={booking ? `${organizerVendorsPath(booking.id)}?post=1` : "/dashboard/organizer/vendors"}
+            className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+          >
+            Find a vendor
+          </Link>
+          <button
+            type="button"
+            onClick={() => setCelebrateTerms(false)}
+            className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            No thanks
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

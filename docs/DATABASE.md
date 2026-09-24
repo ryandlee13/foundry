@@ -540,9 +540,11 @@ lands, reconcile against this rather than the original §12–17 sketch, which p
   "moved forward" on acceptance but gets no thread to reply in until the venue owner
   initiates one; the planner can never create a booking thread either. **Event rooms**:
   anchored to `booking_id` → `bookings.id` plus a denormalized `venue_id`, with membership
-  in `message_thread_participants`. The one kind the **organizer** creates — via
-  `openEventRoom()` in `src/lib/spaces/eventRoom.ts`, which requires a `confirmed` booking,
-  a venue with an owner account, and at least one confirmed vendor engagement. Neither a
+  in `message_thread_participants`. Opened automatically by `ensureEventRoom()` in
+  `src/lib/spaces/eventRoom.ts` as soon as a vendor confirms, which requires a `confirmed`
+  booking, a venue with an owner account, and at least one confirmed vendor engagement
+  (`openEventRoom()` is the same thing with an organizer check, used by
+  `assignEngagementToBooking()`). Neither a
   venue nor a vendor may create one or add themselves; membership is additive only (a
   vendor confirming later is added, nobody is ever removed). This trio of rules (no
   vendor-initiated proposal thread, no planner-initiated booking thread, no

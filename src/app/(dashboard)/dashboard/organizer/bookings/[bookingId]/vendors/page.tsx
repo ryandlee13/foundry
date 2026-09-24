@@ -7,9 +7,13 @@ export const metadata: Metadata = {
 
 export default async function VendorRequestsRoute({
   params,
+  searchParams,
 }: {
   params: Promise<{ bookingId: string }>;
+  /** `?post=1` opens the post-a-request form on arrival — see the celebration dialog in MessageThreadView. */
+  searchParams: Promise<{ post?: string }>;
 }) {
   const { bookingId } = await params;
-  return <OrganizerVendorRequestsPage bookingId={bookingId} />;
+  const { post } = await searchParams;
+  return <OrganizerVendorRequestsPage bookingId={bookingId} autoOpenBuilder={post === "1"} />;
 }
