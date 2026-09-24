@@ -13,8 +13,54 @@ function formatPriceRange(min: number, max: number): string {
   return min === max ? `$${min}/hr` : `$${min}–$${max}/hr`;
 }
 
-export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
+/**
+ * Sits above the card's full-bleed link (`z-10`, like the save heart) and is
+ * always visible rather than hover-only, so it works on touch.
+ */
+function PhotoArrow({
+  direction,
+  venueName,
+  onClick,
+}: {
+  direction: "previous" | "next";
+  venueName: string;
+  onClick: (event: React.MouseEvent) => void;
+}) {
+  const isNext = direction === "next";
+  return (
+    <button
+      type="button"
+      aria-label={`Show the ${direction} photo of ${venueName}`}
+      onClick={onClick}
+      className={`absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-paper/80 text-ink opacity-80 backdrop-blur-sm transition-all hover:bg-paper hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-brass ${
+        isNext ? "right-2" : "left-2"
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.25}>
+        <path
+          d={isNext ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+export default function VenueCard({
+  venue,
+  prefillQuery = "",
+}: {
+  venue: VenueWithDistance;
+  /**
+   * The planner's search brief (date, times, guest count, event type) as a
+   * query string, carried onto the venue link so the booking form over there
+   * opens already filled in. See src/lib/spaces/bookingPrefill.ts.
+   */
+  prefillQuery?: string;
+}) {
   const [saved, setSaved] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState(0);
 
   /*
    * Events-hosted is invented filler (getEventsDoneForVenue is a hash, not a
@@ -27,6 +73,26 @@ export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
   const isSeedVenue = venue.ownerId === null;
   const eventsHosted = isSeedVenue ? getEventsDoneForVenue(venue.id) : null;
 
+  /*
+   * Paging through a listing's photos without opening it, so two spaces can be
+   * compared side by side in the grid.
+   *
+   * Only real uploaded photos page. The seed listings are fictional and carry
+   * none on purpose (CLAUDE.md's placeholder-copy rule — a real photograph of a
+   * real San Francisco room would misrepresent an actual business), so arrows
+   * there would step between identical gradients and feel broken.
+   */
+  const photos = venue.photos ?? [];
+  const canBrowsePhotos = photos.length > 1;
+
+  function stepPhoto(event: React.MouseEvent, delta: number) {
+    // The whole card is covered by an absolutely-positioned <Link>; without
+    // this, browsing photos navigates to the venue page instead.
+    event.preventDefault();
+    event.stopPropagation();
+    setPhotoIndex((current) => (current + delta + photos.length) % photos.length);
+  }
+
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
       <div className="relative">
@@ -34,13 +100,25 @@ export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
           accent={venue.visualAccent}
           icon={venue.icon}
           imageCount={venue.images.length}
-          photoUrl={venue.photos?.[0]}
+          currentIndex={photoIndex + 1}
+          photoUrl={photos[photoIndex]}
           className="aspect-[4/3] w-full"
         >
           {venue.badge && (
             <span className="absolute left-3 top-3 rounded-full bg-paper/90 px-2.5 py-1 text-[11px] font-semibold text-ink backdrop-blur-sm">
               {BADGE_LABELS[venue.badge]}
             </span>
+          )}
+
+          {canBrowsePhotos && (
+            <>
+              <PhotoArrow
+                direction="previous"
+                venueName={venue.name}
+                onClick={(event) => stepPhoto(event, -1)}
+              />
+              <PhotoArrow direction="next" venueName={venue.name} onClick={(event) => stepPhoto(event, 1)} />
+            </>
           )}
         </VenueImagePlaceholder>
 
@@ -98,7 +176,11 @@ export default function VenueCard({ venue }: { venue: VenueWithDistance }) {
         )}
       </div>
 
-      <Link href={`/spaces/${venue.slug}`} className="absolute inset-0" aria-label={`View ${venue.name}`} />
+      <Link
+        href={prefillQuery ? `/spaces/${venue.slug}?${prefillQuery}` : `/spaces/${venue.slug}`}
+        className="absolute inset-0"
+        aria-label={`View ${venue.name}`}
+      />
     </article>
   );
 }

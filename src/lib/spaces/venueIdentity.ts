@@ -47,9 +47,11 @@ export function resolveVenueDisclosure(input: {
 
   const disclosed: Omit<VenueDisclosure, "reason"> = {
     // Listings that predate this field have no separate real name; the public
-    // title is all there is, so there's nothing extra to reveal.
+    // title is all there is, so there's nothing extra to reveal. Same for a
+    // blank address: the fictional seed listings carry none, and "unlocking"
+    // an empty string is worse than saying nothing — see hasDisclosedDetails().
     realName: venue.realName?.trim() || null,
-    exactAddress: venue.exactAddress,
+    exactAddress: venue.exactAddress?.trim() || null,
   };
 
   if (venue.ownerId !== null && venue.ownerId === viewerId) {
@@ -68,22 +70,35 @@ export function resolveVenueDisclosure(input: {
 }
 
 /**
- * Tooltip copy for the "i" beside a listing's title, explaining what's held
+ * Is there anything to actually show once the gate opens? A viewer can be
+ * fully entitled (`reason === "confirmed_booking"`) and still have nothing to
+ * read, because the host never supplied a street address — every fictional
+ * seed listing is in exactly that position. Surfaces use this to choose
+ * between the reveal and saying nothing; showing an empty "unlocked" panel
+ * reads as a bug, and showing the not-yet notice to someone who *has* booked
+ * reads as a broken promise.
+ */
+export function hasDisclosedDetails(disclosure: VenueDisclosure): boolean {
+  return disclosure.realName !== null || disclosure.exactAddress !== null;
+}
+
+/**
+ * Tooltip copy for the "i" beside a listing's district, explaining what's held
  * back and what unlocks it. Lives here, next to the rule it describes, so the
  * promise the UI makes and the gate that keeps it can't drift apart.
  *
- * Both say **confirmed**, not "contract signed": confirmation is what
- * `resolveVenueDisclosure()` actually keys on. Contracts are optional in the
- * booking flow, so gating the address on one would leave planners of hosts who
- * never send a contract without an address at all. Change the copy only
+ * Both say **booked/confirmed**, not "contract signed": a confirmed booking is
+ * what `resolveVenueDisclosure()` actually keys on. Contracts are optional in
+ * the booking flow, so gating the address on one would leave planners of hosts
+ * who never send a contract without an address at all. Change the copy only
  * together with the rule above.
  */
 export const VENUE_PRIVACY_NOTICE =
-  "This host lists by description. The venue's name and exact address are shared with you as soon as your booking is confirmed.";
+  "Address will be revealed when your event is booked. The venue's name unlocks at the same time — this host lists by description until then.";
 
 /** The same rule, from the owner's side — they already know their own address. */
 export const VENUE_PRIVACY_NOTICE_OWNER =
-  "Planners see your listing title and district only. Your venue's name and exact address are revealed once you confirm their booking.";
+  "Planners see your district and listing title only. Your address and venue name are revealed once you confirm their booking.";
 
 /**
  * Normalizes for comparison: lowercase, punctuation stripped, whitespace

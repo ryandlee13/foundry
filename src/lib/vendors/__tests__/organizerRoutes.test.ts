@@ -9,7 +9,13 @@ describe("organizerVendorsPath", () => {
   it("routes an unassigned request to the standalone page", () => {
     // Built by hand, the null case produced ".../bookings/null/vendors" — a
     // 404 that reads like the request was lost.
-    expect(organizerVendorsPath(null)).toBe("/dashboard/organizer/vendors");
+    expect(organizerVendorsPath(null)).toBe("/dashboard/organizer/vendors/unassigned");
+  });
+
+  it("does not collide with the Vendors tab", () => {
+    // `/dashboard/organizer/vendors` is the planner's Vendors tab (a list of
+    // their events); an unassigned request must not land there.
+    expect(organizerVendorsPath(null)).not.toBe("/dashboard/organizer/vendors");
   });
 
   it("never emits a literal null segment", () => {
@@ -26,6 +32,8 @@ describe("organizerProposalsPath", () => {
   });
 
   it("nests under the standalone page when there isn't", () => {
-    expect(organizerProposalsPath(null, "n-1")).toBe("/dashboard/organizer/vendors/n-1/proposals");
+    expect(organizerProposalsPath(null, "n-1")).toBe(
+      "/dashboard/organizer/vendors/unassigned/n-1/proposals"
+    );
   });
 });

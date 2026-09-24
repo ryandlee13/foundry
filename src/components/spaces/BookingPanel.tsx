@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { addBooking, formatEventDate } from "@/lib/spaces/bookings";
+import { addBooking, formatEventDate, getBookingsForOrganizer } from "@/lib/spaces/bookings";
 import { EVENT_TYPE_LABELS } from "@/lib/spaces/labels";
 import {
   evaluateBookingRequest,
@@ -16,7 +16,9 @@ import {
   formatTimeRange,
   type BookingConstraintViolation,
 } from "@/lib/spaces/bookingConstraints";
+import { hasBookingPrefill, readBookingPrefill } from "@/lib/spaces/bookingPrefill";
 import Dialog from "@/components/ui/Dialog";
+import InfoTooltip from "@/components/ui/InfoTooltip";
 import type { EventType, Venue } from "@/lib/types/spaces";
 
 function formatPriceRange(min: number, max: number): string {
@@ -33,6 +35,7 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [attendees, setAttendees] = useState("");
+  const [prefilled, setPrefilled] = useState(false);
   const [organizerNote, setOrganizerNote] = useState("");
   const [coiAgreed, setCoiAgreed] = useState(false);
   const [depositAgreed, setDepositAgreed] = useState(false);
@@ -40,6 +43,33 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const [requestedId, setRequestedId] = useState<string | null>(null);
   const [pendingViolations, setPendingViolations] = useState<BookingConstraintViolation[]>([]);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
+  /** Whether this was the planner's very first request, read before it was saved. */
+  const [wasFirstRequest, setWasFirstRequest] = useState(false);
+
+  /*
+   * Everything the planner already answered on the homepage or in the Discover
+   * Spaces filters, carried here on the venue link (bookingPrefill.ts). Runs
+   * once on mount, before the form can be typed into, so it seeds the fields
+   * without ever overwriting an edit.
+   *
+   * Reads window.location rather than useSearchParams() on purpose: calling
+   * that hook here would force /spaces/[slug] to bail out of static rendering
+   * into a Suspense fallback, replacing the prerendered listing with a loading
+   * state on every venue page for the sake of a form field.
+   */
+  useEffect(() => {
+    const prefill = readBookingPrefill(new URLSearchParams(window.location.search));
+    if (!hasBookingPrefill(prefill)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (prefill.eventType) setEventType(prefill.eventType);
+    if (prefill.eventDate) setEventDate(prefill.eventDate);
+    if (prefill.startTime) setStartTime(prefill.startTime);
+    if (prefill.endTime) setEndTime(prefill.endTime);
+    if (prefill.attendees !== null) setAttendees(String(prefill.attendees));
+    setPrefilled(true);
+  }, []);
 
   function handleBookClick() {
     if (!isLoading && !user) {
@@ -47,18 +77,23 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
     }
   }
 
-  function submitBooking() {
-    if (!user) return;
+  /** The venue's own requirements, checked before the review step so the summary is never shown with an error waiting behind it. */
+  function findMissingAgreement(): string | null {
     if (venue.rules.coiRequired && !coiAgreed) {
-      setError("This venue requires a Certificate of Insurance — check the box to agree.");
-      setConfirmDialogOpen(false);
-      return;
+      return "This venue requires a Certificate of Insurance — check the box to agree.";
     }
     if (venue.rules.securityDepositRequired && !depositAgreed) {
-      setError("This venue requires a security deposit — check the box to agree.");
-      setConfirmDialogOpen(false);
-      return;
+      return "This venue requires a security deposit — check the box to agree.";
     }
+    return null;
+  }
+
+  function submitBooking() {
+    if (!user) return;
+
+    // Read before the write: after addBooking() this planner always has at
+    // least one, so "your first request" could never be true if asked later.
+    setWasFirstRequest(getBookingsForOrganizer(user.id).length === 0);
 
     const booking = addBooking({
       venueId: venue.id,
@@ -79,12 +114,25 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       ...(organizerNote.trim() ? { organizerNote: organizerNote.trim() } : {}),
     });
     setRequestedId(booking.id);
-    setConfirmDialogOpen(false);
+    setReviewOpen(false);
+    setSuccessOpen(true);
   }
 
+  /**
+   * "Send booking request" doesn't send anything — it opens the review step.
+   * Everything that could stop the request is checked here first (missing
+   * agreements, then the venue's booking policy), so the summary a planner is
+   * asked to confirm is one they can actually confirm.
+   */
   function handleConfirm() {
     if (!user) return;
     setError(null);
+
+    const missingAgreement = findMissingAgreement();
+    if (missingAgreement) {
+      setError(missingAgreement);
+      return;
+    }
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const violations = evaluateBookingRequest(
@@ -106,7 +154,7 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
       return;
     }
 
-    submitBooking();
+    setReviewOpen(true);
   }
 
   return (
@@ -184,6 +232,11 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
           </button>
         ) : (
           <div className="space-y-3">
+            {prefilled && (
+              <p className="rounded-lg bg-paper-dim px-3.5 py-2.5 text-xs text-ink-soft">
+                Filled in from your search — change anything before you send it.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <div className="col-span-2">
                 <label htmlFor="booking-event-name" className="block text-xs font-medium text-ink-soft">
@@ -289,15 +342,34 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
               <div className="space-y-2 rounded-lg bg-paper-dim px-3.5 py-3">
                 <p className="text-xs font-semibold text-ink">This venue requires:</p>
                 {venue.rules.coiRequired && (
-                  <label className="flex items-start gap-2 text-xs text-ink">
-                    <input
-                      type="checkbox"
-                      checked={coiAgreed}
-                      onChange={(event) => setCoiAgreed(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
-                    />
-                    I&apos;ll provide a Certificate of Insurance
-                  </label>
+                  /*
+                    "Certificate of Insurance" is the single most alarming
+                    phrase in this form for a first-time planner — it reads as
+                    paperwork they've already failed to have. The tooltip says
+                    what it is, that it isn't needed at this step, and that
+                    they won't be left to work it out alone.
+                    TODO: the last clause is a promise with nothing behind it
+                    yet. Build the COI walkthrough (or soften the wording)
+                    before a real launch.
+                  */
+                  <div className="flex items-start gap-1.5">
+                    <label className="flex items-start gap-2 text-xs text-ink">
+                      <input
+                        type="checkbox"
+                        checked={coiAgreed}
+                        onChange={(event) => setCoiAgreed(event.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-wine focus:ring-1 focus:ring-brass"
+                      />
+                      I&apos;ll provide a Certificate of Insurance
+                    </label>
+                    <span className="mt-0.5">
+                      <InfoTooltip label="What a Certificate of Insurance is">
+                        A one-page document from an insurer showing your event is covered — most venues ask
+                        for one. You don&apos;t need it now, and you won&apos;t be sorting it out alone:
+                        we&apos;ll walk you through it once the booking is confirmed.
+                      </InfoTooltip>
+                    </span>
+                  </div>
                 )}
                 {venue.rules.securityDepositRequired && (
                   <label className="flex items-start gap-2 text-xs text-ink">
@@ -353,10 +425,135 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
           </button>
           <button
             type="button"
+            onClick={() => {
+              // Hands off to the review step rather than submitting outright —
+              // accepting the venue's caveat isn't the same as confirming the
+              // whole request.
+              setConfirmDialogOpen(false);
+              setReviewOpen(true);
+            }}
+            className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+          >
+            Continue
+          </button>
+        </div>
+      </Dialog>
+
+      {/*
+        The last look before anything is sent. A booking request is a real ask
+        of a real host, and until now the only summary of one appeared *after*
+        it had already gone out.
+      */}
+      <Dialog
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        labelledBy="booking-review-title"
+        panelClassName="w-full max-w-md p-6"
+      >
+        <h2 id="booking-review-title" className="font-display text-xl font-semibold text-ink">
+          Does this look right?
+        </h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          This is what {venue.name} will receive. Nothing has been sent yet.
+        </p>
+
+        <dl className="mt-4 space-y-2.5 rounded-xl bg-paper-dim px-4 py-3.5 text-sm">
+          {eventName.trim() && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-soft">Event</dt>
+              <dd className="text-right font-medium text-ink">{eventName.trim()}</dd>
+            </div>
+          )}
+          {eventType && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-soft">Type</dt>
+              <dd className="text-right font-medium text-ink">{EVENT_TYPE_LABELS[eventType]}</dd>
+            </div>
+          )}
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-soft">Date</dt>
+            <dd className="text-right font-medium text-ink">{formatEventDate(eventDate)}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-soft">Time</dt>
+            <dd className="text-right font-medium text-ink">{formatTimeRange(startTime, endTime)}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-soft">Guests</dt>
+            <dd className="text-right font-medium text-ink">{attendees}</dd>
+          </div>
+          {organizerNote.trim() && (
+            <div className="border-t border-line pt-2.5">
+              <dt className="text-ink-soft">Notes for the host</dt>
+              <dd className="mt-1 whitespace-pre-wrap text-ink">{organizerNote.trim()}</dd>
+            </div>
+          )}
+          {(venue.rules.coiRequired || venue.rules.securityDepositRequired) && (
+            <div className="border-t border-line pt-2.5 text-xs text-ink-soft">
+              You&apos;ve agreed to
+              {venue.rules.coiRequired && " provide a Certificate of Insurance"}
+              {venue.rules.coiRequired && venue.rules.securityDepositRequired && " and"}
+              {venue.rules.securityDepositRequired && " pay the required security deposit"}.
+            </div>
+          )}
+        </dl>
+
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setReviewOpen(false)}
+            className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            Edit details
+          </button>
+          <button
+            type="button"
             onClick={submitBooking}
             className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
           >
-            Submit anyway
+            Confirm &amp; send
+          </button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={successOpen}
+        onClose={() => setSuccessOpen(false)}
+        labelledBy="booking-success-title"
+        panelClassName="w-full max-w-md p-7 text-center"
+      >
+        {/*
+          "First" is checked against the planner's own bookings rather than
+          hardcoded — congratulating someone on their first request when it's
+          their fourth reads as a form letter, which is the opposite of what
+          this moment is for.
+        */}
+        <h2
+          id="booking-success-title"
+          className="font-display text-2xl font-semibold leading-snug text-green-700 sm:text-3xl"
+        >
+          {wasFirstRequest
+            ? "Congratulations, you've sent your first booking request!"
+            : "Your booking request is on its way!"}
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+          Once the booking request is accepted, rates and other details can be confirmed directly with the
+          venue.
+        </p>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/organizer")}
+            className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+          >
+            Go see event details
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/spaces")}
+            className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+          >
+            Continue browsing
           </button>
         </div>
       </Dialog>

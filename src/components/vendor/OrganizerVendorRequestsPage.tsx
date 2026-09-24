@@ -37,6 +37,27 @@ import type { EngagementStatus, EventNeed, EventNeedPhase, EventNeedStatus, Vend
 
 const INACTIVE_ENGAGEMENT_STATUSES = new Set<EngagementStatus>(["canceled_by_organizer", "canceled_by_vendor", "declined_by_vendor"]);
 
+/**
+ * The two one-way actions on a request. `closeEventNeed`/`cancelEventNeed` set
+ * a terminal status and nothing in the UI sets it back — a misclick costs the
+ * planner the posting and every bid still coming in on it, so both ask first.
+ * Publish/pause/resume are all reversible in one click and don't.
+ */
+type DestructiveNeedAction = "close" | "cancel";
+
+const DESTRUCTIVE_ACTION_COPY: Record<DestructiveNeedAction, { title: string; body: string; confirm: string }> = {
+  close: {
+    title: "Close this request?",
+    body: "It stops showing in Discover Gigs and vendors can't send new proposals. There's no reopen — you'd post a fresh request instead. Proposals you've already received stay in your list.",
+    confirm: "Close request",
+  },
+  cancel: {
+    title: "Cancel this request?",
+    body: "This withdraws the request entirely. It stops showing in Discover Gigs, vendors can't send new proposals, and there's no undo — you'd post a fresh request instead.",
+    confirm: "Cancel request",
+  },
+};
+
 const STATUS_STYLES: Record<EventNeedStatus, string> = {
   draft: "bg-paper-dim text-ink-soft",
   published: "bg-green-100 text-green-800",
@@ -57,7 +78,18 @@ const ENGAGEMENT_STATUS_STYLES: Record<EngagementStatus, string> = {
   disputed: "bg-wine/10 text-wine",
 };
 
-export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: string }) {
+export default function OrganizerVendorRequestsPage({
+  bookingId,
+  showHeader = true,
+}: {
+  bookingId: string;
+  /**
+   * False when this is embedded under the Vendors tab, which supplies its own
+   * title and event switcher — the standalone route keeps the back link and
+   * heading it has always had.
+   */
+  showHeader?: boolean;
+}) {
   const { user, isLoading: authLoading } = useAuth();
   const [loaded, setLoaded] = useState(false);
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -71,6 +103,9 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
   const [unreadByEngagement, setUnreadByEngagement] = useState<Record<string, number>>({});
   const [threadIdByEngagement, setThreadIdByEngagement] = useState<Record<string, string>>({});
   const [formOpen, setFormOpen] = useState(false);
+  const [confirmingAction, setConfirmingAction] = useState<{ need: EventNeed; action: DestructiveNeedAction } | null>(
+    null
+  );
 
   const refresh = useCallback(() => {
     if (!user) return;
@@ -144,6 +179,12 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
     refresh();
   }
 
+  function confirmDestructiveAction() {
+    if (!confirmingAction) return;
+    handleAction(confirmingAction.need.id, confirmingAction.action);
+    setConfirmingAction(null);
+  }
+
   function handleMarkComplete(engagementId: string) {
     completeEngagement(engagementId);
     refresh();
@@ -156,19 +197,23 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
 
   return (
     <div>
-      <Link href="/dashboard/organizer" className="text-sm font-medium text-ink-soft hover:text-ink">
-        ← Back to organizer dashboard
-      </Link>
+      {showHeader && (
+        <>
+          <Link href="/dashboard/organizer" className="text-sm font-medium text-ink-soft hover:text-ink">
+            ← Back to organizer dashboard
+          </Link>
 
-      {/* Single entry point: the Find Vendors panel below. This row used to
-          carry a duplicate "Looking for a ___" button sitting directly above
-          it, which offered the same action twice under two different names. */}
-      <div className="mt-4">
-        <h1 className="font-display text-2xl font-semibold text-ink">Find vendors</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          {formatEventLabel(booking)} · {formatTimeRange(booking.startTime, booking.endTime)}
-        </p>
-      </div>
+          {/* Single entry point: the Find Vendors panel below. This row used to
+              carry a duplicate "Looking for a ___" button sitting directly above
+              it, which offered the same action twice under two different names. */}
+          <div className="mt-4">
+            <h1 className="font-display text-2xl font-semibold text-ink">Find vendors</h1>
+            <p className="mt-1 text-sm text-ink-soft">
+              {formatEventLabel(booking)} · {formatTimeRange(booking.startTime, booking.endTime)}
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="mt-6">
         <FindVendorsPrompt booking={booking} onOpenBuilder={() => setFormOpen(true)} />
@@ -230,12 +275,12 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
                     </button>
                   )}
                   {(need.status === "published" || need.status === "paused") && (
-                    <button type="button" onClick={() => handleAction(need.id, "close")} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim">
+                    <button type="button" onClick={() => setConfirmingAction({ need, action: "close" })} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper-dim">
                       Close
                     </button>
                   )}
                   {need.status !== "canceled" && need.status !== "filled" && need.status !== "closed" && (
-                    <button type="button" onClick={() => handleAction(need.id, "cancel")} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-wine transition-colors hover:bg-wine/5">
+                    <button type="button" onClick={() => setConfirmingAction({ need, action: "cancel" })} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-wine transition-colors hover:bg-wine/5">
                       Cancel
                     </button>
                   )}
@@ -319,6 +364,43 @@ export default function OrganizerVendorRequestsPage({ bookingId }: { bookingId: 
           })()}
         </div>
       )}
+
+      <Dialog
+        open={confirmingAction !== null}
+        onClose={() => setConfirmingAction(null)}
+        labelledBy="need-action-confirm-title"
+        panelClassName="w-full max-w-md p-6"
+      >
+        {confirmingAction && (
+          <>
+            <h2 id="need-action-confirm-title" className="font-display text-xl font-semibold text-ink">
+              {DESTRUCTIVE_ACTION_COPY[confirmingAction.action].title}
+            </h2>
+            <p className="mt-2 text-sm font-medium text-ink">
+              {confirmingAction.need.title || `Looking for a ${getSkillName(confirmingAction.need.skillSlug)}`}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+              {DESTRUCTIVE_ACTION_COPY[confirmingAction.action].body}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmingAction(null)}
+                className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+              >
+                Keep it open
+              </button>
+              <button
+                type="button"
+                onClick={confirmDestructiveAction}
+                className="flex-1 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+              >
+                {DESTRUCTIVE_ACTION_COPY[confirmingAction.action].confirm}
+              </button>
+            </div>
+          </>
+        )}
+      </Dialog>
 
       <Dialog open={formOpen} onClose={() => setFormOpen(false)} labelledBy="vendor-request-form-title" panelClassName="w-full max-w-xl p-6 sm:p-8">
         <h2 id="vendor-request-form-title" className="font-display text-xl font-semibold text-ink">

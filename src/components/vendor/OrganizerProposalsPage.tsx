@@ -151,6 +151,15 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
     return <ErrorState title="Not authorized" description="You can only review proposals on your own vendor requests." />;
   }
 
+  /*
+   * Shortlisting is a "still deciding" action. finalizeDeal() holds a position
+   * the moment the organizer commits to a vendor, so a filled position means
+   * someone is booked here — at which point marking a rival proposal as a
+   * maybe is noise. Decline (and Finalize, if a second position is still open)
+   * stay available; only the maybe goes.
+   */
+  const canShortlist = need.positionsFilled === 0;
+
   function openAcceptConfirm(proposal: VendorProposal) {
     setError(null);
     const effectiveStatus = getEffectiveProposalStatus(proposal, now);
@@ -310,7 +319,7 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
 
                   {isActionable && (
                     <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
-                      {effectiveStatus === "submitted" && (
+                      {effectiveStatus === "submitted" && canShortlist && (
                         <button type="button" onClick={() => handleShortlist(proposal)} className="rounded-full border border-line px-3.5 py-1.5 text-xs font-semibold text-ink hover:bg-paper-dim">
                           Shortlist
                         </button>

@@ -9,6 +9,7 @@ import { getBookingsForOrganizer } from "@/lib/spaces/bookings";
 import {
   VENUE_PRIVACY_NOTICE,
   VENUE_PRIVACY_NOTICE_OWNER,
+  hasDisclosedDetails,
   resolveVenueDisclosure,
   type VenueDisclosure,
 } from "@/lib/spaces/venueIdentity";
@@ -42,12 +43,14 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
   }, [venue, user]);
 
   /*
-   * Only a planner on a confirmed booking gets the details rendered. The owner
-   * is deliberately excluded: resolveVenueDisclosure() still returns their own
-   * address to them (they're entitled to it), but showing a venue operator
-   * their own street address on their own listing told them nothing.
+   * Only a planner on a confirmed booking gets the details rendered, and only
+   * when the host actually supplied some. The owner is deliberately excluded:
+   * resolveVenueDisclosure() still returns their own address to them (they're
+   * entitled to it), but showing a venue operator their own street address on
+   * their own listing told them nothing.
    */
   const addressDisclosed = disclosure?.reason === "confirmed_booking";
+  const showReveal = addressDisclosed && disclosure !== null && hasDisclosedDetails(disclosure);
 
   const allowedRules = (Object.keys(RULE_LABELS) as (keyof typeof RULE_LABELS)[]).filter(
     (key) => venue.rules[key]
@@ -106,24 +109,26 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
             site, and book around Foundry (docs/SECURITY.md #5).
 
             Until the address is actually disclosed, that's explained by the "i"
-            beside the title rather than a banner — the rule is worth stating
-            once, quietly, not given a block of page weight on every listing.
-            The owner sees the same affordance: they already know their own
-            address, so printing it back to them was pure noise.
+            beside the *district* rather than a banner — the district is the
+            thing standing in for the address, so that's where the question gets
+            asked. The rule is worth stating once, quietly, not given a block of
+            page weight on every listing. The owner sees the same affordance:
+            they already know their own address, so printing it back to them was
+            pure noise.
 
             Everything below comes from resolveVenueDisclosure() — never read
             realName/exactAddress off the Venue in a component.
           */}
-          <h1 className="mt-2 flex flex-wrap items-center gap-2.5 font-display text-3xl font-semibold text-ink sm:text-4xl">
-            {venue.name}
+          <h1 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">{venue.name}</h1>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-ink-soft">
+            <span>
+              {venue.neighborhood}, {venue.city} · {SPACE_TYPE_LABELS[venue.spaceType]}
+            </span>
             {!addressDisclosed && (
-              <InfoTooltip label="Why the venue's name and address aren't shown">
+              <InfoTooltip label="Why the exact address isn't shown">
                 {disclosure?.reason === "owner" ? VENUE_PRIVACY_NOTICE_OWNER : VENUE_PRIVACY_NOTICE}
               </InfoTooltip>
             )}
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {venue.neighborhood}, {venue.city} · {SPACE_TYPE_LABELS[venue.spaceType]}
           </p>
           <VenueHostLine ownerId={venue.ownerId} />
 
@@ -132,7 +137,7 @@ export default function VenueDetailView({ venue }: { venue: Venue }) {
             whole mechanism, and the one case where the details are genuinely
             new information to the person reading.
           */}
-          {addressDisclosed && disclosure && (
+          {showReveal && disclosure && (
             <div className="mt-4 rounded-xl border border-brass/40 bg-brass/5 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-brass-dark">
                 Unlocked for your confirmed booking

@@ -12,9 +12,15 @@ import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 import type { Booking, BookingStatus } from "@/lib/types/spaces";
 
+/*
+ * Confirmed is green, not brass: it's the one status that means "this is
+ * settled, stop worrying about it", and in brass it read as the same
+ * in-progress amber as everything else on the page. Same green the vendor
+ * layer already uses for a filled request and a completed engagement.
+ */
 const STATUS_STYLES: Record<BookingStatus, string> = {
   pending: "bg-paper-dim text-ink-soft",
-  confirmed: "bg-brass/15 text-brass-dark",
+  confirmed: "bg-green-100 text-green-800",
   declined: "bg-wine/10 text-wine",
 };
 

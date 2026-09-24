@@ -44,9 +44,13 @@ choice:
    either field off a `Venue` directly (the two exceptions — the owner's own submission
    review and edit form — say so in-file). `slug` is generated from the descriptive title so
    the URL doesn't leak the name either. **Only `reason === "confirmed_booking"` actually
-   renders the details** (venue page and booking thread); everyone else, the owner included,
-   gets an `InfoTooltip` beside the venue name carrying `VENUE_PRIVACY_NOTICE` /
-   `VENUE_PRIVACY_NOTICE_OWNER`. The owner is excluded on purpose — `resolveVenueDisclosure()`
+   renders the details** (venue page and booking thread), *and* only when
+   `hasDisclosedDetails()` says there is something to render — the fictional seed listings
+   carry `exactAddress: ""`, and an "unlocked" panel containing nothing reads as a bug.
+   Everyone else, the owner included, gets an `InfoTooltip` — beside the **district** on
+   the venue page (the district is what's standing in for the address, so that's where the
+   question gets asked) and beside the venue name in a booking thread, which has no district
+   line — carrying `VENUE_PRIVACY_NOTICE` / `VENUE_PRIVACY_NOTICE_OWNER`. The owner is excluded on purpose — `resolveVenueDisclosure()`
    still returns their own address to them, but printing a venue operator's own street
    address back at them is noise, not a feature. Both notices say *confirmed*, not "contract
    signed": confirmation is what the gate keys on, and contracts are optional in the booking
@@ -118,8 +122,12 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
   payments (Phase 7) — it carries a "Payments coming soon" tag instead. Widen both only
   when those features actually land.
 - Placeholder/marketing copy must not claim things that aren't true yet (no fake reviews,
-  no fake activity counts, no "verified" claims on unreviewed documents). **Scoped
-  exception:** the homepage "Event recaps" carousel
+  no fake activity counts, no "verified" claims on unreviewed documents). One **outstanding
+  promise** is knowingly in the product at user direction: the COI `InfoTooltip` in
+  `BookingPanel.tsx` says Foundry will walk a planner through getting a Certificate of
+  Insurance, and no such walkthrough exists. It carries a `TODO` at the line — build it or
+  soften the wording before a real launch. Don't add more forward-looking promises like it.
+  **Scoped exception:** the homepage "Event recaps" carousel
   (`src/components/marketing/RecapCarousel.tsx`) and the venue-detail "events hosted" stat
   + reviews (`src/components/spaces/VenueReviews.tsx`) use invented names/quotes as
   explicitly-approved dummy filler until real testimonials exist, using initials-only
@@ -214,6 +222,35 @@ now rather than waiting.
   events → your venues → subscription. Listing management used to sit at the top with a
   "List another space" CTA, which made an owner who already has listings land on a page
   asking them to create more, when the work waiting on them is the requests.
+- **A planner never types their event details twice.** `src/lib/spaces/bookingPrefill.ts`
+  (pure) carries date / start / end / guest count / event type from the homepage hero and
+  the Discover Spaces filters onto every venue link, and `BookingPanel` seeds its fields
+  from it. It reuses the exact query keys `urlState.ts` already defines, so there is one
+  vocabulary, not two — and it is **URL-only, never persisted**, the same call as
+  `VendorSearchBrief`. Two rules: a multi-value `eventType` filter prefills nothing (the
+  planner hasn't said which one their event *is*), and the read happens in a mount effect
+  off `window.location.search` rather than `useSearchParams()` — that hook would force
+  `/spaces/[slug]` to bail out of static rendering into a Suspense fallback, trading the
+  prerendered listing for a loading state on every venue page. Prefill is convenience only;
+  `evaluateBookingRequest()` still re-checks everything.
+- **"Send booking request" opens a review step; it does not send.** `BookingPanel` runs
+  every check that could stop a request — missing COI/deposit agreements first, then
+  `evaluateBookingRequest()` — *before* showing the summary, so a planner is never asked to
+  confirm something they can't confirm. A soft constraint violation leads into the same
+  review rather than submitting outright (accepting the venue's caveat isn't confirming the
+  request). Only "Confirm & send" calls `addBooking()`, and the success dialog congratulates
+  a **first** request only when `getBookingsForOrganizer()` was empty *before* the write —
+  read it after and it can never be true. Destructive vendor-request actions
+  (`closeEventNeed`/`cancelEventNeed`) confirm the same way: both set a terminal status and
+  nothing in the UI sets it back. Reversible actions (publish/pause/resume) don't ask.
+- **Find Vendors is a sidebar tab (`/dashboard/organizer/vendors`), not only a button on a
+  booking row.** `OrganizerVendorsTab` picks a confirmed booking (switcher shown only when
+  there's more than one) and embeds the same `OrganizerVendorRequestsPage` the per-booking
+  route renders, with `showHeader={false}` — one component, two entry points, no second copy
+  of the screen to keep in sync. Vendor requests are still booking-anchored, which is why
+  the tab chooses an event first. The sidebar resolves the active tab by longest matching
+  href (`resolveActiveHref`): Vendors sits under Event Details' path, so a plain prefix test
+  lights up both at once.
 - **Booking messaging is host-only until the host says yes, then two-way.** A booking
   thread (`BookingMessageThread`, part of the `MessageThread` discriminated union in
   `src/lib/vendors/messages.ts`) routes through one gate, `openBookingThread` in
@@ -304,14 +341,14 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   `EventNeed.bookingId` and `VendorEngagement.bookingId` are `string | null`; null means
   "not assigned to an event yet". **The UI for this is currently hidden at user direction**
   ("hide vendors without an event for now") — nothing links to
-  `/dashboard/organizer/vendors`, so no new unassigned request can be created through the
-  app. The routes, `UnassignedVendorsPage.tsx`, and all the supporting logic are kept
+  `/dashboard/organizer/vendors/unassigned`, so no new unassigned request can be created
+  through the app. The routes, `UnassignedVendorsPage.tsx`, and all the supporting logic are kept
   intact and working, the same way `TriangleDiagram.tsx` is kept unreferenced: restoring it
   means re-adding the two entry points (the badge link on `/dashboard/organizer` and the
   empty-state action in `OrganizerDashboard.tsx`). Don't unwind the nullable anchor to
   "clean up" — it's load-bearing for the assignment flow and for any request already
   created. A planner who locks in a DJ before finding a room posts
-  the request from `/dashboard/organizer/vendors`, supplying date/time/location themselves
+  the request from `/dashboard/organizer/vendors/unassigned`, supplying date/time/location themselves
   via `VendorRequestContext` (`src/lib/vendors/requestContext.ts`) instead of reading them
   off a `Booking` — that indirection is why `VendorRequestForm`/`VendorNeedsBuilder` take a
   `context` rather than a `booking`. Later, `assignEngagementToBooking()`

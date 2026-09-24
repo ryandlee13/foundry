@@ -5,6 +5,7 @@ import { useSpacesFilters } from "@/hooks/useSpacesFilters";
 import { applyFilters, countActiveFilters } from "@/lib/spaces/filters";
 import { computeFacetCounts } from "@/lib/spaces/facets";
 import { sortVenues } from "@/lib/spaces/sort";
+import { bookingPrefillFromFilters, bookingPrefillToQuery } from "@/lib/spaces/bookingPrefill";
 import { RADIUS_OPTIONS_MILES, type Venue } from "@/lib/types/spaces";
 import { VENUES } from "@/lib/spaces/venues";
 import { getPubliclyVisibleVenues } from "@/lib/spaces/submittedVenues";
@@ -39,6 +40,13 @@ export default function SpacesPageClient() {
   // Faceted counts for the panel — each dimension counted with its own
   // selections lifted, so the numbers predict what ticking a box would give.
   const facetCounts = useMemo(() => computeFacetCounts(allVenues, filters), [allVenues, filters]);
+
+  /*
+   * What the planner has already told us — date, times, guest count, event
+   * type — carried onto every venue link so the booking form on the other side
+   * opens pre-filled instead of asking for it all again.
+   */
+  const prefillQuery = useMemo(() => bookingPrefillToQuery(bookingPrefillFromFilters(filters)), [filters]);
 
   const activeFilterCount = countActiveFilters(filters);
   const maxRadius = RADIUS_OPTIONS_MILES[RADIUS_OPTIONS_MILES.length - 1];
@@ -114,7 +122,7 @@ export default function SpacesPageClient() {
 
         <div className="min-w-0 flex-1">
           {results.length > 0 ? (
-            <VenueGrid venues={results} />
+            <VenueGrid venues={results} prefillQuery={prefillQuery} />
           ) : (
             <EmptyVenueResults
               canIncreaseRadius={filters.radiusMiles < maxRadius}

@@ -23,9 +23,21 @@ const EVENT_DETAILS_HREF: Record<AppRole, string | null> = {
   admin: null,
 };
 
-function isActive(pathname: string, href: string): boolean {
+function matches(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * Most specific match wins. The organizer's Vendors tab lives *under* Event
+ * Details (`/dashboard/organizer/vendors` vs `/dashboard/organizer`), so a
+ * plain prefix test lights up both at once and neither one tells you where you
+ * are. Returns the winning href, or null on a page no tab owns.
+ */
+function resolveActiveHref(pathname: string, hrefs: string[]): string | null {
+  return hrefs
+    .filter((href) => matches(pathname, href))
+    .reduce<string | null>((best, href) => (best === null || href.length > best.length ? href : best), null);
 }
 
 export default function DashboardLayout({
@@ -66,17 +78,28 @@ export default function DashboardLayout({
           },
         ]
       : []),
+    /*
+     * Hiring vendors is half of planning an event, so it gets a tab of its own
+     * rather than a button on one row of the bookings list. Planner-side only:
+     * a venue operator or a vendor has no vendors to hire from here.
+     */
+    ...(activeRole === "organizer" ? [{ href: "/dashboard/organizer/vendors", label: "Vendors" }] : []),
     { href: "/dashboard/messages", label: "Messages", badge: unreadMessages },
     { href: "/dashboard/notifications", label: "Notifications", badge: unreadNotifications },
     { href: "/dashboard/admin", label: "Admin" },
   ];
+
+  const activeHref = resolveActiveHref(
+    pathname,
+    navItems.map((item) => item.href)
+  );
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6 lg:flex-row lg:px-8">
       <aside className="lg:w-56 lg:shrink-0">
         <nav className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
           {navItems.map((item) => {
-            const active = isActive(pathname, item.href);
+            const active = item.href === activeHref;
             return (
               <Link
                 key={item.href}

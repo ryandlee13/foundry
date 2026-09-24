@@ -574,9 +574,15 @@ export const VENUES: Venue[] = SEED_VENUES.map((venue) => ({
   ...venue,
   ownerId: null,
   createdAt: SEED_CREATED_AT,
-  // Never rendered publicly (see the Venue type) — there's no real address
-  // behind these fictional listings to begin with.
-  exactAddress: "Address on file",
+  /*
+   * Never rendered publicly (see the Venue type) — and blank on purpose:
+   * there is no real address behind these fictional listings. It used to hold
+   * the literal string "Address on file", which then got *revealed* to a
+   * planner with a confirmed booking as if it were the address. Blank means
+   * "the host never supplied one", which is the truth; hasDisclosedDetails()
+   * in venueIdentity.ts is what surfaces read to stay quiet about it.
+   */
+  exactAddress: "",
 }));
 
 export function getVenueBySlug(slug: string): Venue | undefined {

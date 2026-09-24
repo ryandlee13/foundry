@@ -35,6 +35,7 @@ import {
 import {
   VENUE_PRIVACY_NOTICE,
   VENUE_PRIVACY_NOTICE_OWNER,
+  hasDisclosedDetails,
   resolveVenueDisclosure,
   type VenueDisclosure,
 } from "@/lib/spaces/venueIdentity";
@@ -141,7 +142,7 @@ function ProposalThreadHeader({
  */
 function VenueDetailsReveal({ disclosure, venue }: { disclosure: VenueDisclosure; venue: Venue | null }) {
   if (!venue || disclosure.reason !== "confirmed_booking") return null;
-  if (!disclosure.exactAddress && !disclosure.realName) return null;
+  if (!hasDisclosedDetails(disclosure)) return null;
 
   return (
     <div className="mt-3 rounded-xl border border-brass/40 bg-brass/5 px-4 py-3">
