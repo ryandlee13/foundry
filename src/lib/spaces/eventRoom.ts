@@ -105,6 +105,100 @@ export const EVENT_ROOM_BLOCK_COPY: Record<EventRoomBlockReason, string> = {
   no_confirmed_vendor: "An event room opens once a vendor has confirmed for this event.",
 };
 
+/**
+ * What state is this event's three-way room in, said in a way any of the three
+ * parties can read?
+ *
+ * `evaluateEventRoomReadiness()` above answers "may this actor OPEN one",
+ * which is an authorization question and gates the organizer-only path. This
+ * answers the display question — does a room exist, and if not, what is
+ * missing — for a vendor or a venue operator who can't open one at all and
+ * shouldn't be told they're unauthorized. Keeping them separate is what stops
+ * a vendor's screen from reading "only the organizer can open the event room"
+ * when the honest answer is "your venue hasn't confirmed yet".
+ *
+ * Pure; the storage-backed wrapper is `describeEventRoomForBooking()`.
+ */
+export type EventRoomState =
+  /** The room exists. Everyone working the event is in one conversation. */
+  | "open"
+  /** Nothing to open yet: this vendor has no event. */
+  | "no_event"
+  /** The venue hasn't accepted, so there is no event to coordinate. */
+  | "booking_unconfirmed"
+  /** A seed listing with no host account — nobody to introduce. */
+  | "venue_has_no_account"
+  /** Confirmed venue, but no confirmed vendor yet, so a room would just duplicate the booking thread. */
+  | "awaiting_first_vendor";
+
+export function describeEventRoomState(input: {
+  booking: Pick<Booking, "status"> | null;
+  venueOwnerId: string | null;
+  vendorOwnerIds: string[];
+  roomExists: boolean;
+}): EventRoomState {
+  if (input.roomExists) return "open";
+  if (!input.booking) return "no_event";
+  if (input.booking.status !== "confirmed") return "booking_unconfirmed";
+  if (!input.venueOwnerId) return "venue_has_no_account";
+  if (input.vendorOwnerIds.length === 0) return "awaiting_first_vendor";
+  /*
+   * Everything a room needs is present but none exists. Reachable only in the
+   * instant before an ensureEventRoom() call on the same page lands, so it
+   * reads as "about to exist" rather than as a fault.
+   */
+  return "awaiting_first_vendor";
+}
+
+/**
+ * Viewer-facing copy for each state.
+ *
+ * Addressed to a supplier (vendor or venue), because the organizer has the
+ * action-shaped version of these messages on their own pages. Nothing here
+ * promises a room will appear by itself where it can't — `venue_has_no_account`
+ * is a real dead end in this prototype (the seed listings have no owner
+ * account), and saying so is better than an empty panel implying it's loading.
+ */
+export const EVENT_ROOM_STATE_COPY: Record<EventRoomState, { title: string; body: string }> = {
+  open: {
+    title: "Event room open",
+    body: "You, the planner, and the venue are in one conversation for this event.",
+  },
+  no_event: {
+    title: "No event yet",
+    body:
+      "You're booked, but the planner hasn't attached this job to a venue. Once they do, " +
+      "a shared conversation opens with you, the planner, and the venue.",
+  },
+  booking_unconfirmed: {
+    title: "Waiting on the venue",
+    body: "The planner's venue hasn't confirmed this date yet. The shared event room opens once it does.",
+  },
+  venue_has_no_account: {
+    title: "No shared room for this venue",
+    body:
+      "This listing has no host account on Foundry, so there's no venue to bring into a shared " +
+      "conversation. Message the planner directly instead.",
+  },
+  awaiting_first_vendor: {
+    title: "Event room opens with the first vendor",
+    body: "Once a vendor confirms for this event, everyone moves into one shared conversation.",
+  },
+};
+
+/** describeEventRoomState() against storage, for a booking that may not exist. */
+export function describeEventRoomForBooking(bookingId: string | null): EventRoomState {
+  if (!bookingId) return "no_event";
+  const booking = getBookingById(bookingId);
+  if (!booking) return "no_event";
+  return describeEventRoomState({
+    booking,
+    venueOwnerId: getBookingVenueOwnerId(booking),
+    vendorOwnerIds: getActiveVendorOwnerIdsForBooking(bookingId),
+    roomExists: getEventThreadForBooking(bookingId) !== null,
+  });
+}
+
 /** Owner accounts of every vendor actively working this booking. Reads storage. */
 export function getActiveVendorOwnerIdsForBooking(bookingId: string): string[] {
   return getEngagementsForBooking(bookingId)

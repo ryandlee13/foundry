@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { attachmentAnchorId } from "@/lib/vendors/messageGroups";
 import BookingProposalCard from "./BookingProposalCard";
 import BookingProposalComposer from "./BookingProposalComposer";
 import ContractCard from "./ContractCard";
@@ -78,11 +79,85 @@ export default function DealLogPanel({
 }) {
   const [composer, setComposer] = useState<ComposerMode>("none");
 
-  const entries = messages.filter((message) => message.proposal || message.dealProposal || message.contract);
+  const [showPrevious, setShowPrevious] = useState(false);
+
+  /*
+   * Newest first, with anything still open pulled to the top.
+   *
+   * The log used to render in message order, which meant the round everyone is
+   * actually arguing about sank to the bottom of a scrolling column as the
+   * conversation went on — the one card that needed an answer was the one you
+   * had to scroll to find.
+   *
+   * Settled rounds aren't deleted, just folded away: "what did we agree three
+   * rounds ago" is a real question, and superseded terms are the audit trail
+   * that answers it.
+   */
+  const { open, previous } = useMemo(() => {
+    const entries = messages.filter(
+      (message) => message.proposal || message.dealProposal || message.contract
+    );
+    const isOpen = (message: ChatMessage) =>
+      message.contract?.status === "sent" ||
+      message.proposal?.status === "sent" ||
+      message.dealProposal?.status === "sent";
+
+    const newestFirst = [...entries].reverse();
+    return {
+      open: newestFirst.filter(isOpen),
+      previous: newestFirst.filter((message) => !isOpen(message)),
+    };
+  }, [messages]);
+
+  const entries = [...open, ...previous];
   const hasActions = canSendBookingProposal || canSendContract || canProposeTerms;
 
   function close() {
     setComposer("none");
+  }
+
+  /**
+   * One card, wrapped in its scroll anchor.
+   *
+   * The id comes from `attachmentAnchorId()` — the same function the chat
+   * pointer uses to find it — so the two can't drift apart. Without the shared
+   * helper, "jump to this offer" is a string built in two places.
+   */
+  function renderCard(message: ChatMessage): ReactNode {
+    const isMine = message.senderId === userId;
+    const senderName = nameFor(message.senderId);
+
+    const card = message.dealProposal ? (
+      <DealProposalCard
+        proposal={message.dealProposal}
+        senderName={senderName}
+        isMine={isMine}
+        canRespond={!isMine}
+        onRespond={(status) => onRespondToDealProposal(message.id, status)}
+      />
+    ) : message.contract ? (
+      <ContractCard
+        contract={message.contract}
+        hostName={hostName}
+        canSign={isOrganizer && !isMine}
+        canWithdraw={isMine}
+        onSign={(signature) => onSignContract(message.id, signature)}
+        onDecline={(reason) => onDeclineContract(message.id, reason)}
+        onWithdraw={() => onWithdrawContract(message.id)}
+      />
+    ) : (
+      <BookingProposalCard
+        proposal={message.proposal!}
+        canRespond={isOrganizer && !isMine}
+        onRespond={(status) => onRespondToBookingProposal(message.id, status)}
+      />
+    );
+
+    return (
+      <div key={message.id} id={attachmentAnchorId(message.id)} className="rounded-2xl">
+        {card}
+      </div>
+    );
   }
 
   return (
@@ -101,47 +176,36 @@ export default function DealLogPanel({
           </p>
         )}
 
-        {entries.map((message) => {
-          const isMine = message.senderId === userId;
-          const senderName = nameFor(message.senderId);
+        {open.map((message) => renderCard(message))}
 
-          if (message.dealProposal) {
-            return (
-              <DealProposalCard
-                key={message.id}
-                proposal={message.dealProposal}
-                senderName={senderName}
-                isMine={isMine}
-                canRespond={!isMine}
-                onRespond={(status) => onRespondToDealProposal(message.id, status)}
-              />
-            );
-          }
+        {previous.length > 0 && (
+          <div className={open.length > 0 ? "border-t border-line pt-3" : undefined}>
+            <button
+              type="button"
+              onClick={() => setShowPrevious((current) => !current)}
+              aria-expanded={showPrevious}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-xs font-semibold text-ink-soft transition-colors hover:text-ink"
+            >
+              <span>
+                {showPrevious ? "Hide" : "Show"} previous rounds ({previous.length})
+              </span>
+              <span aria-hidden className={showPrevious ? "rotate-180" : undefined}>
+                ⌄
+              </span>
+            </button>
+            {showPrevious && (
+              /*
+                Dimmed, not hidden: these are settled or superseded, so they
+                should read as history rather than competing with the live card
+                above them for attention.
+              */
+              <div className="mt-2 space-y-3 opacity-70">
+                {previous.map((message) => renderCard(message))}
+              </div>
+            )}
+          </div>
+        )}
 
-          if (message.contract) {
-            return (
-              <ContractCard
-                key={message.id}
-                contract={message.contract}
-                hostName={hostName}
-                canSign={isOrganizer && !isMine}
-                canWithdraw={isMine}
-                onSign={(signature) => onSignContract(message.id, signature)}
-                onDecline={(reason) => onDeclineContract(message.id, reason)}
-                onWithdraw={() => onWithdrawContract(message.id)}
-              />
-            );
-          }
-
-          return (
-            <BookingProposalCard
-              key={message.id}
-              proposal={message.proposal!}
-              canRespond={isOrganizer && !isMine}
-              onRespond={(status) => onRespondToBookingProposal(message.id, status)}
-            />
-          );
-        })}
 
         {composer === "booking_proposal" && (
           <BookingProposalComposer

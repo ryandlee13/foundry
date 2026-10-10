@@ -6,7 +6,11 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { findAccountById } from "@/lib/auth/storage";
 import { getBookingById, formatEventDate } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
-import { ensureEventRoomForEngagement } from "@/lib/spaces/eventRoom";
+import {
+  ensureEventRoomForEngagement,
+  describeEventRoomForBooking,
+  EVENT_ROOM_STATE_COPY,
+} from "@/lib/spaces/eventRoom";
 import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import { getEngagementsForVendor, cancelEngagementByVendor, confirmEngagementTerms, declineEngagementTerms } from "@/lib/vendors/engagements";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
@@ -71,6 +75,14 @@ export default function VendorConfirmedGigsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
+
+  /*
+   * A gig with no bookingId is hired-but-unassigned: real, agreed, paid-for
+   * work with no venue attached yet. It used to sit in the same list as
+   * scheduled work with one line of text to tell them apart.
+   */
+  const scheduled = engagements.filter((engagement) => bookingsById[engagement.id]);
+  const awaitingVenue = engagements.filter((engagement) => !bookingsById[engagement.id]);
 
   if (authLoading || !loaded) {
     return <LoadingState label="Loading your confirmed gigs…" />;
@@ -139,8 +151,36 @@ export default function VendorConfirmedGigsPage() {
             }
           />
         ) : (
-          <ul className="space-y-3">
-            {engagements.map((engagement) => {
+          /*
+           * Two sections, because "booked, venue known" and "booked, no venue
+           * yet" are different situations for a vendor and were previously one
+           * list distinguished by a single line of brass text. A vendor needs
+           * to know which jobs they can actually plan around.
+           */
+          <div className="space-y-8">
+            {[
+              { key: "scheduled", heading: null, items: scheduled },
+              {
+                key: "awaiting",
+                heading: {
+                  title: `Awaiting a venue (${awaitingVenue.length})`,
+                  blurb:
+                    "You're hired and the terms are agreed. The planner hasn't attached these to a venue yet, so there's no date to plan around and no shared event room.",
+                },
+                items: awaitingVenue,
+              },
+            ]
+              .filter((section) => section.items.length > 0)
+              .map((section) => (
+                <section key={section.key}>
+                  {section.heading && (
+                    <div className="mb-3 rounded-2xl border border-brass/40 bg-brass/5 px-5 py-4">
+                      <h2 className="font-display text-base font-semibold text-ink">{section.heading.title}</h2>
+                      <p className="mt-0.5 text-sm leading-relaxed text-ink-soft">{section.heading.blurb}</p>
+                    </div>
+                  )}
+                  <ul className="space-y-3">
+                    {section.items.map((engagement) => {
               const need = needsById[engagement.id];
               const booking = bookingsById[engagement.id];
               const organizer = findAccountById(engagement.organizerId);
@@ -170,14 +210,39 @@ export default function VendorConfirmedGigsPage() {
                         {organizer && ` · Organized by ${organizer.name.split(" ")[0]}`}
                         {unread > 0 && ` · ${unread} unread message${unread === 1 ? "" : "s"}`}
                       </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <StatusBadge descriptor={resolveEngagementTone(engagement.status, "vendor")} />
                       {!booking && (
-                        <p className="mt-1 text-xs text-brass-dark">
-                          Venue to be confirmed — the organizer hasn&apos;t attached this to an event yet.
-                        </p>
+                        <span className="rounded-full bg-muted-bg px-2.5 py-1 text-xs font-semibold text-muted">
+                          Event TBD
+                        </span>
                       )}
                     </div>
-                    <StatusBadge className="shrink-0" descriptor={resolveEngagementTone(engagement.status, "vendor")} />
                   </div>
+
+                  {/*
+                    Says where the three-way conversation is: open, waiting on
+                    something nameable, or impossible for this listing. An
+                    unexplained absence is what sends a vendor to email to ask
+                    the venue about load-in.
+                  */}
+                  {(() => {
+                    const roomState = describeEventRoomForBooking(engagement.bookingId);
+                    const copy = EVENT_ROOM_STATE_COPY[roomState];
+                    return (
+                      <div
+                        className={`mt-3 rounded-xl px-4 py-2.5 ${
+                          roomState === "open" ? "bg-ok-bg" : "bg-paper-dim"
+                        }`}
+                      >
+                        <p className={`text-xs font-semibold ${roomState === "open" ? "text-ok" : "text-ink"}`}>
+                          {copy.title}
+                        </p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">{copy.body}</p>
+                      </div>
+                    );
+                  })()}
 
                   {engagement.status === "pending_vendor_confirmation" && (
                     <div className="mt-3">
@@ -221,8 +286,11 @@ export default function VendorConfirmedGigsPage() {
                   </div>
                 </li>
               );
-            })}
-          </ul>
+                    })}
+                  </ul>
+                </section>
+              ))}
+          </div>
         )}
       </div>
 

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   computeEventRoomParticipants,
+  describeEventRoomState,
   evaluateAssignment,
   evaluateEventRoomReadiness,
+  EVENT_ROOM_STATE_COPY,
   selectAssignableBookings,
+  type EventRoomState,
 } from "../eventRoom";
 
 describe("computeEventRoomParticipants", () => {
@@ -178,5 +181,75 @@ describe("selectAssignableBookings", () => {
 
   it("returns nothing when the planner has no confirmed events yet", () => {
     expect(selectAssignableBookings(bookings, "planner-3")).toEqual([]);
+  });
+});
+
+describe("describeEventRoomState", () => {
+  const confirmed = { status: "confirmed" as const };
+
+  it("reports an existing room regardless of anything else", () => {
+    expect(
+      describeEventRoomState({ booking: null, venueOwnerId: null, vendorOwnerIds: [], roomExists: true })
+    ).toBe("open");
+  });
+
+  it("tells a vendor with no event that they have no event", () => {
+    expect(
+      describeEventRoomState({ booking: null, venueOwnerId: "o-1", vendorOwnerIds: ["v-1"], roomExists: false })
+    ).toBe("no_event");
+  });
+
+  it("blames the unconfirmed booking before anything else", () => {
+    expect(
+      describeEventRoomState({
+        booking: { status: "pending" },
+        venueOwnerId: null,
+        vendorOwnerIds: [],
+        roomExists: false,
+      })
+    ).toBe("booking_unconfirmed");
+  });
+
+  /*
+   * The seed listings have no owner account, so this is the common case in demo
+   * data — and the one state where no amount of waiting produces a room.
+   */
+  it("names a hostless listing as a dead end rather than a wait", () => {
+    expect(
+      describeEventRoomState({
+        booking: confirmed,
+        venueOwnerId: null,
+        vendorOwnerIds: ["v-1"],
+        roomExists: false,
+      })
+    ).toBe("venue_has_no_account");
+  });
+
+  it("waits for the first vendor once the venue is in place", () => {
+    expect(
+      describeEventRoomState({
+        booking: confirmed,
+        venueOwnerId: "o-1",
+        vendorOwnerIds: [],
+        roomExists: false,
+      })
+    ).toBe("awaiting_first_vendor");
+  });
+
+  it("has copy for every state, and never tells a supplier they lack permission", () => {
+    const states: EventRoomState[] = [
+      "open",
+      "no_event",
+      "booking_unconfirmed",
+      "venue_has_no_account",
+      "awaiting_first_vendor",
+    ];
+    for (const state of states) {
+      const copy = EVENT_ROOM_STATE_COPY[state];
+      expect(copy.title.trim().length).toBeGreaterThan(0);
+      expect(copy.body.trim().length).toBeGreaterThan(0);
+      // The authorization wording belongs to the organizer-only path, not here.
+      expect(copy.body.toLowerCase()).not.toContain("only the organizer");
+    }
   });
 });

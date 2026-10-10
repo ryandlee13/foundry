@@ -75,3 +75,36 @@ body {
     outline: none;
   }
 }
+
+/*
+ * The flash a card gets when you jump to it from a chat pointer
+ * (MessageThreadView's jumpToOffer). A ring rather than a background change,
+ * so it reads on every card variant in the offers column without fighting
+ * whatever tone that card already carries.
+ *
+ * Wrapped in a no-preference query rather than animated unconditionally: the
+ * scroll still happens for someone who asked for reduced motion, they just
+ * don't get the pulse. The static ring below is the fallback that makes the
+ * target identifiable either way.
+ */
+.offer-card-pulse {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .offer-card-pulse {
+    animation: offer-card-pulse 1.5s ease-out;
+  }
+
+  @keyframes offer-card-pulse {
+    0%,
+    100% {
+      outline-color: transparent;
+    }
+    15%,
+    60% {
+      outline-color: var(--color-brass);
+    }
+  }
+}

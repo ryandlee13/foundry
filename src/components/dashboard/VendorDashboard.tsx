@@ -20,12 +20,15 @@ import LoadingState from "@/components/ui/LoadingState";
 import type { Booking, Venue } from "@/lib/types/spaces";
 import type { VendorProfile } from "@/lib/types/vendors";
 import { formatMoney } from "@/lib/ui/format";
+import { INTERACTIVE_CARD } from "@/lib/ui/interactive";
 
 export default function VendorDashboard({ accountId }: { accountId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [earnings, setEarnings] = useState<VendorEarnings | null>(null);
   const [upcoming, setUpcoming] = useState<Booking[]>([]);
+  /** Confirmed gigs with no venue attached — see the refresh loop. */
+  const [awaitingVenue, setAwaitingVenue] = useState(0);
   const [venuesById, setVenuesById] = useState<Record<string, Venue>>({});
 
   const refresh = useCallback(() => {
@@ -41,10 +44,25 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
 
     const upcomingBookings: Booking[] = [];
     const venues: Record<string, Venue> = {};
+    /*
+     * Gigs the vendor is hired for that have no venue attached yet.
+     *
+     * These used to vanish: the loop below skipped anything `getBookingById`
+     * couldn't resolve, and a null bookingId resolves to undefined — so a
+     * confirmed, agreed, booked gig simply wasn't on the dashboard anywhere.
+     * They can't go in "Upcoming events" (there's no date to sort them by, and
+     * UpcomingEventCard needs a Booking), so they're counted and linked out to
+     * the confirmed-gigs page where they now have their own section.
+     */
+    let awaitingVenueCount = 0;
     for (const engagement of engagements) {
       if (engagement.status !== "confirmed" && engagement.status !== "in_progress") continue;
       const booking = getBookingById(engagement.bookingId);
-      if (!booking || booking.eventDate < todayIso) continue;
+      if (!booking) {
+        awaitingVenueCount += 1;
+        continue;
+      }
+      if (booking.eventDate < todayIso) continue;
       upcomingBookings.push(booking);
       const venue = getVenueById(booking.venueId);
       if (venue) venues[booking.venueId] = venue;
@@ -54,6 +72,7 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
     setProfile(found);
     setEarnings(computeVendorEarnings(engagements, todayIso));
     setUpcoming(upcomingBookings);
+    setAwaitingVenue(awaitingVenueCount);
     setVenuesById(venues);
     setLoaded(true);
   }, [accountId]);
@@ -130,9 +149,33 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
 
       <section>
         <h2 className="font-display text-lg font-semibold text-ink">Upcoming events</h2>
+
+        {/*
+          Hired, but with nowhere to be yet. Called out above the calendar
+          rather than inside it: these have no date, and a planner attaching
+          them to a venue is what turns them into a row below.
+        */}
+        {awaitingVenue > 0 && (
+          <Link
+            href="/dashboard/vendor/confirmed"
+            className={`mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brass/40 bg-brass/5 px-5 py-4 ${INTERACTIVE_CARD}`}
+          >
+            <span className="text-sm text-ink">
+              <span className="font-semibold">
+                {awaitingVenue} confirmed gig{awaitingVenue === 1 ? "" : "s"}
+              </span>{" "}
+              {awaitingVenue === 1 ? "has" : "have"} no venue yet, so {awaitingVenue === 1 ? "it isn't" : "they aren't"}{" "}
+              on the calendar below.
+            </span>
+            <span className="shrink-0 text-sm font-semibold text-brass-dark">See the details →</span>
+          </Link>
+        )}
+
         {upcoming.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-dashed border-line px-5 py-8 text-center text-sm text-ink-soft">
-            No confirmed gigs on the calendar yet.
+            {awaitingVenue > 0
+              ? "Nothing with a confirmed date yet — the gigs above are waiting on a venue."
+              : "No confirmed gigs on the calendar yet."}
           </p>
         ) : (
           <ul className="mt-3 space-y-3">

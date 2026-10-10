@@ -52,9 +52,20 @@ import {
   type VenueDisclosure,
 } from "@/lib/spaces/venueIdentity";
 import InfoTooltip from "@/components/ui/InfoTooltip";
-import { syncEventRoomParticipants } from "@/lib/spaces/eventRoom";
 import { getVenueById } from "@/lib/spaces/submittedVenues";
 import DealLogPanel from "@/components/dashboard/DealLogPanel";
+import MessageStream, { type ThreadSeat } from "./MessageStream";
+import StatusBadge from "@/components/ui/StatusBadge";
+import { summarizeTurn } from "@/lib/ui/whoseTurn";
+import type { ViewerRole } from "@/lib/ui/statusTone";
+import { attachmentAnchorId, hasAttachment } from "@/lib/vendors/messageGroups";
+import {
+  describeEventRoomForBooking,
+  EVENT_ROOM_STATE_COPY,
+  syncEventRoomParticipants,
+  type EventRoomState,
+} from "@/lib/spaces/eventRoom";
+import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import type {
   BookingContractAttachment,
   BookingProposalAttachment,
@@ -292,7 +303,13 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
   const [celebrateTerms, setCelebrateTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
+  /** Collapses the header once the stream is scrolled — see the sticky bar below. */
+  const [condensed, setCondensed] = useState(false);
+  /** Below lg the two columns become tabs; there isn't room for both. */
+  const [mobileTab, setMobileTab] = useState<"chat" | "offers">("chat");
+  const [roomState, setRoomState] = useState<EventRoomState>("open");
 
   const refresh = useCallback(() => {
     if (!user) return;
@@ -335,7 +352,15 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
           const relatedBooking = getBookingById(foundNeed.bookingId);
           setEventLabel(relatedBooking ? formatEventLabel(relatedBooking) : foundNeed.publicLocation);
         }
-        setEngagement(found.engagementId ? (getEngagementById(found.engagementId) ?? null) : null);
+        const foundEngagement = found.engagementId ? (getEngagementById(found.engagementId) ?? null) : null;
+        setEngagement(foundEngagement);
+        /*
+         * A confirmed vendor whose engagement has no bookingId is hired but not
+         * attached to a venue — `no_event`. It belongs in the thread because
+         * this is where the vendor is looking when they wonder who to ask
+         * about load-in.
+         */
+        setRoomState(describeEventRoomForBooking(foundEngagement?.bookingId ?? foundNeed?.bookingId ?? null));
       } else {
         setProposal(null);
         setNeed(null);
@@ -349,6 +374,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
         const relatedBooking = getBookingById(found.bookingId) ?? null;
         const venue = getVenueById(found.venueId) ?? null;
+        setRoomState(describeEventRoomForBooking(found.bookingId));
         setBooking(relatedBooking);
         setBookingVenue(venue);
         setDisclosure(
@@ -492,11 +518,70 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
 
   const starters = resolveStarters();
 
+  /*
+   * Where each participant sits in THIS thread. A venue operator hosts a
+   * booking thread but is just a participant in an event room, so a seat can
+   * never be read off someone's app-wide role.
+   */
+  const venueOwnerId = booking ? getBookingVenueOwnerId(booking) : null;
+  // Captured rather than read inside seatFor: TS narrowing doesn't survive
+  // into a closure, and `thread` is only non-null after the guard above.
+  const threadOrganizerId = thread.organizerId;
+
+  function seatFor(accountId: string): ThreadSeat {
+    if (accountId === threadOrganizerId) return { kind: "planner", label: "Planner" };
+    if (venueOwnerId && accountId === venueOwnerId) return { kind: "venue", label: "Venue" };
+    // Named by trade, not just "Vendor": in a four-person room, "who's asking
+    // about power" should be answerable without opening a profile.
+    const skill = getVendorProfileByOwnerId(accountId)?.skills[0];
+    return { kind: "vendor", label: skill ? `Vendor \u00b7 ${getSkillName(skill)}` : "Vendor" };
+  }
+
+  const roleOf = (accountId: string): ViewerRole => {
+    const kind = seatFor(accountId).kind;
+    return kind === "planner" ? "organizer" : kind === "venue" ? "venue_operator" : "vendor";
+  };
+
+  /** What this thread is waiting on, and whether it's waiting on the viewer. */
+  const turn = summarizeTurn({
+    messages,
+    viewer: roleOf(user.id),
+    senderRoleOf: roleOf,
+    senderNameOf: nameFor,
+    engagementStatus: engagement?.status ?? null,
+  });
+
+  const offerCount = messages.filter(hasAttachment).length;
+
+  /**
+   * Jumps from a chat pointer to the card holding the actual numbers, and
+   * flashes it. On mobile the offers column is a tab, so it has to be switched
+   * to and mounted before there is anything to scroll to.
+   */
+  function jumpToOffer(messageId: string) {
+    setMobileTab("offers");
+    requestAnimationFrame(() => {
+      const node = document.getElementById(attachmentAnchorId(messageId));
+      if (!node) return;
+      node.scrollIntoView({ block: "center", behavior: "smooth" });
+      node.classList.add("offer-card-pulse");
+      window.setTimeout(() => node.classList.remove("offer-card-pulse"), 1600);
+    });
+  }
+
+  const roomNotice = roomState !== "open" ? EVENT_ROOM_STATE_COPY[roomState] : null;
+
   function handleSend() {
     if (!draft.trim() || !user) return;
     sendMessage({ threadId, senderId: user.id, body: draft });
     setDraft("");
     refresh();
+    // Focus stays put: the common case after sending is sending again.
+    const node = composerRef.current;
+    if (node) {
+      node.style.height = "auto";
+      node.focus();
+    }
   }
 
   function sendAttachment(
@@ -521,15 +606,63 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-11rem)] flex-col">
+    /*
+     * dvh, not vh: on mobile browsers vh counts the space behind the retracting
+     * toolbar, so the composer sat below the fold until you scrolled.
+     */
+    <div className="flex h-[calc(100dvh-11rem)] min-h-[32rem] flex-col">
       <Link href="/dashboard/messages" className="text-sm font-medium text-ink-soft hover:text-ink">
         ← Back to messages
       </Link>
 
+      {/*
+        Below lg these columns used to stack inside a fixed height, which left
+        the offers column scrolled off the bottom of a box that didn't scroll —
+        unreachable. Tabs instead, with a dot when something in there is
+        waiting on the viewer.
+      */}
+      <div
+        role="tablist"
+        aria-label="Conversation"
+        className="mt-3 grid grid-cols-2 gap-1 rounded-full bg-paper-dim p-0.5 lg:hidden"
+      >
+        {([["chat", "Chat"], ["offers", `Offers${offerCount > 0 ? ` (${offerCount})` : ""}`]] as const).map(
+          ([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={mobileTab === key}
+              onClick={() => setMobileTab(key)}
+              className={`flex items-center justify-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                mobileTab === key ? "bg-paper text-ink shadow-sm" : "text-ink-soft"
+              }`}
+            >
+              {label}
+              {key === "offers" && turn.isViewersTurn && (
+                <span
+                  aria-label="waiting on you"
+                  className="h-1.5 w-1.5 rounded-full bg-act motion-safe:animate-pulse"
+                />
+              )}
+            </button>
+          )
+        )}
+      </div>
+
       {/* Talk on the left, offers on the right — see DealLogPanel for why. */}
-      <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_380px]">
-        <div className="flex min-h-0 flex-col">
-          <div className="rounded-2xl border border-line bg-paper px-5 py-4">
+      <div className="mt-3 grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_380px]">
+        <div className={`flex min-h-0 flex-col ${mobileTab === "chat" ? "" : "hidden"} lg:flex`}>
+          {/*
+            Condenses once the stream is scrolled. At full height the header
+            card plus an AgreedTermsCard ate so much of a fixed-height column
+            that the conversation itself got a few hundred pixels.
+          */}
+          <div
+            className={`rounded-2xl border border-line bg-paper px-5 transition-all duration-150 ${
+              condensed ? "max-h-24 overflow-hidden py-3" : "py-4"
+            }`}
+          >
             {isProposalThread(thread) ? (
               <ProposalThreadHeader
                 need={need}
@@ -560,17 +693,39 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
             ) : (
               <p className="font-display text-lg font-semibold text-ink">{otherAccount?.name ?? "Foundry user"}</p>
             )}
+            {/*
+              One line saying what this conversation is waiting on. Without it,
+              finding an unsigned agreement or an unanswered deposit ask meant
+              reading the whole offers column.
+            */}
+            {turn.status && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <StatusBadge descriptor={turn.status} />
+                {turn.detail && <span className="text-xs text-ink-soft">{turn.detail}</span>}
+              </div>
+            )}
             {disclosure && <VenueDetailsReveal disclosure={disclosure} venue={bookingVenue} />}
             {error && <p className="mt-2 text-xs text-wine">{error}</p>}
           </div>
 
-          {isProposalThread(thread) && engagement?.status === "pending_vendor_confirmation" && (
-            <div className="mt-3">
-              <AgreedTermsCard engagement={engagement} counterpartyName={otherAccount?.name ?? "the vendor"} />
+          {/*
+            Why there is (or isn't) a three-way room. `no_event` is what a
+            booked-but-unassigned vendor sees; `venue_has_no_account` is a real
+            dead end rather than a wait — saying which beats an empty panel
+            that looks like it's still loading.
+          */}
+          {roomNotice && !isEventThread(thread) && (
+            <div className="mt-3 rounded-2xl border border-line bg-paper-dim/60 px-4 py-3">
+              <p className="text-xs font-semibold text-ink">{roomNotice.title}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">{roomNotice.body}</p>
             </div>
           )}
 
-          <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-line bg-paper p-5">
+          <div
+            ref={streamRef}
+            onScroll={(event) => setCondensed(event.currentTarget.scrollTop > 24)}
+            className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-paper p-5"
+          >
             {messages.length === 0 ? (
               /*
                 An empty thread with a blank composer is where people stall —
@@ -605,67 +760,76 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
                 )}
               </div>
             ) : (
-              messages.map((message) => {
-                const isMine = message.senderId === user.id;
-                const hasAttachment = Boolean(message.proposal || message.dealProposal || message.contract);
-                return (
-                  <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm ${
-                        isMine ? "bg-wine text-paper" : "bg-paper-dim text-ink"
-                      }`}
-                    >
-                      {/*
-                        Event rooms have several people in them, so an unnamed
-                        bubble is ambiguous in a way a 1:1 thread never is.
-                      */}
-                      {isEventThread(thread) && !isMine && (
-                        <p className="mb-0.5 text-[11px] font-semibold text-ink-soft">{nameFor(message.senderId)}</p>
-                      )}
-                      <p>{message.body}</p>
-                      {hasAttachment && (
-                        // A pointer, not a copy — the full card lives in the log
-                        // so numbers exist in exactly one place on screen.
-                        <p className={`mt-1 text-[11px] font-semibold ${isMine ? "text-paper/80" : "text-brass-dark"}`}>
-                          → See &quot;Offers &amp; agreements&quot;
-                        </p>
-                      )}
-                      <p className={`mt-1 text-[10px] ${isMine ? "text-paper/70" : "text-ink-soft"}`}>
-                        {new Date(message.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
+              <MessageStream
+                messages={messages}
+                viewerId={user.id}
+                nameFor={nameFor}
+                /*
+                  Seats only where they disambiguate. In a 1:1 thread the
+                  bubble's side already says who spoke, so a name and role chip
+                  over every cluster would be noise.
+                */
+                seatFor={isEventThread(thread) ? seatFor : null}
+                showSenders={isEventThread(thread)}
+                onJumpToOffer={jumpToOffer}
+              />
             )}
             <div ref={bottomRef} />
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <input
+          {/*
+            A textarea, not an input: load-in instructions and a list of
+            questions are both normal things to send here, and a single-line
+            field where Enter always fired meant neither could be written
+            without sending three fragments. Enter still sends — that's the
+            common case — and Shift+Enter breaks a line.
+          */}
+          <div className="mt-3 flex items-end gap-2">
+            <textarea
               ref={composerRef}
-              type="text"
+              rows={1}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSend();
+              onChange={(event) => {
+                setDraft(event.target.value);
+                // Grow to fit, to a point; past that it scrolls rather than
+                // eating the conversation above it.
+                const node = event.currentTarget;
+                node.style.height = "auto";
+                node.style.height = `${Math.min(node.scrollHeight, 160)}px`;
               }}
-              placeholder="Write a message…"
-              className="flex-1 rounded-full border border-line bg-paper px-4 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Write a message…  (Shift+Enter for a new line)"
+              className="max-h-40 flex-1 resize-none rounded-2xl border border-line bg-paper px-4 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
             />
             <button
               type="button"
               onClick={handleSend}
               disabled={!draft.trim()}
-              className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft disabled:cursor-not-allowed disabled:opacity-50"
             >
               Send
             </button>
           </div>
         </div>
 
-        <DealLogPanel
-          messages={messages}
+        {/*
+          The offers column. AgreedTermsCard lives here rather than above the
+          chat stream where it used to sit: it IS an offer — the locked terms
+          both sides confirmed — and every other number for this thread is in
+          this column.
+        */}
+        <div className={`flex min-h-0 flex-col gap-3 ${mobileTab === "offers" ? "" : "hidden"} lg:flex`}>
+          {isProposalThread(thread) && engagement?.status === "pending_vendor_confirmation" && (
+            <AgreedTermsCard engagement={engagement} counterpartyName={otherAccount?.name ?? "the vendor"} />
+          )}
+
+          <DealLogPanel
+            messages={messages}
           userId={user.id}
           nameFor={nameFor}
           hostName={otherAccount?.name ?? "the host"}
@@ -729,8 +893,9 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
                   : " The organizer still has to finalize before this is booked."}
               </p>
             ) : null
-          }
-        />
+            }
+          />
+        </div>
       </div>
 
       <FinalizeDealDialog

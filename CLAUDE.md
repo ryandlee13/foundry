@@ -363,6 +363,69 @@ now rather than waiting.
   than repeating the card — numbers exist in exactly one place on screen. Mixed inline,
   offers scroll away and people re-state figures in prose, which is the behaviour this
   layout exists to remove.
+- **A status badge says whose move it is, not what the enum is called.**
+  `src/lib/ui/statusTone.ts` (pure, tested) is the only place a status becomes a color and
+  a sentence, and every function takes the **viewer's role** — one
+  `pending_vendor_confirmation` engagement is "Waiting on vendor" (`wait`) to the planner
+  and "Your confirmation needed" (`act`) to the vendor. Render it only through
+  `StatusBadge`, which always prints the label and adds a dot on `act`, so color is never
+  the only carrier. Four `@theme` tokens (`ok`/`wait`/`act`/`muted`, each with a `-bg`)
+  replaced eight ad-hoc `STATUS_STYLES` maps and the stock Tailwind greens; each text/bg
+  pair clears WCAG AA against *its own background*, so retune both halves together. Labels
+  come from the existing `*_STATUS_LABELS` maps wherever the viewer-neutral wording is
+  right — don't start a second label vocabulary. Keyboard focus is one `:focus-visible`
+  base rule in `globals.css` (dialog panels opt out); the ~110 existing input
+  `focus:ring-brass` sites are fine and were deliberately left alone.
+- **A conversation is days, then clusters — not one bubble per row.**
+  `groupMessages()` (`src/lib/vendors/messageGroups.ts`, pure, tested) breaks a cluster on
+  a new sender, a gap over 5 minutes, a **local** day boundary, or an attachment. That last
+  one is deliberate: an offer is a landmark, and folding it into a run of chat makes it
+  skimmable past. One timestamp per cluster via `formatChatTime()`, exact time on `title`;
+  day headings via `formatDaySeparator()`. Never render a raw `toLocaleString()` in the
+  stream again — that is what made it read as a server log. Sender name + initials avatar +
+  role chip show **only in event rooms** (`showSenders`); in a 1:1 thread the bubble's side
+  already says who spoke. Seats come from `seatFor()`, which reads the thread's own
+  membership — a venue operator hosts a booking thread but is just a participant in a room,
+  so a seat can never be read off an app-wide role.
+- **The composer is a textarea: Enter sends, Shift+Enter breaks a line.** It grows to
+  160px then scrolls, and keeps focus after sending. A single-line input where Enter always
+  fired meant load-in instructions had to be sent as three fragments.
+- **"Whose turn is it" is derived, never stored.** `summarizeTurn()`
+  (`src/lib/ui/whoseTurn.ts`, pure, tested) walks the messages for the newest *open*
+  attachment and ranks contract > deposit/terms > deal round — the order in which they
+  settle a booking — falling back to an engagement awaiting vendor confirmation. It powers
+  the thread header line, the inbox badge, the "Needs my reply" filter, and the mobile
+  Offers dot from one calculation, so they can't disagree.
+- **Mobile is tabs, not a stack.** Below `lg` the chat and offers columns become Chat /
+  Offers (n) tabs with an `act` dot when something in there waits on the viewer. Stacked
+  inside the old fixed `h-[calc(100vh-…)]`, the offers column sat below the fold of a box
+  that didn't scroll — literally unreachable. The height is now `dvh`: `vh` counts the
+  space behind a mobile browser's retracting toolbar. `AgreedTermsCard` lives in the
+  **offers** column, not above the stream — it is an offer, and numbers belong in one
+  place.
+- **A chat attachment pointer is a button, not a label.** It scrolls the matching card in
+  `DealLogPanel` into view and pulses it (`.offer-card-pulse`, animated only under
+  `prefers-reduced-motion: no-preference`). Both sides build the DOM id with
+  `attachmentAnchorId()` so the pointer and its target can't drift. `DealLogPanel` orders
+  newest-first with open items pinned, and folds settled/superseded rounds into a muted
+  "previous rounds (n)" disclosure — the audit trail stays, it just stops competing with
+  the live card.
+- **The three-way room's absence is explained, never silent.** `describeEventRoomState()`
+  (pure) + `EVENT_ROOM_STATE_COPY` answer the *display* question — open, `no_event`,
+  `booking_unconfirmed`, `venue_has_no_account`, `awaiting_first_vendor` — and are
+  deliberately separate from `evaluateEventRoomReadiness()`, which answers the
+  *authorization* question and gates the organizer-only path. Keeping them apart is what
+  stops a vendor's screen reading "only the organizer can open the event room" when the
+  honest answer is "your venue hasn't confirmed yet". **`venue_has_no_account` is a real
+  dead end, not a wait**: the seed listings have `ownerId: null`, so most demo bookings can
+  never produce a room, and saying so beats an empty panel that looks like loading.
+- **A vendor hired with no venue is a first-class state, not a missing row.**
+  `VendorDashboard` used to `continue` past any engagement whose `getBookingById()` came
+  back undefined — which is exactly what a null `bookingId` does — so a confirmed, agreed
+  gig silently vanished from the dashboard. It now counts them and links out.
+  `/dashboard/vendor/confirmed` groups them under their own "Awaiting a venue" heading with
+  an **Event TBD** badge, because "booked with a date" and "booked with nowhere to be" are
+  different situations for a vendor to plan around. Don't re-merge those sections.
 - None of this is real. Before a real launch, all of it needs: a real Supabase project,
   the `docs/DATABASE.md` schema (extended with space type/amenities/rules/photos columns
   and real Storage-backed uploads — see `docs/ROUTES.md`), RLS policies per
