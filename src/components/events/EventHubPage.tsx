@@ -19,6 +19,9 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 import EventProgressStepper from "./EventProgressStepper";
+import LedgerTable from "@/components/finance/LedgerTable";
+import { resolveEventLedger } from "@/lib/finance/eventLedgerData";
+import type { EventLedger } from "@/lib/finance/eventLedger";
 import OrganizerVendorRequestsPage from "@/components/vendor/OrganizerVendorRequestsPage";
 import type { EventProgress } from "@/lib/events/eventProgress";
 import type { Booking } from "@/lib/types/spaces";
@@ -51,6 +54,7 @@ export default function EventHubPage({ bookingId }: { bookingId: string }) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [progress, setProgress] = useState<EventProgress | null>(null);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
+  const [ledger, setLedger] = useState<EventLedger | null>(null);
 
   const refresh = useCallback(() => {
     if (!user) return;
@@ -75,6 +79,7 @@ export default function EventHubPage({ bookingId }: { bookingId: string }) {
 
     const todayIso = new Date().toISOString().slice(0, 10);
     setProgress(resolveEventProgress(bookingId, todayIso));
+    setLedger(resolveEventLedger(bookingId, user.id));
 
     const rows: ThreadRow[] = [];
     const venueThread = getThreadForBooking(bookingId);
@@ -161,6 +166,23 @@ export default function EventHubPage({ bookingId }: { bookingId: string }) {
       {progress && (
         <section className="mt-6 rounded-2xl border border-line bg-paper p-5 sm:p-6">
           <EventProgressStepper progress={progress} />
+        </section>
+      )}
+
+      {ledger && (
+        <section className="mt-6 rounded-2xl border border-line bg-paper p-5 sm:p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold text-ink">Budget</h2>
+            <Link
+              href="/dashboard/organizer/finances"
+              className="text-xs font-semibold text-brass-dark hover:underline"
+            >
+              All events →
+            </Link>
+          </div>
+          <div className="mt-4">
+            <LedgerTable ledger={ledger} />
+          </div>
         </section>
       )}
 

@@ -135,6 +135,7 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
           label="Made this month"
           value={formatMoney(earnings.monthAmount)}
           footnote="From gigs completed this month."
+          href="/dashboard/vendor/finances"
         />
         <KpiCard
           label="Made all time"
@@ -144,6 +145,7 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
               ? `${earnings.rateBasedCount} hourly/day-rate gig${earnings.rateBasedCount === 1 ? "" : "s"} not included — those are rates, not totals.`
               : "Across every completed gig."
           }
+          href="/dashboard/vendor/finances"
         />
         <KpiCard
           label="Gigs completed"

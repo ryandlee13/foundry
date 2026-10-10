@@ -72,6 +72,7 @@ export default function VenueDashboard({ accountId }: { accountId: string }) {
           label="Estimated this month"
           value={formatMoney(earnings.monthAmount)}
           footnote={`${earnings.monthBookingCount} event${earnings.monthBookingCount === 1 ? "" : "s"} · estimated from your hourly rate`}
+          href="/dashboard/venue/finances"
         />
         <KpiCard
           label="Estimated all time"

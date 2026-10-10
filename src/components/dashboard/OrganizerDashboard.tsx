@@ -17,10 +17,16 @@ import UpNextStrip from "@/components/events/UpNextStrip";
 import { buildOrganizerUpNext } from "@/lib/events/upNextData";
 import type { UpNextItem } from "@/lib/events/upNext";
 import { organizerEventPath } from "@/lib/vendors/organizerRoutes";
+import { resolveOrganizerLedgers } from "@/lib/finance/eventLedgerData";
+import { formatMoney } from "@/lib/ui/format";
+import { formatEventDate } from "@/lib/spaces/bookings";
 
 export default function OrganizerDashboard({ accountId }: { accountId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [upNext, setUpNext] = useState<UpNextItem[]>([]);
+  /** Committed money across events still ahead, plus the soonest deposit asked for. */
+  const [committed, setCommitted] = useState(0);
+  const [nextDue, setNextDue] = useState<{ label: string; amount: number | null; dueDate: string | null; counterparty: string } | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [venuesById, setVenuesById] = useState<Record<string, Venue>>({});
   const [vendorsPartneredCount, setVendorsPartneredCount] = useState(0);
@@ -63,6 +69,24 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
     setUnreadByBooking(unread);
     setTodayIso(new Date().toISOString().slice(0, 10));
     setUpNext(buildOrganizerUpNext(accountId));
+
+    /*
+     * Committed only — never the estimates. A dashboard KPI is the single most
+     * quotable number on the page, and quoting our own rate-times-hours
+     * arithmetic as "committed" is exactly the confusion the ledger's basis
+     * split exists to prevent.
+     */
+    const ledgers = resolveOrganizerLedgers(accountId);
+    const todayIsoForLedger = new Date().toISOString().slice(0, 10);
+    const ahead = ledgers.filter((entry) => entry.eventDate >= todayIsoForLedger);
+    setCommitted(ahead.reduce((total, entry) => total + entry.ledger.firmTotal, 0));
+
+    // Soonest dated request wins; undated ones can't be "next".
+    const dated = ahead
+      .flatMap((entry) => entry.ledger.dues)
+      .filter((due) => due.dueDate !== null)
+      .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
+    setNextDue(dated[0] ?? null);
     setLoaded(true);
   }, [accountId]);
 
@@ -98,7 +122,7 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
       */}
       <UpNextStrip items={upNext} />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           label="Events thrown"
           value={eventsThrown}
@@ -112,6 +136,27 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
           href="/dashboard/organizer"
         />
         <KpiCard label="Upcoming events" value={upcoming.length} footnote="Confirmed and still ahead." />
+        {/*
+          Money, which this dashboard had none of. "Committed" is firm figures
+          only — see the ledger's basis rule — so it can be read as a number
+          somebody is actually owed.
+        */}
+        <KpiCard
+          label="Committed across upcoming events"
+          value={formatMoney(committed)}
+          footnote="Figures you've agreed with venues and vendors. Estimates aren't included."
+          href="/dashboard/organizer/finances"
+        />
+        <KpiCard
+          label="Next deposit requested"
+          value={nextDue?.amount !== null && nextDue?.amount !== undefined ? formatMoney(nextDue.amount) : nextDue ? "Amount TBC" : "None"}
+          footnote={
+            nextDue
+              ? `${nextDue.counterparty}${nextDue.dueDate ? ` · by ${formatEventDate(nextDue.dueDate)}` : ""} · requested, not paid`
+              : "Nobody has asked you for a deposit."
+          }
+          href="/dashboard/organizer/finances"
+        />
       </div>
 
       <section>

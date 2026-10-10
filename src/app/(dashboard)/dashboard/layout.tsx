@@ -23,6 +23,14 @@ const EVENT_DETAILS_HREF: Record<AppRole, string | null> = {
   admin: null,
 };
 
+/** Admin has no finances of its own — it moderates, it doesn't transact. */
+const FINANCES_HREF: Record<AppRole, string | null> = {
+  organizer: "/dashboard/organizer/finances",
+  venue_operator: "/dashboard/venue/finances",
+  vendor: "/dashboard/vendor/finances",
+  admin: null,
+};
+
 function matches(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -67,6 +75,13 @@ export default function DashboardLayout({
   }
 
   const eventDetailsHref = activeRole ? EVENT_DETAILS_HREF[activeRole] : null;
+  /*
+   * Each role's money lives on its own page, because each role's money means a
+   * different thing: the planner is spending, the vendor and the venue are
+   * earning, and the venue's figures are partly estimates while the vendor's
+   * are agreed amounts. One shared route would have had to hedge all of that.
+   */
+  const financesHref = activeRole ? FINANCES_HREF[activeRole] : null;
   const navItems: { href: string; label: string; badge?: number }[] = [
     { href: "/dashboard", label: "Dashboard" },
     ...(eventDetailsHref
@@ -85,6 +100,7 @@ export default function DashboardLayout({
      */
     ...(activeRole === "organizer" ? [{ href: "/dashboard/organizer/vendors", label: "Vendors" }] : []),
     { href: "/dashboard/messages", label: "Messages", badge: unreadMessages },
+    ...(financesHref ? [{ href: financesHref, label: "Finances" }] : []),
     { href: "/dashboard/notifications", label: "Notifications", badge: unreadNotifications },
     { href: "/dashboard/admin", label: "Admin" },
   ];

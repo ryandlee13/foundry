@@ -461,6 +461,41 @@ now rather than waiting.
   uses the overlay-link pattern (`absolute inset-0` + a `relative z-10` trailing slot),
   the same one `GigCard` and `VendorProfileCard` use, because the trailing slot carries
   its own buttons and nesting interactive elements is invalid.
+- **Every money figure carries its basis, and the three never get added together.**
+  `src/lib/finance/eventLedger.ts` (pure, tested) turns an event into line items whose
+  `basis` is one of: **`firm`** (a fixed total somebody committed to — signed contract,
+  accepted offer, confirmed `flat_fee`/`package` engagement), **`estimate`** (arithmetic
+  *we* did — floor rate x booked hours, always rendered "est." with a reason in an
+  `InfoTooltip`), or **`rate_only`** (a rate with no hours to multiply, e.g. an unassigned
+  vendor or `contact_for_quote` — rendered "$150/hr" and **never summed**). The venue line
+  follows a strict precedence: **signed contract > accepted offer > estimate**, and
+  `VenueFinancesPage` uses the same order so the two sides of a booking can't show
+  different figures. `summarizeLedger()` returns `firmTotal`, `estimatedTotal` and
+  `rateOnlyCount` **separately and never pre-added** — combining committed money with a
+  guess is a decision a caller has to make explicitly. `formatLedgerSummary()` is the one
+  place that sentence is written ("$6,400 committed · ~$1,200 estimated · 1 rate not
+  included"), so the tilde and the exclusions can't go missing.
+  `src/lib/finance/vendorLedger.ts` does the vendor-side equivalent (upcoming / completed
+  by month / awaiting a venue) and inherits the same rule from `computeRosterSpend()`;
+  `computeVendorEarnings()` still owns the dashboard KPIs — **don't fork a second earnings
+  calculation.**
+- **Nothing is ever "paid".** No money moves through Foundry (Phase 7), so deposits and
+  balances render as **"requested"** with a date, never as paid, due, or settled. There is
+  no `paidAt` anywhere and adding one would assert a transaction that never happened.
+  `LEDGER_FOOTNOTE` must render on every surface showing these figures, and a test asserts
+  the status mapping never labels an accepted deposit request "paid". Only a **firm** line
+  can be flagged over budget — flagging an estimate would have the planner chasing a number
+  nobody has asked them for.
+- **Finance routes are per role, and the planner's venue identity still goes through the
+  gate.** `/dashboard/organizer/finances`, `/dashboard/vendor/finances`,
+  `/dashboard/venue/finances`, plus a Budget section on the event hub; "Finances" sits
+  after Messages in the sidebar, role-branched (admin has none — it moderates, it doesn't
+  transact). Each role gets its own page because each role's money means something
+  different: the planner is spending, the other two are earning, and the venue's figures
+  are partly estimates while the vendor's are agreed amounts. `eventLedgerData.ts` resolves
+  the venue's name through `resolveVenueDisclosure()` — never off the `Venue` — so
+  `realName` still appears only for the organizer of a confirmed booking (docs/SECURITY.md
+  #5).
 - None of this is real. Before a real launch, all of it needs: a real Supabase project,
   the `docs/DATABASE.md` schema (extended with space type/amenities/rules/photos columns
   and real Storage-backed uploads — see `docs/ROUTES.md`), RLS policies per
