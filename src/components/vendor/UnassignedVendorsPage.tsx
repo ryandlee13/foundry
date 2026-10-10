@@ -34,14 +34,24 @@ const FIELD =
 const LABEL = "block text-xs font-medium text-ink-soft";
 
 /**
- * Where a planner hires vendors before they have a venue, and attaches them to
- * an event afterwards.
+ * The vendor lobby: where a planner hires vendors before they have a venue,
+ * and moves them onto an event afterwards.
  *
  * The prototype used to require a confirmed booking before any vendor request
  * could exist, which meant a planner who'd locked in a DJ first had nowhere to
  * put them. Requests here carry `bookingId: null` until assigned.
  */
-export default function UnassignedVendorsPage() {
+export default function UnassignedVendorsPage({
+  autoOpenHire = false,
+}: {
+  /**
+   * Opens the hire-a-vendor dialog immediately. Set from `?post=1` by the
+   * route, which reads it server-side — a planner who just told the homepage
+   * they want a vendor before a venue shouldn't have to press the same button
+   * a second time on arrival.
+   */
+  autoOpenHire?: boolean;
+} = {}) {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [loaded, setLoaded] = useState(false);
@@ -54,7 +64,7 @@ export default function UnassignedVendorsPage() {
   const [pickedBooking, setPickedBooking] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(autoOpenHire);
   const [details, setDetails] = useState<StandaloneRequestDetails>(getEmptyStandaloneDetails);
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const [context, setContext] = useState<VendorRequestContext | null>(null);
@@ -107,7 +117,7 @@ export default function UnassignedVendorsPage() {
     if (!user) return;
     const bookingId = pickedBooking[engagementId];
     if (!bookingId) {
-      setError("Pick an event to assign this vendor to.");
+      setError("Pick a booked venue to move this vendor to.");
       return;
     }
     setError(null);
@@ -119,7 +129,7 @@ export default function UnassignedVendorsPage() {
       }
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't assign this vendor.");
+      setError(err instanceof Error ? err.message : "Couldn't move this vendor.");
     }
   }
 
@@ -132,15 +142,18 @@ export default function UnassignedVendorsPage() {
 
   return (
     <div>
-      <Link href="/dashboard/organizer/vendors" className="text-sm font-medium text-ink-soft hover:text-ink">
+      <Link
+        href="/dashboard/organizer/vendors"
+        className="text-sm font-medium text-ink-soft hover:text-ink"
+      >
         ← Back to Vendors
       </Link>
 
       <div className="mt-4">
-        <h1 className="font-display text-2xl font-semibold text-ink">Vendors without an event</h1>
+        <h1 className="font-display text-2xl font-semibold text-ink">Vendor lobby</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Line up vendors before you&apos;ve booked a space. Once you have a venue, assign them to it here and
-          everyone moves into one shared conversation.
+          Line up vendors before you&apos;ve booked a space. Once you have a venue, move them to it here and
+          everyone lands in one shared conversation — you, the venue, and the vendor.
         </p>
       </div>
 
@@ -161,7 +174,7 @@ export default function UnassignedVendorsPage() {
         <h2 className="font-display text-lg font-semibold text-ink">Confirmed vendors</h2>
         {engagements.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-dashed border-line px-5 py-8 text-center text-sm text-ink-soft">
-            No unassigned vendors. Anyone you hire without an event shows up here until you attach them to one.
+            Nobody in the lobby yet. Anyone you hire without an event waits here until you move them to a venue.
           </p>
         ) : (
           <ul className="mt-3 space-y-3">
@@ -180,13 +193,13 @@ export default function UnassignedVendorsPage() {
                       </p>
                     </div>
                     <span className="rounded-full bg-paper-dim px-2.5 py-1 text-xs font-semibold text-ink-soft">
-                      Not assigned to an event
+                      No venue yet
                     </span>
                   </div>
 
                   {assignableBookings.length === 0 ? (
                     <p className="mt-3 border-t border-line pt-3 text-sm text-ink-soft">
-                      Book a venue and confirm it, then you can attach this vendor to that event.{" "}
+                      Book a venue and get it confirmed, then you can move this vendor onto that event.{" "}
                       <Link href="/spaces" className="font-semibold text-brass-dark hover:underline">
                         Discover spaces
                       </Link>
@@ -195,7 +208,7 @@ export default function UnassignedVendorsPage() {
                     <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-line pt-3">
                       <div className="min-w-[220px] flex-1">
                         <label htmlFor={`assign-${engagement.id}`} className={LABEL}>
-                          Assign to event
+                          Move to a venue
                         </label>
                         <select
                           id={`assign-${engagement.id}`}
@@ -205,7 +218,7 @@ export default function UnassignedVendorsPage() {
                           }
                           className={FIELD}
                         >
-                          <option value="">Choose an event…</option>
+                          <option value="">Choose a booked venue…</option>
                           {assignableBookings.map((booking) => (
                             <option key={booking.id} value={booking.id}>
                               {formatEventLabel(booking)} · {formatEventDate(booking.eventDate)}
@@ -218,7 +231,7 @@ export default function UnassignedVendorsPage() {
                         onClick={() => handleAssign(engagement.id)}
                         className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
                       >
-                        Assign &amp; open event room
+                        Move to a venue
                       </button>
                     </div>
                   )}

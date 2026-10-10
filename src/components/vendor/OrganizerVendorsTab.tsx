@@ -30,13 +30,28 @@ function pickDefaultBooking(bookings: Booking[], todayIso: string): Booking | nu
   return byDate.find((booking) => booking.eventDate >= todayIso) ?? byDate[byDate.length - 1];
 }
 
-export default function OrganizerVendorsTab() {
+export default function OrganizerVendorsTab({
+  autoOpenBuilder = false,
+}: {
+  /**
+   * Opens the post-a-request form for the selected event straight away. Set
+   * from `?post=1` by the route, which reads it server-side for the same
+   * reason the per-booking route does — see OrganizerVendorRequestsPage.
+   */
+  autoOpenBuilder?: boolean;
+} = {}) {
   const { user, isLoading: authLoading } = useAuth();
   const [loaded, setLoaded] = useState(false);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Vendors hired before there was an event to put them on. */
   const [unassignedCount, setUnassignedCount] = useState(0);
+  /*
+   * Switching events remounts the embedded page (see the `key` below), so the
+   * arrive-with-the-form-open request has to be spent on the first event shown.
+   * Otherwise every switch would pop the builder back open.
+   */
+  const [autoOpen, setAutoOpen] = useState(autoOpenBuilder);
 
   useEffect(() => {
     if (!user) return;
@@ -89,15 +104,15 @@ export default function OrganizerVendorsTab() {
           </p>
           <p className="mt-0.5 text-sm text-ink-soft">
             {unassignedCount > 0
-              ? `${unassignedCount} vendor${unassignedCount === 1 ? " isn't" : "s aren't"} attached to an event yet — assign ${unassignedCount === 1 ? "them" : "each of them"} to one and everybody moves into a shared conversation.`
-              : "Line up vendors without a space, then attach them to an event once it's confirmed."}
+              ? `${unassignedCount} vendor${unassignedCount === 1 ? " is" : "s are"} waiting in your lobby — move ${unassignedCount === 1 ? "them" : "each of them"} to a venue and everybody lands in a shared conversation.`
+              : "Line up vendors without a space, then move them to a venue once it's confirmed."}
           </p>
         </div>
         <Link
           href="/dashboard/organizer/vendors/unassigned"
           className="flex shrink-0 items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
         >
-          Vendors without an event
+          Vendor lobby
           {unassignedCount > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-wine px-1.5 text-[11px] font-bold text-paper">
               {unassignedCount}
@@ -140,7 +155,10 @@ export default function OrganizerVendorsTab() {
               <select
                 id="vendors-event"
                 value={selected.id}
-                onChange={(event) => setSelectedId(event.target.value)}
+                onChange={(event) => {
+                  setAutoOpen(false);
+                  setSelectedId(event.target.value);
+                }}
                 className="rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
               >
                 {options.map((booking) => (
@@ -170,7 +188,12 @@ export default function OrganizerVendorsTab() {
 
             <div className="mt-5 border-t border-line pt-5">
               {/* key: remount on switch so the embedded page reloads its own data. */}
-              <OrganizerVendorRequestsPage key={selected.id} bookingId={selected.id} showHeader={false} />
+              <OrganizerVendorRequestsPage
+                key={selected.id}
+                bookingId={selected.id}
+                showHeader={false}
+                autoOpenBuilder={autoOpen}
+              />
             </div>
           </section>
         </>

@@ -6,6 +6,7 @@ import VendorCategorySelect from "@/components/vendor/VendorCategorySelect";
 import { briefToSearchParams, getEmptyBrief } from "@/lib/vendors/vendorSearch";
 import {
   FIELD_CLASS,
+  FORM_STACK_CLASS,
   LABEL_CLASS,
   LocationField,
   SUBMIT_CLASS,
@@ -20,17 +21,21 @@ const DESCRIPTION_MAX = 300;
  * that this does NOT route through the venue-booking flow. It builds a
  * VendorSearchBrief in the URL and hands it to /vendors.
  *
+ * The browse half of the hero's vendor tab (HeroVendorPanel is the chooser
+ * that gets here); posting a gig is the other half and goes to the dashboard.
+ *
  * Three of these fields narrow results (category, date via lead time, budget
- * via fixed starting prices); guest count and the description ride along as
- * context for the eventual request. `filterVendorsByBrief` documents why —
- * don't add a fake capacity or keyword filter to make the other two look
- * like they're doing something.
+ * via fixed starting prices) and the description rides along as context for
+ * the eventual request. `filterVendorsByBrief` documents why — don't add a
+ * fake keyword filter to make the last one look like it's doing something.
+ * Guest count is deliberately absent: vendors carry no capacity field, so on
+ * a browse form it is a question with no consequence. /vendors still offers it
+ * when a planner is refining a brief they're about to send.
  */
 export default function HeroVendorSearch() {
   const router = useRouter();
   const [skillSlug, setSkillSlug] = useState<VendorSkillSlug | null>(null);
   const [eventDate, setEventDate] = useState("");
-  const [guestCount, setGuestCount] = useState("");
   const [budget, setBudget] = useState("");
   const [description, setDescription] = useState("");
 
@@ -46,7 +51,6 @@ export default function HeroVendorSearch() {
       ...getEmptyBrief(),
       skillSlug,
       eventDate: eventDate || null,
-      guestCount: toPositiveInt(guestCount),
       budget: toPositiveInt(budget),
       description,
     });
@@ -54,7 +58,7 @@ export default function HeroVendorSearch() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3" aria-label="Search event vendors">
+    <form onSubmit={handleSubmit} className={FORM_STACK_CLASS} aria-label="Search event vendors">
       <div>
         <label htmlFor="hero-vendor-category" className={LABEL_CLASS}>
           Vendor category
@@ -69,7 +73,7 @@ export default function HeroVendorSearch() {
         </div>
       </div>
 
-      <LocationField id="hero-vendor-location" />
+      <LocationField />
 
       <div>
         <label htmlFor="hero-vendor-date" className={LABEL_CLASS}>
@@ -84,38 +88,21 @@ export default function HeroVendorSearch() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="hero-vendor-guests" className={LABEL_CLASS}>
-            Guest count
-          </label>
-          <input
-            id="hero-vendor-guests"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={guestCount}
-            onChange={(e) => setGuestCount(e.target.value)}
-            placeholder="120"
-            className={`mt-1 ${FIELD_CLASS}`}
-          />
-        </div>
-        <div>
-          <label htmlFor="hero-vendor-budget" className={LABEL_CLASS}>
-            Budget
-          </label>
-          <input
-            id="hero-vendor-budget"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={50}
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="$ total"
-            className={`mt-1 ${FIELD_CLASS}`}
-          />
-        </div>
+      <div>
+        <label htmlFor="hero-vendor-budget" className={LABEL_CLASS}>
+          Budget
+        </label>
+        <input
+          id="hero-vendor-budget"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          step={50}
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
+          placeholder="$ total"
+          className={`mt-1 ${FIELD_CLASS}`}
+        />
       </div>
 
       <div>

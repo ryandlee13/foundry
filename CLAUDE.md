@@ -104,6 +104,21 @@ React Hook Form. No Stripe yet — payments are a deliberately deferred phase
   sitting beside the search buttons they made "what do I click" a four-way question for
   someone who only wanted a room. The venue tab deliberately does **not** ask about vendor
   needs; that's what the vendor tab is for.
+- **The two hero tabs are not symmetrical.** Venue is a search form outright. Vendor is a
+  chooser first (`HeroVendorPanel.tsx`): *Browse vendors* vs *Create a posting*, because
+  those are two different jobs and a single search box only ever served the first —
+  someone who already knows what they need was being dropped into a directory instead of a
+  brief. Browse renders the unchanged `HeroVendorSearch` (category, location, date, budget,
+  what do you need) and stays anonymous on `/vendors`. **Guest count was removed from that
+  form on purpose** — vendors carry no capacity field, so on a browse form it's a question
+  with no consequence; `/vendors` still offers it when a planner is refining a brief they
+  intend to send. Create a posting asks **the venue question before the account question**:
+  sign-in navigates away and returns via `next`, so an answer collected after it would have
+  nowhere to live in between. "I've already booked a venue" →
+  `/dashboard/organizer/vendors?post=1`; "vendor first" →
+  `/dashboard/organizer/vendors/unassigned?post=1`. Both routes read `?post=1` server-side
+  and open their request form on arrival, the same pattern (and for the same
+  static-rendering reason) as the per-booking vendors route.
 - **Homepage sections below the hero, in order:** "One event, one place"
   (`ValuePropsSection`), Featured Spaces (`FeaturedSpacesSection`), Popular Vendor
   Categories (`VendorCategoriesSection`), Event recaps, then the closing CTA. The
@@ -249,6 +264,15 @@ now rather than waiting.
   `/spaces/[slug]` to bail out of static rendering into a Suspense fallback, trading the
   prerendered listing for a loading state on every venue page. Prefill is convenience only;
   `evaluateBookingRequest()` still re-checks everything.
+  **`eventDescription` is the one prefill field that is not a filter.** The hero's "About
+  your event" box travels as `EVENT_DESCRIPTION_PARAM` (`eventDesc`) and lands in
+  `BookingPanel`'s *Notes for the host* — not in a field of its own, or the planner
+  describes their event twice on one form. It is deliberately **not** part of
+  `SearchFilters` (`bookingPrefillFromFilters()` takes it as a second argument): putting it
+  there would mean teaching the facet counts, the active-filter chips, and "clear all" to
+  ignore it. Because `filtersToSearchParams()` doesn't know about it, `useSpacesFilters`
+  captures it once from the landing URL and re-applies it on every URL sync — remove that
+  and ticking any filter silently drops the description before it reaches a venue link.
 - **"Send booking request" opens a review step; it does not send.** `BookingPanel` runs
   every check that could stop a request — missing COI/deposit agreements first, then
   `evaluateBookingRequest()` — *before* showing the summary, so a planner is never asked to
@@ -382,7 +406,11 @@ boundary" caveat. See `docs/PRD.md` §4.3/4.4 and `docs/IMPLEMENTATION_PLAN.md` 
   count-gated banner on `/dashboard/organizer` (shown only when something is actually
   waiting to be attached — that page is about bookings). Don't unwind the nullable anchor to
   "clean up" — it's load-bearing for the assignment flow and for any request already
-  created. A planner who locks in a DJ before finding a room posts
+  created. That page is called the **vendor lobby** in UI copy, and the action that attaches
+  someone to an event is **"Move to a venue"** — the planner's mental model is a waiting
+  room they move people out of, not a database row they assign a foreign key to. The
+  underlying function is still `assignEngagementToBooking()`; only the wording changed.
+  A planner who locks in a DJ before finding a room posts
   the request from `/dashboard/organizer/vendors/unassigned`, supplying date/time/location themselves
   via `VendorRequestContext` (`src/lib/vendors/requestContext.ts`) instead of reading them
   off a `Booking` — that indirection is why `VendorRequestForm`/`VendorNeedsBuilder` take a

@@ -4,6 +4,7 @@ import {
   bookingPrefillToQuery,
   hasBookingPrefill,
   readBookingPrefill,
+  EVENT_DESCRIPTION_MAX,
 } from "../bookingPrefill";
 import { getDefaultFilters } from "../urlState";
 
@@ -13,12 +14,15 @@ function read(query: string) {
 
 describe("readBookingPrefill", () => {
   it("reads a full search brief off the query string", () => {
-    expect(read("date=2026-08-23&start=18:00&end=23:00&attendees=80&eventType=party")).toEqual({
+    expect(
+      read("date=2026-08-23&start=18:00&end=23:00&attendees=80&eventType=party&eventDesc=A+40th")
+    ).toEqual({
       eventDate: "2026-08-23",
       startTime: "18:00",
       endTime: "23:00",
       attendees: 80,
       eventType: "party",
+      eventDescription: "A 40th",
     });
   });
 
@@ -48,6 +52,17 @@ describe("readBookingPrefill", () => {
     expect(read("eventType=party,wedding").eventType).toBeNull();
     expect(read("eventType=party").eventType).toBe("party");
   });
+
+  it("treats a blank event description as nothing carried", () => {
+    expect(read("eventDesc=").eventDescription).toBeNull();
+    expect(read("eventDesc=%20%20").eventDescription).toBeNull();
+    expect(hasBookingPrefill(read("eventDesc=Rehearsal+dinner"))).toBe(true);
+  });
+
+  it("caps the event description so a pasted essay can't become the URL", () => {
+    const long = "x".repeat(EVENT_DESCRIPTION_MAX + 50);
+    expect(read(`eventDesc=${long}`).eventDescription).toHaveLength(EVENT_DESCRIPTION_MAX);
+  });
 });
 
 describe("bookingPrefillFromFilters", () => {
@@ -70,19 +85,29 @@ describe("bookingPrefillFromFilters", () => {
       endTime: "23:00",
       attendees: 80,
       eventType: "party",
+      eventDescription: null,
     });
+  });
+
+  it("takes the event description separately — it isn't a filter", () => {
+    const prefill = bookingPrefillFromFilters(getDefaultFilters(), "  Rehearsal dinner  ");
+    expect(prefill.eventDescription).toBe("Rehearsal dinner");
+    expect(hasBookingPrefill(prefill)).toBe(true);
   });
 });
 
 describe("bookingPrefillToQuery", () => {
   it("round-trips through the query string", () => {
-    const prefill = bookingPrefillFromFilters({
-      ...getDefaultFilters(),
-      eventDate: "2026-08-23",
-      startTime: "18:00",
-      attendees: 80,
-      eventTypes: ["party"],
-    });
+    const prefill = bookingPrefillFromFilters(
+      {
+        ...getDefaultFilters(),
+        eventDate: "2026-08-23",
+        startTime: "18:00",
+        attendees: 80,
+        eventTypes: ["party"],
+      },
+      "A 40th birthday — toast around nine."
+    );
     expect(read(bookingPrefillToQuery(prefill))).toEqual(prefill);
   });
 

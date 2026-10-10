@@ -19,7 +19,7 @@ import VenueGrid from "@/components/spaces/VenueGrid";
 import EmptyVenueResults from "@/components/spaces/EmptyVenueResults";
 
 export default function SpacesPageClient() {
-  const { filters, updateFilters, setLocation, clearAll } = useSpacesFilters();
+  const { filters, updateFilters, setLocation, clearAll, eventDescription } = useSpacesFilters();
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   // Starts as just the seed venues (matches server-rendered output) so
@@ -43,10 +43,14 @@ export default function SpacesPageClient() {
 
   /*
    * What the planner has already told us — date, times, guest count, event
-   * type — carried onto every venue link so the booking form on the other side
-   * opens pre-filled instead of asking for it all again.
+   * type, and the one-line description of the event — carried onto every venue
+   * link so the booking form on the other side opens pre-filled instead of
+   * asking for it all again.
    */
-  const prefillQuery = useMemo(() => bookingPrefillToQuery(bookingPrefillFromFilters(filters)), [filters]);
+  const prefillQuery = useMemo(
+    () => bookingPrefillToQuery(bookingPrefillFromFilters(filters, eventDescription)),
+    [filters, eventDescription]
+  );
 
   const activeFilterCount = countActiveFilters(filters);
   const maxRadius = RADIUS_OPTIONS_MILES[RADIUS_OPTIONS_MILES.length - 1];

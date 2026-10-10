@@ -7,9 +7,15 @@ export const metadata: Metadata = {
 
 /**
  * The planner's Vendors tab. Requests for an event that doesn't exist yet live
- * at `/dashboard/organizer/vendors/unassigned` — still built, still unlinked
- * (see CLAUDE.md's "hide vendors without an event" note).
+ * at `/dashboard/organizer/vendors/unassigned`, reached from the panel at the
+ * top of this page.
  */
-export default function OrganizerVendorsRoute() {
-  return <OrganizerVendorsTab />;
+export default async function OrganizerVendorsRoute({
+  searchParams,
+}: {
+  /** `?post=1` opens the post-a-request form on arrival — set by the homepage hero's "Create a posting" flow. */
+  searchParams: Promise<{ post?: string }>;
+}) {
+  const { post } = await searchParams;
+  return <OrganizerVendorsTab autoOpenBuilder={post === "1"} />;
 }

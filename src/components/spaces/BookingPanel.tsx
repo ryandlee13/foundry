@@ -68,6 +68,10 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
     if (prefill.startTime) setStartTime(prefill.startTime);
     if (prefill.endTime) setEndTime(prefill.endTime);
     if (prefill.attendees !== null) setAttendees(String(prefill.attendees));
+    // The hero's "About your event" box lands here rather than in a field of
+    // its own: it's the same thing this note asks for, and adding a second box
+    // would have the planner describing their event twice on one form.
+    if (prefill.eventDescription) setOrganizerNote(prefill.eventDescription);
     setPrefilled(true);
   }, []);
 

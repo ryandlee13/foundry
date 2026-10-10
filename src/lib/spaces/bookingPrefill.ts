@@ -27,6 +27,13 @@ export interface BookingPrefill {
   endTime: string | null;
   attendees: number | null;
   eventType: EventType | null;
+  /**
+   * A sentence or two about the event, typed in the homepage hero. Unlike the
+   * other five this is **not** a filter — no venue field could be matched
+   * against free text — so it rides the URL purely to seed "Notes for the
+   * host" on the other side. See EVENT_DESCRIPTION_PARAM.
+   */
+  eventDescription: string | null;
 }
 
 export const EMPTY_BOOKING_PREFILL: BookingPrefill = {
@@ -35,7 +42,19 @@ export const EMPTY_BOOKING_PREFILL: BookingPrefill = {
   endTime: null,
   attendees: null,
   eventType: null,
+  eventDescription: null,
 };
+
+/**
+ * The one prefill key `urlState.ts` does not own, because it isn't a filter.
+ * `useSpacesFilters` has to carry it explicitly across a filter change —
+ * `filtersToSearchParams()` rebuilds the query from `SearchFilters` alone and
+ * would otherwise drop it the moment someone ticks a checkbox.
+ */
+export const EVENT_DESCRIPTION_PARAM = "eventDesc";
+
+/** Long enough for "60th birthday, sit-down dinner, toast at nine"; short enough to stay a URL. */
+export const EVENT_DESCRIPTION_MAX = 300;
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -69,6 +88,12 @@ function readEventType(value: string | null): EventType | null {
   return EVENT_TYPES.includes(parts[0] as EventType) ? (parts[0] as EventType) : null;
 }
 
+function readDescription(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().slice(0, EVENT_DESCRIPTION_MAX);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function readBookingPrefill(params: URLSearchParams): BookingPrefill {
   return {
     eventDate: readDate(params.get("date")),
@@ -76,16 +101,26 @@ export function readBookingPrefill(params: URLSearchParams): BookingPrefill {
     endTime: readTime(params.get("end")),
     attendees: readAttendees(params.get("attendees")),
     eventType: readEventType(params.get("eventType")),
+    eventDescription: readDescription(params.get(EVENT_DESCRIPTION_PARAM)),
   };
 }
 
-export function bookingPrefillFromFilters(filters: SearchFilters): BookingPrefill {
+/**
+ * `eventDescription` comes in separately because it is not part of
+ * `SearchFilters` — it filters nothing, so putting it there would mean teaching
+ * the facet counts, the active-filter chips, and "clear all" to ignore it.
+ */
+export function bookingPrefillFromFilters(
+  filters: SearchFilters,
+  eventDescription?: string | null
+): BookingPrefill {
   return {
     eventDate: readDate(filters.eventDate),
     startTime: readTime(filters.startTime),
     endTime: readTime(filters.endTime),
     attendees: filters.attendees !== null ? readAttendees(String(filters.attendees)) : null,
     eventType: filters.eventTypes.length === 1 ? filters.eventTypes[0] : null,
+    eventDescription: readDescription(eventDescription ?? null),
   };
 }
 
@@ -97,6 +132,7 @@ export function bookingPrefillToQuery(prefill: BookingPrefill): string {
   if (prefill.endTime) params.set("end", prefill.endTime);
   if (prefill.attendees !== null) params.set("attendees", String(prefill.attendees));
   if (prefill.eventType) params.set("eventType", prefill.eventType);
+  if (prefill.eventDescription) params.set(EVENT_DESCRIPTION_PARAM, prefill.eventDescription);
   return params.toString();
 }
 
@@ -106,6 +142,7 @@ export function hasBookingPrefill(prefill: BookingPrefill): boolean {
     prefill.startTime !== null ||
     prefill.endTime !== null ||
     prefill.attendees !== null ||
-    prefill.eventType !== null
+    prefill.eventType !== null ||
+    prefill.eventDescription !== null
   );
 }
