@@ -50,15 +50,18 @@ function PhotoArrow({
 
 export default function VenueCard({
   venue,
-  prefillQuery = "",
+  searchQuery = "",
 }: {
   venue: VenueWithDistance;
   /**
-   * The planner's search brief (date, times, guest count, event type) as a
-   * query string, carried onto the venue link so the booking form over there
-   * opens already filled in. See src/lib/spaces/bookingPrefill.ts.
+   * The planner's entire search as a query string, carried onto the venue
+   * link. It does two jobs over there: the booking form reads the date, times,
+   * guest count and event type off it so nothing is typed twice
+   * (src/lib/spaces/bookingPrefill.ts), and "Back to Discover Spaces" replays
+   * the rest — price, amenities, neighborhood — so returning to the grid
+   * doesn't reset the search.
    */
-  prefillQuery?: string;
+  searchQuery?: string;
 }) {
   const [saved, setSaved] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -178,7 +181,7 @@ export default function VenueCard({
       </div>
 
       <Link
-        href={prefillQuery ? `/spaces/${venue.slug}?${prefillQuery}` : `/spaces/${venue.slug}`}
+        href={searchQuery ? `/spaces/${venue.slug}?${searchQuery}` : `/spaces/${venue.slug}`}
         className="absolute inset-0"
         aria-label={`View ${venue.name}`}
       />

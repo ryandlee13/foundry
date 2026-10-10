@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  bookingPrefillFromFilters,
   bookingPrefillToQuery,
   hasBookingPrefill,
   readBookingPrefill,
   EVENT_DESCRIPTION_MAX,
 } from "../bookingPrefill";
-import { getDefaultFilters } from "../urlState";
+import { filtersToSearchParams, getDefaultFilters } from "../urlState";
 
 function read(query: string) {
   return readBookingPrefill(new URLSearchParams(query));
@@ -65,21 +64,39 @@ describe("readBookingPrefill", () => {
   });
 });
 
-describe("bookingPrefillFromFilters", () => {
-  it("carries nothing from an untouched filter set", () => {
-    expect(hasBookingPrefill(bookingPrefillFromFilters(getDefaultFilters()))).toBe(false);
+describe("bookingPrefillToQuery", () => {
+  it("round-trips through the query string", () => {
+    const prefill = read("date=2026-08-23&start=18:00&attendees=80&eventType=party&eventDesc=A+40th");
+    expect(read(bookingPrefillToQuery(prefill))).toEqual(prefill);
   });
 
-  it("carries the fields a planner actually filled in", () => {
-    const prefill = bookingPrefillFromFilters({
+  it("produces an empty string when there is nothing to carry", () => {
+    expect(bookingPrefillToQuery(read(""))).toBe("");
+  });
+});
+
+/*
+ * A venue link carries the planner's entire search, not a query built for this
+ * module, so the reader has to pick its six keys out of everything else the
+ * filters put there and leave the rest alone.
+ */
+describe("reading a prefill off a full Discover Spaces search", () => {
+  it("picks up the booking fields and ignores the filter-only ones", () => {
+    const params = filtersToSearchParams({
       ...getDefaultFilters(),
       eventDate: "2026-08-23",
       startTime: "18:00",
       endTime: "23:00",
       attendees: 80,
       eventTypes: ["party"],
+      minPrice: 100,
+      maxPrice: 200,
+      amenities: ["projector"],
+      spaceTypes: ["loft"],
+      sort: "price_asc",
     });
-    expect(prefill).toEqual({
+
+    expect(readBookingPrefill(params)).toEqual({
       eventDate: "2026-08-23",
       startTime: "18:00",
       endTime: "23:00",
@@ -89,29 +106,17 @@ describe("bookingPrefillFromFilters", () => {
     });
   });
 
-  it("takes the event description separately — it isn't a filter", () => {
-    const prefill = bookingPrefillFromFilters(getDefaultFilters(), "  Rehearsal dinner  ");
-    expect(prefill.eventDescription).toBe("Rehearsal dinner");
-    expect(hasBookingPrefill(prefill)).toBe(true);
-  });
-});
-
-describe("bookingPrefillToQuery", () => {
-  it("round-trips through the query string", () => {
-    const prefill = bookingPrefillFromFilters(
-      {
-        ...getDefaultFilters(),
-        eventDate: "2026-08-23",
-        startTime: "18:00",
-        attendees: 80,
-        eventTypes: ["party"],
-      },
-      "A 40th birthday — toast around nine."
+  it("carries nothing from an untouched filter set", () => {
+    expect(hasBookingPrefill(readBookingPrefill(filtersToSearchParams(getDefaultFilters())))).toBe(
+      false
     );
-    expect(read(bookingPrefillToQuery(prefill))).toEqual(prefill);
   });
 
-  it("produces an empty string when there is nothing to carry", () => {
-    expect(bookingPrefillToQuery(bookingPrefillFromFilters(getDefaultFilters()))).toBe("");
+  it("still refuses to guess when several event types are filtered on", () => {
+    const params = filtersToSearchParams({
+      ...getDefaultFilters(),
+      eventTypes: ["party", "wedding"],
+    });
+    expect(readBookingPrefill(params).eventType).toBeNull();
   });
 });

@@ -253,26 +253,40 @@ now rather than waiting.
   just scattered across two lists, leaving the planner to work out the implication. The
   filter sidebar keeps the plain "Alcohol allowed" label — there it's a filter, not a
   description.
+- **A venue link carries the planner's whole search, and `useSpacesFilters` builds that
+  string exactly once.** `searchQuery` (the hook's return value) is both what the
+  Discover Spaces URL syncs to and what every `VenueCard` href carries, so the grid's
+  address and the link out of it cannot drift. It does two jobs on the other side:
+  `bookingPrefill.ts` reads the booking fields off it, and `VenueBackLink` replays the
+  rest. Don't rebuild either from a subset — restoring *some* of a search is a wrong
+  answer, not a partial one, which is why "Back to Discover Spaces" replays the full query
+  minus `from` (ours, a routing hint, not part of anyone's search).
 - **A planner never types their event details twice.** `src/lib/spaces/bookingPrefill.ts`
-  (pure) carries date / start / end / guest count / event type from the homepage hero and
-  the Discover Spaces filters onto every venue link, and `BookingPanel` seeds its fields
-  from it. It reuses the exact query keys `urlState.ts` already defines, so there is one
-  vocabulary, not two — and it is **URL-only, never persisted**, the same call as
-  `VendorSearchBrief`. Two rules: a multi-value `eventType` filter prefills nothing (the
-  planner hasn't said which one their event *is*), and the read happens in a mount effect
-  off `window.location.search` rather than `useSearchParams()` — that hook would force
-  `/spaces/[slug]` to bail out of static rendering into a Suspense fallback, trading the
-  prerendered listing for a loading state on every venue page. Prefill is convenience only;
-  `evaluateBookingRequest()` still re-checks everything.
+  (pure) reads date / start / end / guest count / event type / description out of whatever
+  query a venue page was reached with, and `BookingPanel` seeds its fields from it. It is
+  **read-only over the URL and never persisted**, the same call as `VendorSearchBrief`, and
+  it reuses the exact query keys `urlState.ts` already defines, so there is one vocabulary,
+  not two. Because the link carries the *whole* search, this module picks out its six keys
+  and ignores the filter-only ones (price, amenities, space type) rather than expecting a
+  query built for it. Three rules: a multi-value `eventType` prefills nothing (the planner
+  hasn't said which one their event *is*) — enforced on the read side, so it holds no
+  matter who built the URL; the read happens in a mount effect off `window.location.search`
+  rather than `useSearchParams()`, since that hook would force `/spaces/[slug]` to bail out
+  of static rendering into a Suspense fallback, trading the prerendered listing for a
+  loading state on every venue page; and **sign-in has to carry the brief back** —
+  `BookingPanel` re-serializes it with `bookingPrefillToQuery()` into the `next` path,
+  because the form is only rendered to a signed-in user and returning to a bare
+  `/spaces/[slug]` was the one place the prefill was actually being lost. Prefill is
+  convenience only; `evaluateBookingRequest()` still re-checks everything.
   **`eventDescription` is the one prefill field that is not a filter.** The hero's "About
   your event" box travels as `EVENT_DESCRIPTION_PARAM` (`eventDesc`) and lands in
   `BookingPanel`'s *Notes for the host* — not in a field of its own, or the planner
   describes their event twice on one form. It is deliberately **not** part of
-  `SearchFilters` (`bookingPrefillFromFilters()` takes it as a second argument): putting it
-  there would mean teaching the facet counts, the active-filter chips, and "clear all" to
-  ignore it. Because `filtersToSearchParams()` doesn't know about it, `useSpacesFilters`
-  captures it once from the landing URL and re-applies it on every URL sync — remove that
-  and ticking any filter silently drops the description before it reaches a venue link.
+  `SearchFilters`: putting it there would mean teaching the facet counts, the active-filter
+  chips, and "clear all" to ignore it. Because `filtersToSearchParams()` doesn't know about
+  it, `useSpacesFilters` captures it once from the landing URL and re-applies it when
+  building `searchQuery` — remove that and ticking any filter silently drops the
+  description before it reaches a venue link.
 - **"Send booking request" opens a review step; it does not send.** `BookingPanel` runs
   every check that could stop a request — missing COI/deposit agreements first, then
   `evaluateBookingRequest()` — *before* showing the summary, so a planner is never asked to

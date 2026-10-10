@@ -16,7 +16,11 @@ import {
   formatTimeRange,
   type BookingConstraintViolation,
 } from "@/lib/spaces/bookingConstraints";
-import { hasBookingPrefill, readBookingPrefill } from "@/lib/spaces/bookingPrefill";
+import {
+  bookingPrefillToQuery,
+  hasBookingPrefill,
+  readBookingPrefill,
+} from "@/lib/spaces/bookingPrefill";
 import Dialog from "@/components/ui/Dialog";
 import InfoTooltip from "@/components/ui/InfoTooltip";
 import type { EventType, Venue } from "@/lib/types/spaces";
@@ -36,6 +40,11 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
   const [endTime, setEndTime] = useState("");
   const [attendees, setAttendees] = useState("");
   const [prefilled, setPrefilled] = useState(false);
+  /**
+   * The same brief re-serialized, so signing in can come back to this venue
+   * with it still attached. Empty when nothing was carried.
+   */
+  const [prefillQuery, setPrefillQuery] = useState("");
   const [organizerNote, setOrganizerNote] = useState("");
   const [coiAgreed, setCoiAgreed] = useState(false);
   const [depositAgreed, setDepositAgreed] = useState(false);
@@ -73,11 +82,25 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
     // would have the planner describing their event twice on one form.
     if (prefill.eventDescription) setOrganizerNote(prefill.eventDescription);
     setPrefilled(true);
+    // Re-serialized rather than reusing window.location.search verbatim:
+    // that could also be carrying ?from=dashboard, and only the brief
+    // should survive a trip through sign-in.
+    setPrefillQuery(bookingPrefillToQuery(prefill));
   }, []);
+
+  /**
+   * Where sign-in sends the planner back to. The brief rides along: without it,
+   * someone who filled in the Discover Spaces filters, opened a venue, and then
+   * signed in landed back on an empty form — which is exactly the retyping the
+   * prefill exists to prevent.
+   */
+  function venueReturnPath(): string {
+    return prefillQuery ? `/spaces/${venue.slug}?${prefillQuery}` : `/spaces/${venue.slug}`;
+  }
 
   function handleBookClick() {
     if (!isLoading && !user) {
-      router.push(`/sign-in?next=${encodeURIComponent(`/spaces/${venue.slug}`)}`);
+      router.push(`/sign-in?next=${encodeURIComponent(venueReturnPath())}`);
     }
   }
 
@@ -227,13 +250,22 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
             </Link>
           </div>
         ) : !isLoading && !user ? (
-          <button
-            type="button"
-            onClick={handleBookClick}
-            className="w-full rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
-          >
-            Sign in to request booking
-          </button>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleBookClick}
+              className="w-full rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+            >
+              Sign in to request booking
+            </button>
+            {/* The form is hidden behind sign-in, so the only way the planner
+                knows their search survived the trip is if we tell them. */}
+            {prefilled && (
+              <p className="text-xs text-ink-soft">
+                We&apos;ve kept your event details — they&apos;ll be filled in when you come back.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-3">
             {prefilled && (

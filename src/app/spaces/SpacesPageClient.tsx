@@ -5,7 +5,6 @@ import { useSpacesFilters } from "@/hooks/useSpacesFilters";
 import { applyFilters, countActiveFilters } from "@/lib/spaces/filters";
 import { computeFacetCounts } from "@/lib/spaces/facets";
 import { sortVenues } from "@/lib/spaces/sort";
-import { bookingPrefillFromFilters, bookingPrefillToQuery } from "@/lib/spaces/bookingPrefill";
 import { RADIUS_OPTIONS_MILES, type Venue } from "@/lib/types/spaces";
 import { VENUES } from "@/lib/spaces/venues";
 import { getPubliclyVisibleVenues } from "@/lib/spaces/submittedVenues";
@@ -19,7 +18,7 @@ import VenueGrid from "@/components/spaces/VenueGrid";
 import EmptyVenueResults from "@/components/spaces/EmptyVenueResults";
 
 export default function SpacesPageClient() {
-  const { filters, updateFilters, setLocation, clearAll, eventDescription } = useSpacesFilters();
+  const { filters, updateFilters, setLocation, clearAll, searchQuery } = useSpacesFilters();
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   // Starts as just the seed venues (matches server-rendered output) so
@@ -41,35 +40,23 @@ export default function SpacesPageClient() {
   // selections lifted, so the numbers predict what ticking a box would give.
   const facetCounts = useMemo(() => computeFacetCounts(allVenues, filters), [allVenues, filters]);
 
-  /*
-   * What the planner has already told us — date, times, guest count, event
-   * type, and the one-line description of the event — carried onto every venue
-   * link so the booking form on the other side opens pre-filled instead of
-   * asking for it all again.
-   */
-  const prefillQuery = useMemo(
-    () => bookingPrefillToQuery(bookingPrefillFromFilters(filters, eventDescription)),
-    [filters, eventDescription]
-  );
-
   const activeFilterCount = countActiveFilters(filters);
   const maxRadius = RADIUS_OPTIONS_MILES[RADIUS_OPTIONS_MILES.length - 1];
 
   return (
     <div className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6 lg:px-10 xl:px-16">
-      {/* Header: title left, location/radius control right, one row. */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-2xl">
-          <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
-            Discover spaces for your next event
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-            Browse San Francisco venues by location, capacity, price, and the amenities your
-            event actually needs.
-          </p>
-        </div>
+      {/*
+        Header: title, with the location/radius control directly beneath it.
+        It replaces a subtitle that only restated what the filter panel already
+        offers; where the search is happening is the one piece of context worth
+        stating, and it belongs next to the heading rather than opposite it.
+      */}
+      <div>
+        <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">
+          Discover spaces for your next event
+        </h1>
 
-        <div className="shrink-0">
+        <div className="mt-3">
           <LocationSearch
             locationLabel={filters.location.label}
             radiusMiles={filters.radiusMiles}
@@ -126,7 +113,7 @@ export default function SpacesPageClient() {
 
         <div className="min-w-0 flex-1">
           {results.length > 0 ? (
-            <VenueGrid venues={results} prefillQuery={prefillQuery} />
+            <VenueGrid venues={results} searchQuery={searchQuery} />
           ) : (
             <EmptyVenueResults
               canIncreaseRadius={filters.radiusMiles < maxRadius}

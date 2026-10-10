@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { filtersToSearchParams, getDefaultFilters, searchParamsToFilters } from "@/lib/spaces/urlState";
 import { EVENT_DESCRIPTION_PARAM } from "@/lib/spaces/bookingPrefill";
@@ -27,6 +27,20 @@ export function useSpacesFilters() {
    */
   const [eventDescription] = useState(() => searchParams.get(EVENT_DESCRIPTION_PARAM));
 
+  /**
+   * The planner's whole search as a query string. This is both what the URL
+   * syncs to and what every venue link carries, deliberately the same value:
+   * the grid's address and the link out of it can't drift if they're built
+   * once. Venue pages read the booking fields off it (bookingPrefill.ts) and
+   * "Back to Discover Spaces" replays all of it, so opening a listing and
+   * coming back no longer resets the search.
+   */
+  const searchQuery = useMemo(() => {
+    const params = filtersToSearchParams(filters);
+    if (eventDescription) params.set(EVENT_DESCRIPTION_PARAM, eventDescription);
+    return params.toString();
+  }, [filters, eventDescription]);
+
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -34,12 +48,10 @@ export function useSpacesFilters() {
       isFirstRender.current = false;
       return;
     }
-    const params = filtersToSearchParams(filters);
-    if (eventDescription) params.set(EVENT_DESCRIPTION_PARAM, eventDescription);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    // Only the current filters value should trigger a URL sync.
+    router.replace(`${pathname}?${searchQuery}`, { scroll: false });
+    // Only a change in the search itself should trigger a URL sync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [searchQuery]);
 
   const updateFilters = useCallback((patch: Partial<SearchFilters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -58,5 +70,5 @@ export function useSpacesFilters() {
     }));
   }, []);
 
-  return { filters, updateFilters, setLocation, clearAll, eventDescription };
+  return { filters, updateFilters, setLocation, clearAll, searchQuery };
 }

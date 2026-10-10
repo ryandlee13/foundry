@@ -1,5 +1,5 @@
 import { EVENT_TYPE_LABELS } from "./labels";
-import type { EventType, SearchFilters } from "@/lib/types/spaces";
+import type { EventType } from "@/lib/types/spaces";
 
 /**
  * Carries what a planner already told us on the homepage (or in the Discover
@@ -11,6 +11,12 @@ import type { EventType, SearchFilters } from "@/lib/types/spaces";
  * query keys `urlState.ts` already defines for the filters (`date`, `start`,
  * `end`, `attendees`, `eventType`), so the link that filtered the grid is the
  * same link that fills the form; there is no second vocabulary to keep in sync.
+ *
+ * A venue link carries the planner's *whole* search, not just these six keys —
+ * the rest (price, amenities, neighborhood) is what lets "Back to Discover
+ * Spaces" return to the same results. So this module reads a subset of the
+ * query it is handed and ignores everything else, rather than expecting a
+ * query built only for it.
  *
  * This is a convenience, not an input source of truth: every value is still
  * editable in the form, and `evaluateBookingRequest()` re-checks all of it
@@ -106,25 +112,10 @@ export function readBookingPrefill(params: URLSearchParams): BookingPrefill {
 }
 
 /**
- * `eventDescription` comes in separately because it is not part of
- * `SearchFilters` — it filters nothing, so putting it there would mean teaching
- * the facet counts, the active-filter chips, and "clear all" to ignore it.
+ * Query string (no leading "?") holding just the brief. Empty when there's
+ * nothing to carry. Used to re-attach the brief to a sign-in return path
+ * (BookingPanel) — venue links carry the full search instead.
  */
-export function bookingPrefillFromFilters(
-  filters: SearchFilters,
-  eventDescription?: string | null
-): BookingPrefill {
-  return {
-    eventDate: readDate(filters.eventDate),
-    startTime: readTime(filters.startTime),
-    endTime: readTime(filters.endTime),
-    attendees: filters.attendees !== null ? readAttendees(String(filters.attendees)) : null,
-    eventType: filters.eventTypes.length === 1 ? filters.eventTypes[0] : null,
-    eventDescription: readDescription(eventDescription ?? null),
-  };
-}
-
-/** Query string (no leading "?") for a venue link. Empty when there's nothing to carry. */
 export function bookingPrefillToQuery(prefill: BookingPrefill): string {
   const params = new URLSearchParams();
   if (prefill.eventDate) params.set("date", prefill.eventDate);
