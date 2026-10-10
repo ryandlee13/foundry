@@ -12,15 +12,17 @@ import { shortlistProposal } from "@/lib/vendors/proposals";
 import { getThreadForProposal, getDealProposalsForThread } from "@/lib/vendors/messages";
 import { resolveEffectiveDealTerms } from "@/lib/vendors/dealProposals";
 import { getSkillName } from "@/lib/vendors/skills";
-import { PRICING_MODEL_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
+import { PRICING_MODEL_LABELS } from "@/lib/vendors/labels";
 import { formatExpiration, formatDeadlineDate, getEffectiveProposalStatus } from "@/lib/vendors/expiration";
 import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 import EmptyState from "@/components/ui/EmptyState";
+import StatusBadge from "@/components/ui/StatusBadge";
+import { resolveProposalTone } from "@/lib/ui/statusTone";
 import Dialog from "@/components/ui/Dialog";
 import FinalizeDealDialog, { type FinalizeDealTerms } from "./FinalizeDealDialog";
 import { organizerVendorsPath } from "@/lib/vendors/organizerRoutes";
-import type { EventNeed, ProposalStatus, VendorProfile, VendorProposal } from "@/lib/types/vendors";
+import type { EventNeed, VendorProfile, VendorProposal } from "@/lib/types/vendors";
 
 type SortOption =
   | "recommended"
@@ -39,19 +41,6 @@ const SORT_LABELS: Record<SortOption, string> = {
   most_completed_events: "Most Foundry events",
   newest: "Newest proposal",
   expiring_soon: "Expiring soon",
-};
-
-const STATUS_STYLES: Record<ProposalStatus, string> = {
-  draft: "bg-paper-dim text-ink-soft",
-  submitted: "bg-brass/15 text-brass-dark",
-  shortlisted: "bg-brass/15 text-brass-dark",
-  in_discussion: "bg-brass/15 text-brass-dark",
-  accepted: "bg-green-100 text-green-800",
-  declined: "bg-wine/10 text-wine",
-  withdrawn: "bg-paper-dim text-ink-soft",
-  expired: "bg-wine/10 text-wine",
-  canceled: "bg-paper-dim text-ink-soft",
-  closed_opportunity_filled: "bg-paper-dim text-ink-soft",
 };
 
 export default function OrganizerProposalsPage({ bookingId, needId }: { bookingId: string | null; needId: string }) {
@@ -311,9 +300,7 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
                   )}
 
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[effectiveStatus]}`}>
-                      {PROPOSAL_STATUS_LABELS[effectiveStatus]}
-                    </span>
+                    <StatusBadge descriptor={resolveProposalTone(effectiveStatus, "organizer")} />
                     <span className="text-xs text-ink-soft">{formatExpiration(proposal.expiresAt, now)}</span>
                   </div>
 

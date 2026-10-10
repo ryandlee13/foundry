@@ -12,11 +12,13 @@ import { computeCompetitiveBidSummary } from "@/lib/vendors/matching";
 import { getBookingById, formatEventDate } from "@/lib/spaces/bookings";
 import { formatTimeRange } from "@/lib/spaces/bookingConstraints";
 import { getSkillName } from "@/lib/vendors/skills";
-import { EXPERIENCE_LEVEL_LABELS, PRICING_MODEL_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
+import { EXPERIENCE_LEVEL_LABELS, PRICING_MODEL_LABELS } from "@/lib/vendors/labels";
 import { formatExpiration, formatDeadlineDate, computeExpiresAt } from "@/lib/vendors/expiration";
 import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
+import StatusBadge from "@/components/ui/StatusBadge";
+import { resolveProposalTone } from "@/lib/ui/statusTone";
 import BidForm from "./BidForm";
 import type { EventNeed, VendorProfile, VendorProposal } from "@/lib/types/vendors";
 
@@ -25,18 +27,6 @@ function formatBudget(min: number | null, max: number | null): string {
   if (min !== null && max !== null) return `$${min}–$${max}`;
   return `$${min ?? max}`;
 }
-
-const PROPOSAL_STATUS_STYLES: Record<string, string> = {
-  submitted: "bg-brass/15 text-brass-dark",
-  shortlisted: "bg-brass/15 text-brass-dark",
-  in_discussion: "bg-brass/15 text-brass-dark",
-  accepted: "bg-green-100 text-green-800",
-  declined: "bg-wine/10 text-wine",
-  withdrawn: "bg-paper-dim text-ink-soft",
-  expired: "bg-wine/10 text-wine",
-  canceled: "bg-paper-dim text-ink-soft",
-  closed_opportunity_filled: "bg-paper-dim text-ink-soft",
-};
 
 export default function GigDetailPage({ needId }: { needId: string }) {
   const { user, isLoading: authLoading } = useAuth();
@@ -210,9 +200,7 @@ export default function GigDetailPage({ needId }: { needId: string }) {
           ) : myProposal ? (
             <div className="rounded-xl border border-line p-4">
               <div className="flex items-center justify-between gap-3">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${PROPOSAL_STATUS_STYLES[myProposal.status] ?? ""}`}>
-                  {PROPOSAL_STATUS_LABELS[myProposal.status]}
-                </span>
+                <StatusBadge descriptor={resolveProposalTone(myProposal.status, "vendor")} />
                 <span className="text-sm font-semibold text-ink">${myProposal.proposedAmount}</span>
               </div>
               {myProposal.status === "in_discussion" && (

@@ -23,6 +23,7 @@ import { ENGAGEMENT_STATUS_LABELS, PROPOSAL_STATUS_LABELS } from "@/lib/vendors/
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
 import type { MessageThread } from "@/lib/types/vendors";
+import { INTERACTIVE_ROW } from "@/lib/ui/interactive";
 
 interface ThreadSummary {
   id: string;
@@ -184,7 +185,7 @@ export default function MessagesInboxPage() {
               <ul className="mt-2 divide-y divide-line rounded-2xl border border-line bg-paper">
                 {group.threads.map(({ thread, otherName, contextLabel, statusLabel, lastMessage, unread }) => (
                   <li key={thread.id}>
-                    <Link href={`/dashboard/messages/${thread.id}`} className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-paper-dim">
+                    <Link href={`/dashboard/messages/${thread.id}`} className={`flex items-center justify-between gap-3 px-5 py-4 ${INTERACTIVE_ROW}`}>
                       <div className="min-w-0">
                         <p className="font-medium text-ink">
                           {contextLabel} <span className="font-normal text-ink-soft">— {otherName}</span>

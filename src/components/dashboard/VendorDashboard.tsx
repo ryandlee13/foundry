@@ -19,10 +19,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 import type { Booking, Venue } from "@/lib/types/spaces";
 import type { VendorProfile } from "@/lib/types/vendors";
-
-function formatMoney(amount: number): string {
-  return `$${amount.toLocaleString()}`;
-}
+import { formatMoney } from "@/lib/ui/format";
 
 export default function VendorDashboard({ accountId }: { accountId: string }) {
   const [loaded, setLoaded] = useState(false);

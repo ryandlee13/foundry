@@ -8,6 +8,7 @@ import { getEventsDoneForVenue } from "@/lib/spaces/reviews";
 import VenueAmenityList from "./VenueAmenityList";
 import VenueImagePlaceholder from "./VenueImagePlaceholder";
 import type { VenueWithDistance } from "@/lib/types/spaces";
+import { INTERACTIVE_CARD } from "@/lib/ui/interactive";
 
 function formatPriceRange(min: number, max: number): string {
   return min === max ? `$${min}/hr` : `$${min}–$${max}/hr`;
@@ -94,7 +95,7 @@ export default function VenueCard({
   }
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
+    <article className={`group relative overflow-hidden rounded-2xl border border-line bg-paper ${INTERACTIVE_CARD}`}>
       <div className="relative">
         <VenueImagePlaceholder
           accent={venue.visualAccent}

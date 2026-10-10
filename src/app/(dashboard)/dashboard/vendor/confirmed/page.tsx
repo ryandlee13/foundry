@@ -12,24 +12,14 @@ import { getEngagementsForVendor, cancelEngagementByVendor, confirmEngagementTer
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
 import { getThreadForEngagement, getUnreadMessageCount } from "@/lib/vendors/messages";
 import { getSkillName } from "@/lib/vendors/skills";
-import { ENGAGEMENT_STATUS_LABELS } from "@/lib/vendors/labels";
 import AgreedTermsCard from "@/components/vendor/AgreedTermsCard";
 import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
+import StatusBadge from "@/components/ui/StatusBadge";
+import { resolveEngagementTone } from "@/lib/ui/statusTone";
 import type { Booking } from "@/lib/types/spaces";
-import type { EngagementStatus, EventNeed, VendorEngagement } from "@/lib/types/vendors";
-
-const STATUS_STYLES: Record<EngagementStatus, string> = {
-  pending_vendor_confirmation: "bg-brass/15 text-brass-dark",
-  confirmed: "bg-brass/15 text-brass-dark",
-  in_progress: "bg-brass/15 text-brass-dark",
-  completed: "bg-green-100 text-green-800",
-  declined_by_vendor: "bg-wine/10 text-wine",
-  canceled_by_organizer: "bg-wine/10 text-wine",
-  canceled_by_vendor: "bg-wine/10 text-wine",
-  disputed: "bg-wine/10 text-wine",
-};
+import type { EventNeed, VendorEngagement } from "@/lib/types/vendors";
 
 export default function VendorConfirmedGigsPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -186,9 +176,7 @@ export default function VendorConfirmedGigsPage() {
                         </p>
                       )}
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[engagement.status]}`}>
-                      {ENGAGEMENT_STATUS_LABELS[engagement.status]}
-                    </span>
+                    <StatusBadge className="shrink-0" descriptor={resolveEngagementTone(engagement.status, "vendor")} />
                   </div>
 
                   {engagement.status === "pending_vendor_confirmation" && (

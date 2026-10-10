@@ -5,15 +5,8 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useVendorDashboardData } from "@/hooks/useVendorDashboardData";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
-import { VENDOR_PROFILE_STATUS_LABELS } from "@/lib/vendors/labels";
-
-const STATUS_STYLES: Record<string, string> = {
-  draft: "bg-paper-dim text-ink-soft",
-  pending_review: "bg-brass/15 text-brass-dark",
-  published: "bg-green-100 text-green-800",
-  rejected: "bg-wine/10 text-wine",
-  suspended: "bg-wine/10 text-wine",
-};
+import { resolveVendorProfileTone } from "@/lib/ui/statusTone";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -66,9 +59,7 @@ export default function VendorDashboardPage() {
           <h1 className="font-display text-2xl font-semibold text-ink">Event status</h1>
           <p className="mt-1 text-sm text-ink-soft">Welcome back, {profile.displayName}.</p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[profile.status]}`}>
-          {VENDOR_PROFILE_STATUS_LABELS[profile.status]}
-        </span>
+        <StatusBadge descriptor={resolveVendorProfileTone(profile.status)} />
       </div>
 
       {profile.status === "rejected" && profile.rejectionReason && (

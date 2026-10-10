@@ -12,31 +12,20 @@ import { getProposalsForNeed } from "@/lib/vendors/proposals";
 import { getVendorProfileById } from "@/lib/vendors/profiles";
 import { getSkillName } from "@/lib/vendors/skills";
 import { summarizeEventVendors, type EventVendorSummary } from "@/lib/vendors/eventVendorSummary";
-import { ENGAGEMENT_STATUS_LABELS, EVENT_NEED_PHASE_LABELS } from "@/lib/vendors/labels";
+import { EVENT_NEED_PHASE_LABELS } from "@/lib/vendors/labels";
 import { ensureBookingConversation } from "@/lib/spaces/bookingWorkflow";
-import { BOOKING_STATUS_LABELS } from "@/lib/spaces/labels";
+import { resolveBookingTone, resolveEngagementTone, type StatusDescriptor } from "@/lib/ui/statusTone";
+import StatusBadge from "@/components/ui/StatusBadge";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
-import type { Booking, BookingStatus } from "@/lib/types/spaces";
+import type { Booking } from "@/lib/types/spaces";
 
 /** Per-booking vendor detail, resolved once on load rather than during render. */
 interface VendorDetail {
   summary: EventVendorSummary;
   requests: { id: string; title: string; phaseLabel: string; bidCount: number }[];
-  vendors: { id: string; name: string; statusLabel: string }[];
+  vendors: { id: string; name: string; status: StatusDescriptor }[];
 }
-
-/*
- * Confirmed is green, not brass: it's the one status that means "this is
- * settled, stop worrying about it", and in brass it read as the same
- * in-progress amber as everything else on the page. Same green the vendor
- * layer already uses for a filled request and a completed engagement.
- */
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  pending: "bg-paper-dim text-ink-soft",
-  confirmed: "bg-green-100 text-green-800",
-  declined: "bg-wine/10 text-wine",
-};
 
 export default function OrganizerDashboardPage() {
   const { user } = useAuth();
@@ -76,7 +65,7 @@ export default function OrganizerDashboardPage() {
         vendors: engagements.map((engagement) => ({
           id: engagement.id,
           name: getVendorProfileById(engagement.vendorProfileId)?.displayName ?? "Vendor",
-          statusLabel: ENGAGEMENT_STATUS_LABELS[engagement.status],
+          status: resolveEngagementTone(engagement.status, "organizer"),
         })),
       };
 
@@ -122,9 +111,9 @@ export default function OrganizerDashboardPage() {
             <span className="font-semibold">
               {unassignedCount} vendor{unassignedCount === 1 ? "" : "s"}
             </span>{" "}
-            {unassignedCount === 1 ? "isn't" : "aren't"} attached to an event yet.
+            {unassignedCount === 1 ? "is" : "are"} waiting in your vendor lobby without a venue.
           </span>
-          <span className="shrink-0 text-sm font-semibold text-brass-dark">Assign to an event →</span>
+          <span className="shrink-0 text-sm font-semibold text-brass-dark">Move to a venue →</span>
         </Link>
       )}
 
@@ -218,11 +207,7 @@ export default function OrganizerDashboardPage() {
                           Vendors
                         </Link>
                       )}
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[booking.status]}`}
-                      >
-                        {BOOKING_STATUS_LABELS[booking.status]}
-                      </span>
+                      <StatusBadge descriptor={resolveBookingTone(booking.status, "organizer")} />
                     </div>
                   </div>
 
@@ -281,7 +266,7 @@ export default function OrganizerDashboardPage() {
                             {detail.vendors.map((vendor) => (
                               <li key={vendor.id} className="flex flex-wrap justify-between gap-2 text-sm">
                                 <span className="text-ink">{vendor.name}</span>
-                                <span className="text-xs text-ink-soft">{vendor.statusLabel}</span>
+                                <StatusBadge descriptor={vendor.status} />
                               </li>
                             ))}
                           </ul>

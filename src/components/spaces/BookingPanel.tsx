@@ -532,7 +532,7 @@ export default function BookingPanel({ venue }: { venue: Venue }) {
         */}
         <h2
           id="booking-success-title"
-          className="font-display text-2xl font-semibold leading-snug text-green-700 sm:text-3xl"
+          className="font-display text-2xl font-semibold leading-snug text-ok sm:text-3xl"
         >
           {wasFirstRequest
             ? "Congratulations, you've sent your first booking request!"

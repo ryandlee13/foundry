@@ -11,6 +11,32 @@
   --color-brass-dark: #8a621f;
   --color-wine: #5c1a34;
   --color-wine-soft: #7c2b4a;
+
+  /*
+   * Semantic status tones. Four meanings, not four states: a badge's color
+   * answers "is this my move?", never "what is the raw enum". The mapping from
+   * any given status to one of these lives in one place, src/lib/ui/statusTone.ts,
+   * and it takes the viewer's role — the same engagement is `wait` for the
+   * planner and `act` for the vendor.
+   *
+   * Tuned to the warm palette rather than taken from stock Tailwind: `ok` is a
+   * deep moss that sits with ivory instead of the blue-green of green-600, and
+   * `act` reuses the existing wine so "you owe someone something" speaks with
+   * the same voice as every primary button in the app.
+   *
+   * Each `-text` is checked against its own `-bg` (not against paper), all
+   * clearing WCAG AA 4.5:1 with room: ok 7.6:1, wait 5.9:1, act 10.4:1,
+   * muted 6.0:1. Keep that true if you retune these.
+   */
+  --color-ok: #2f5133;
+  --color-ok-bg: #e8efe2;
+  --color-wait: #7a5313;
+  --color-wait-bg: #f7eeda;
+  --color-act: #5c1a34;
+  --color-act-bg: #f7e4ea;
+  --color-muted: #5f564a;
+  --color-muted-bg: #efeae0;
+
   --font-display: var(--font-fraunces);
   --font-sans: var(--font-inter);
 }
@@ -19,4 +45,33 @@ body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+@layer base {
+  /*
+   * One keyboard focus ring for the whole app.
+   *
+   * Form inputs already carried `focus:ring-1 focus:ring-brass` individually
+   * (110 call sites) and keep it. What had nothing at all was every button,
+   * link, and clickable card — they only ever styled `hover:`, which a
+   * keyboard never triggers. This covers all of them at once.
+   *
+   * `:focus-visible` rather than `:focus` on purpose: the browser only matches
+   * it for keyboard/assistive focus, so clicking a button doesn't leave a ring
+   * behind it.
+   */
+  :focus-visible {
+    outline: 2px solid var(--color-brass);
+    outline-offset: 2px;
+  }
+
+  /*
+   * Dialog panels take focus programmatically when they open (see
+   * components/ui/Dialog.tsx) so that screen readers land inside them. That is
+   * a focus *container*, not a control — ringing the whole modal tells the user
+   * nothing about where they are, so it opts out.
+   */
+  [role="dialog"]:focus-visible {
+    outline: none;
+  }
 }

@@ -22,10 +22,12 @@ import { getThreadForEngagement, getUnreadMessageCount } from "@/lib/vendors/mes
 import { getSkillName } from "@/lib/vendors/skills";
 import { formatDeadlineDate } from "@/lib/vendors/expiration";
 import { computeRosterSpend } from "@/lib/vendors/engagementTotals";
-import { EVENT_NEED_STATUS_LABELS, ENGAGEMENT_STATUS_LABELS, EVENT_NEED_PHASE_LABELS, PRICING_MODEL_LABELS } from "@/lib/vendors/labels";
+import { EVENT_NEED_PHASE_LABELS, PRICING_MODEL_LABELS } from "@/lib/vendors/labels";
 import Dialog from "@/components/ui/Dialog";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
+import StatusBadge from "@/components/ui/StatusBadge";
+import { resolveEngagementTone, resolveEventNeedTone } from "@/lib/ui/statusTone";
 import ErrorState from "@/components/ui/ErrorState";
 import { contextFromBooking } from "@/lib/vendors/requestContext";
 import { ensureEventRoom } from "@/lib/spaces/eventRoom";
@@ -33,7 +35,7 @@ import FindVendorsPrompt from "./FindVendorsPrompt";
 import VendorNeedsBuilder from "./VendorNeedsBuilder";
 import { organizerProposalsPath } from "@/lib/vendors/organizerRoutes";
 import type { Booking } from "@/lib/types/spaces";
-import type { EngagementStatus, EventNeed, EventNeedPhase, EventNeedStatus, VendorEngagement, VendorProfile } from "@/lib/types/vendors";
+import type { EngagementStatus, EventNeed, EventNeedPhase, VendorEngagement, VendorProfile } from "@/lib/types/vendors";
 
 const INACTIVE_ENGAGEMENT_STATUSES = new Set<EngagementStatus>(["canceled_by_organizer", "canceled_by_vendor", "declined_by_vendor"]);
 
@@ -56,26 +58,6 @@ const DESTRUCTIVE_ACTION_COPY: Record<DestructiveNeedAction, { title: string; bo
     body: "This withdraws the request entirely. It stops showing in Discover Gigs, vendors can't send new proposals, and there's no undo — you'd post a fresh request instead.",
     confirm: "Cancel request",
   },
-};
-
-const STATUS_STYLES: Record<EventNeedStatus, string> = {
-  draft: "bg-paper-dim text-ink-soft",
-  published: "bg-green-100 text-green-800",
-  paused: "bg-brass/15 text-brass-dark",
-  filled: "bg-brass/15 text-brass-dark",
-  closed: "bg-paper-dim text-ink-soft",
-  canceled: "bg-wine/10 text-wine",
-};
-
-const ENGAGEMENT_STATUS_STYLES: Record<EngagementStatus, string> = {
-  pending_vendor_confirmation: "bg-brass/15 text-brass-dark",
-  confirmed: "bg-brass/15 text-brass-dark",
-  in_progress: "bg-brass/15 text-brass-dark",
-  completed: "bg-green-100 text-green-800",
-  declined_by_vendor: "bg-wine/10 text-wine",
-  canceled_by_organizer: "bg-wine/10 text-wine",
-  canceled_by_vendor: "bg-wine/10 text-wine",
-  disputed: "bg-wine/10 text-wine",
 };
 
 export default function OrganizerVendorRequestsPage({
@@ -263,9 +245,7 @@ export default function OrganizerVendorRequestsPage({
                       {EVENT_NEED_PHASE_LABELS[phaseByNeed[need.id] ?? "not_started"]}
                     </p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[need.status]}`}>
-                    {EVENT_NEED_STATUS_LABELS[need.status]}
-                  </span>
+                  <StatusBadge className="shrink-0" descriptor={resolveEventNeedTone(need.status)} />
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -336,9 +316,7 @@ export default function OrganizerVendorRequestsPage({
                         </p>
                       </div>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${ENGAGEMENT_STATUS_STYLES[engagement.status]}`}>
-                      {ENGAGEMENT_STATUS_LABELS[engagement.status]}
-                    </span>
+                    <StatusBadge className="shrink-0" descriptor={resolveEngagementTone(engagement.status, "organizer")} />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {threadIdByEngagement[engagement.id] && (

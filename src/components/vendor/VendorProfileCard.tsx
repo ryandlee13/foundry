@@ -2,13 +2,14 @@ import Link from "next/link";
 import { VENDOR_SKILLS } from "@/lib/vendors/skills";
 import { toSafeExternalUrl } from "@/lib/vendors/portfolioLinks";
 import type { VendorProfile } from "@/lib/types/vendors";
+import { INTERACTIVE_CARD } from "@/lib/ui/interactive";
 
 export default function VendorProfileCard({ vendor }: { vendor: VendorProfile }) {
   const hasLinks =
     Boolean(toSafeExternalUrl(vendor.websiteUrl)) || Boolean(toSafeExternalUrl(vendor.instagramUrl)) || vendor.portfolioLinks.length > 0;
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
+    <article className={`group relative overflow-hidden rounded-2xl border border-line bg-paper ${INTERACTIVE_CARD}`}>
       <div className="relative aspect-[4/3] w-full overflow-hidden">
         {vendor.coverImage ? (
           // eslint-disable-next-line @next/next/no-img-element -- local data URL, not a remote image domain

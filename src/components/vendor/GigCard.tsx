@@ -6,6 +6,7 @@ import { formatExpiration } from "@/lib/vendors/expiration";
 import VenueImagePlaceholder from "@/components/spaces/VenueImagePlaceholder";
 import type { Venue } from "@/lib/types/spaces";
 import type { EventNeedWithMatch } from "@/lib/types/vendors";
+import { INTERACTIVE_CARD } from "@/lib/ui/interactive";
 
 function formatBudget(min: number | null, max: number | null): string {
   if (min === null && max === null) return "Contact for quote";
@@ -49,7 +50,7 @@ export default function GigCard({
   const fewBids = need.bidCount < 3;
 
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-line bg-paper transition-all hover:-translate-y-0.5 hover:border-brass hover:shadow-lg">
+    <article className={`group relative overflow-hidden rounded-2xl border border-line bg-paper ${INTERACTIVE_CARD}`}>
       {venue && need.locationType !== "remote" && (
         <VenueImagePlaceholder
           accent={venue.visualAccent}

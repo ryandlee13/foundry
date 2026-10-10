@@ -12,10 +12,7 @@ import VenueProfileSummary from "./VenueProfileSummary";
 import type { Venue } from "@/lib/types/spaces";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
-
-function formatMoney(amount: number): string {
-  return `$${amount.toLocaleString()}`;
-}
+import { formatMoney } from "@/lib/ui/format";
 
 export default function VenueDashboard({ accountId }: { accountId: string }) {
   const { loaded, venues, bookingsByVenue, pendingCount, refresh } = useOwnedVenuesData(accountId);

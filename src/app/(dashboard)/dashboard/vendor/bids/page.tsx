@@ -7,24 +7,12 @@ import { getVendorProfileByOwnerId } from "@/lib/vendors/profiles";
 import { getProposalsForVendor, withdrawProposal, renewProposal } from "@/lib/vendors/proposals";
 import { getEventNeedById } from "@/lib/vendors/eventNeeds";
 import { getSkillName } from "@/lib/vendors/skills";
-import { PROPOSAL_STATUS_LABELS } from "@/lib/vendors/labels";
+import { resolveProposalTone } from "@/lib/ui/statusTone";
+import StatusBadge from "@/components/ui/StatusBadge";
 import { formatExpiration, computeExpiresAt } from "@/lib/vendors/expiration";
 import LoadingState from "@/components/ui/LoadingState";
 import EmptyState from "@/components/ui/EmptyState";
-import type { EventNeed, ProposalStatus, VendorProposal } from "@/lib/types/vendors";
-
-const STATUS_STYLES: Record<ProposalStatus, string> = {
-  draft: "bg-paper-dim text-ink-soft",
-  submitted: "bg-brass/15 text-brass-dark",
-  shortlisted: "bg-brass/15 text-brass-dark",
-  in_discussion: "bg-brass/15 text-brass-dark",
-  accepted: "bg-green-100 text-green-800",
-  declined: "bg-wine/10 text-wine",
-  withdrawn: "bg-paper-dim text-ink-soft",
-  expired: "bg-wine/10 text-wine",
-  canceled: "bg-paper-dim text-ink-soft",
-  closed_opportunity_filled: "bg-paper-dim text-ink-soft",
-};
+import type { EventNeed, VendorProposal } from "@/lib/types/vendors";
 
 const TABS: { key: "active" | "all"; label: string }[] = [
   { key: "active", label: "Active" },
@@ -123,9 +111,7 @@ export default function VendorBidsPage() {
                           : `Submitted ${proposal.submittedAt?.slice(0, 10)}`}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[proposal.status]}`}>
-                      {PROPOSAL_STATUS_LABELS[proposal.status]}
-                    </span>
+                    <StatusBadge className="shrink-0" descriptor={resolveProposalTone(proposal.status, "vendor")} />
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">

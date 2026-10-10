@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { INTERACTIVE_CARD } from "@/lib/ui/interactive";
 
 /**
  * A single headline number. Pass `href` to make the whole card a drill-down
@@ -27,12 +28,18 @@ export default function KpiCard({
 
   if (href) {
     return (
-      <Link
-        href={href}
-        className="group flex flex-col rounded-2xl border border-line bg-paper p-5 transition-colors hover:border-brass"
-      >
+      <Link href={href} className={`group flex flex-col rounded-2xl border border-line bg-paper p-5 ${INTERACTIVE_CARD}`}>
         {body}
-        <span className="mt-auto pt-3 text-xs font-semibold text-brass-dark opacity-0 transition-opacity group-hover:opacity-100">
+        {/*
+          Always rendered, not revealed on hover.
+          
+          This was `opacity-0 group-hover:opacity-100`, which meant that on any
+          touch device — where there is no hover — the only clue that a KPI
+          drilled down into anything never appeared at all. Now it's quiet at
+          rest and brightens on hover, so the affordance exists for everyone and
+          still doesn't compete with the number.
+        */}
+        <span className="mt-auto pt-3 text-xs font-semibold text-ink-soft transition-colors group-hover:text-brass-dark">
           View all →
         </span>
       </Link>

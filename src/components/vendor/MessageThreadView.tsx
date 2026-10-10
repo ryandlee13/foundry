@@ -755,7 +755,7 @@ export default function MessageThreadView({ threadId }: { threadId: string }) {
       >
         <h2
           id="terms-accepted-title"
-          className="font-display text-2xl font-semibold leading-snug text-green-700 sm:text-3xl"
+          className="font-display text-2xl font-semibold leading-snug text-ok sm:text-3xl"
         >
           Congratulations — your venue is settled!
         </h2>
