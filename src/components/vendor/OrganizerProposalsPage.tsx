@@ -225,7 +225,18 @@ export default function OrganizerProposalsPage({ bookingId, needId }: { bookingI
 
       <div className="mt-6">
         {sorted.length === 0 ? (
-          <EmptyState title="No proposals yet" description="Proposals will appear here once vendors start bidding on this request." />
+          <EmptyState
+            title="No proposals yet"
+            description="Proposals appear here once vendors bid on this request. You don't have to wait — you can approach someone directly."
+            action={
+              <Link
+                href="/vendors"
+                className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-paper-dim"
+              >
+                Browse vendors
+              </Link>
+            }
+          />
         ) : (
           <ul className="space-y-4">
             {sorted.map((proposal) => {

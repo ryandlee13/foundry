@@ -16,6 +16,10 @@ import { EVENT_NEED_PHASE_LABELS } from "@/lib/vendors/labels";
 import { ensureBookingConversation } from "@/lib/spaces/bookingWorkflow";
 import { resolveBookingTone, resolveEngagementTone, type StatusDescriptor } from "@/lib/ui/statusTone";
 import StatusBadge from "@/components/ui/StatusBadge";
+import EventProgressStepper from "@/components/events/EventProgressStepper";
+import { resolveEventProgress } from "@/lib/events/eventProgressData";
+import { organizerEventPath } from "@/lib/vendors/organizerRoutes";
+import type { EventProgress } from "@/lib/events/eventProgress";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 import type { Booking } from "@/lib/types/spaces";
@@ -35,6 +39,7 @@ export default function OrganizerDashboardPage() {
   const [unreadByBooking, setUnreadByBooking] = useState<Record<string, number>>({});
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [vendorDetailByBooking, setVendorDetailByBooking] = useState<Record<string, VendorDetail>>({});
+  const [progressByBooking, setProgressByBooking] = useState<Record<string, EventProgress>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,7 +48,12 @@ export default function OrganizerDashboardPage() {
     const threadIds: Record<string, string> = {};
     const unread: Record<string, number> = {};
     const vendorDetails: Record<string, VendorDetail> = {};
+    const progressByBookingId: Record<string, EventProgress> = {};
+    const todayIso = new Date().toISOString().slice(0, 10);
     for (const booking of owned) {
+      // Resolved on load like everything else here — computing it during
+      // render would hit localStorage once per row per render.
+      progressByBookingId[booking.id] = resolveEventProgress(booking.id, todayIso);
       /*
        * Read here, not in the expanded panel: resolving needs, proposals, and
        * vendor profiles during render would hit localStorage once per row per
@@ -88,6 +98,7 @@ export default function OrganizerDashboardPage() {
     setThreadIdByBooking(threadIds);
     setUnreadByBooking(unread);
     setVendorDetailByBooking(vendorDetails);
+    setProgressByBooking(progressByBookingId);
     setUnassignedCount(getUnassignedEngagementsForOrganizer(user.id).length);
     setLoaded(true);
   }, [user]);
@@ -179,6 +190,16 @@ export default function OrganizerDashboardPage() {
                       )}
                     </button>
                     <div className="flex items-center gap-3">
+                      {/*
+                        Into the event hub — the one page that holds this
+                        event's progress, vendors, and conversations together.
+                      */}
+                      <Link
+                        href={organizerEventPath(booking.id)}
+                        className="rounded-full bg-wine px-3.5 py-1.5 text-xs font-semibold text-paper transition-colors hover:bg-wine-soft"
+                      >
+                        Open event
+                      </Link>
                       {threadIdByBooking[booking.id] && (
                         <Link
                           href={`/dashboard/messages/${threadIdByBooking[booking.id]}`}
@@ -210,6 +231,12 @@ export default function OrganizerDashboardPage() {
                       <StatusBadge descriptor={resolveBookingTone(booking.status, "organizer")} />
                     </div>
                   </div>
+
+                  {progressByBooking[booking.id] && (
+                    <div className="mt-3">
+                      <EventProgressStepper progress={progressByBooking[booking.id]} compact />
+                    </div>
+                  )}
 
                   {expanded && (
                     <div id={panelId} className="mt-4 space-y-4 border-t border-line pt-4">

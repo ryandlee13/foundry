@@ -13,10 +13,14 @@ import type { Venue } from "@/lib/types/spaces";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 import { formatMoney } from "@/lib/ui/format";
+import UpNextStrip from "@/components/events/UpNextStrip";
+import { buildVenueOwnerUpNext } from "@/lib/events/upNextData";
+import type { UpNextItem } from "@/lib/events/upNext";
 
 export default function VenueDashboard({ accountId }: { accountId: string }) {
   const { loaded, venues, bookingsByVenue, pendingCount, refresh } = useOwnedVenuesData(accountId);
   const [todayIso, setTodayIso] = useState("");
+  const [upNext, setUpNext] = useState<UpNextItem[]>([]);
 
   function handleToggleVisibility(venue: Venue) {
     setVenueVisibility(venue.id, !venue.listingHidden);
@@ -26,7 +30,8 @@ export default function VenueDashboard({ accountId }: { accountId: string }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTodayIso(new Date().toISOString().slice(0, 10));
-  }, []);
+    setUpNext(buildVenueOwnerUpNext(accountId));
+  }, [accountId]);
 
   if (!loaded || !todayIso) return <LoadingState label="Loading your listings…" />;
 
@@ -55,6 +60,13 @@ export default function VenueDashboard({ accountId }: { accountId: string }) {
 
   return (
     <div className="space-y-8">
+      {/*
+        What's waiting on this person, before anything that merely describes
+        what exists. A pending booking request is the top band: a planner can
+        do nothing until the host answers.
+      */}
+      <UpNextStrip items={upNext} />
+
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard
           label="Estimated this month"

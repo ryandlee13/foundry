@@ -225,6 +225,15 @@ export default function OrganizerVendorRequestsPage({
             <EmptyState
               title="No vendor requests yet"
               description="Post what you need to start receiving proposals from matching vendors."
+              action={
+                <button
+                  type="button"
+                  onClick={() => setFormOpen(true)}
+                  className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+                >
+                  Post a request
+                </button>
+              }
             />
           </div>
         ) : (

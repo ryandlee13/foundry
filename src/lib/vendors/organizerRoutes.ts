@@ -23,3 +23,21 @@ export function organizerVendorsPath(bookingId: string | null): string {
 export function organizerProposalsPath(bookingId: string | null, needId: string): string {
   return `${organizerVendorsPath(bookingId)}/${needId}/proposals`;
 }
+
+/**
+ * The event hub — one page per confirmed booking, holding that event's
+ * progress, vendors, and conversations.
+ *
+ * Keyed by booking id because a confirmed `Booking` *is* the event in this
+ * prototype; there is no events table (see docs/DATABASE.md). The route is
+ * `/events/[bookingId]` rather than `/bookings/[id]` because "event" is what
+ * a planner calls the thing, and the booking is an implementation detail of
+ * how it's currently anchored.
+ *
+ * Null means the vendor lobby: hires that have no event to belong to yet.
+ */
+export function organizerEventPath(bookingId: string | null): string {
+  return bookingId
+    ? `/dashboard/organizer/events/${bookingId}`
+    : "/dashboard/organizer/vendors/unassigned";
+}

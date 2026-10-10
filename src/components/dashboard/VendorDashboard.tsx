@@ -21,9 +21,13 @@ import type { Booking, Venue } from "@/lib/types/spaces";
 import type { VendorProfile } from "@/lib/types/vendors";
 import { formatMoney } from "@/lib/ui/format";
 import { INTERACTIVE_CARD } from "@/lib/ui/interactive";
+import UpNextStrip from "@/components/events/UpNextStrip";
+import { buildVendorUpNext } from "@/lib/events/upNextData";
+import type { UpNextItem } from "@/lib/events/upNext";
 
 export default function VendorDashboard({ accountId }: { accountId: string }) {
   const [loaded, setLoaded] = useState(false);
+  const [upNext, setUpNext] = useState<UpNextItem[]>([]);
   const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [earnings, setEarnings] = useState<VendorEarnings | null>(null);
   const [upcoming, setUpcoming] = useState<Booking[]>([]);
@@ -74,6 +78,7 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
     setUpcoming(upcomingBookings);
     setAwaitingVenue(awaitingVenueCount);
     setVenuesById(venues);
+    setUpNext(buildVendorUpNext(accountId));
     setLoaded(true);
   }, [accountId]);
 
@@ -118,6 +123,13 @@ export default function VendorDashboard({ accountId }: { accountId: string }) {
 
   return (
     <div className="space-y-8">
+      {/*
+        What's waiting on this person. Unanswered terms sit at the top: they
+        hold the organizer's hire open and freeze every competing proposal on
+        that request until the vendor acts.
+      */}
+      <UpNextStrip items={upNext} />
+
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard
           label="Made this month"

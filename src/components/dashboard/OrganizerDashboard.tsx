@@ -13,9 +13,14 @@ import UpcomingEventCard from "./UpcomingEventCard";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadingState from "@/components/ui/LoadingState";
 import type { Booking, Venue } from "@/lib/types/spaces";
+import UpNextStrip from "@/components/events/UpNextStrip";
+import { buildOrganizerUpNext } from "@/lib/events/upNextData";
+import type { UpNextItem } from "@/lib/events/upNext";
+import { organizerEventPath } from "@/lib/vendors/organizerRoutes";
 
 export default function OrganizerDashboard({ accountId }: { accountId: string }) {
   const [loaded, setLoaded] = useState(false);
+  const [upNext, setUpNext] = useState<UpNextItem[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [venuesById, setVenuesById] = useState<Record<string, Venue>>({});
   const [vendorsPartneredCount, setVendorsPartneredCount] = useState(0);
@@ -57,6 +62,7 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
     setThreadIdByBooking(threadIds);
     setUnreadByBooking(unread);
     setTodayIso(new Date().toISOString().slice(0, 10));
+    setUpNext(buildOrganizerUpNext(accountId));
     setLoaded(true);
   }, [accountId]);
 
@@ -85,6 +91,13 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
 
   return (
     <div className="space-y-8">
+      {/*
+        What's waiting on this person, before anything that merely describes
+        what exists. Every other section answers "what do I have"; this is the
+        only one that answers "what do I have to do".
+      */}
+      <UpNextStrip items={upNext} />
+
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard
           label="Events thrown"
@@ -123,6 +136,7 @@ export default function OrganizerDashboard({ accountId }: { accountId: string })
           <ul className="mt-4 space-y-3">
             {upcoming.map((booking) => (
               <UpcomingEventCard
+                href={organizerEventPath(booking.id)}
                 key={booking.id}
                 booking={booking}
                 venue={venuesById[booking.venueId]}

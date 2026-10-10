@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { organizerProposalsPath, organizerVendorsPath } from "../organizerRoutes";
+import { organizerEventPath, organizerProposalsPath, organizerVendorsPath } from "../organizerRoutes";
 
 describe("organizerVendorsPath", () => {
   it("routes an assigned request under its booking", () => {
@@ -35,5 +35,20 @@ describe("organizerProposalsPath", () => {
     expect(organizerProposalsPath(null, "n-1")).toBe(
       "/dashboard/organizer/vendors/unassigned/n-1/proposals"
     );
+  });
+});
+
+describe("organizerEventPath", () => {
+  it("points at the event hub for a booking", () => {
+    expect(organizerEventPath("b-1")).toBe("/dashboard/organizer/events/b-1");
+  });
+
+  /*
+   * The same null-safety the vendor paths needed: a hand-built template string
+   * produced `/events/null` and routed to a 404 that looked like data loss.
+   */
+  it("sends an eventless hire to the vendor lobby, never to /events/null", () => {
+    expect(organizerEventPath(null)).toBe("/dashboard/organizer/vendors/unassigned");
+    expect(organizerEventPath(null)).not.toContain("null");
   });
 });

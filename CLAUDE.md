@@ -426,6 +426,41 @@ now rather than waiting.
   `/dashboard/vendor/confirmed` groups them under their own "Awaiting a venue" heading with
   an **Event TBD** badge, because "booked with a date" and "booked with nowhere to be" are
   different situations for a vendor to plan around. Don't re-merge those sections.
+- **An event has one page, and it's keyed by booking id.**
+  `/dashboard/organizer/events/[bookingId]` (`EventHubPage`) is where an event's progress,
+  conversations, and vendors live together — build links to it with
+  `organizerEventPath()`, which returns the vendor lobby for `null` rather than
+  `/events/null`. The param is a **booking** id because a confirmed `Booking` is what
+  stands in for an event here (no events table — `docs/DATABASE.md`); `docs/ROUTES.md` had
+  listed this as a future `/organizer/events/[id]`. Its vendor section embeds
+  `OrganizerVendorRequestsPage` with `showHeader={false}`, the same
+  one-component-two-entry-points pattern `OrganizerVendorsTab` uses — don't fork that
+  screen.
+- **Event progress is derived, never stored.** `computeEventProgress()`
+  (`src/lib/events/eventProgress.ts`, pure, tested) returns six steps — Venue → Vendors →
+  Terms agreed → Contract signed → Event day → Reviews — from booking status, engagement
+  statuses, open attachments, the event date, and review records. **No `progress` field
+  exists and none should be added**; the stepper is a view of the records, so it cannot
+  drift from them. `resolveEventProgressData`'s wrapper (`eventProgressData.ts`) is the
+  only part that touches storage. Two rules worth keeping: the **contract step is
+  `skipped`, not unfinished**, when no contract was ever sent — contracts are optional in
+  the booking flow (the venue privacy gate keys on confirmation, not a signature), so
+  treating an unsent one as a gap would leave every event permanently incomplete, and
+  `applicableCount` excludes it; and **"Terms agreed" is never done before anyone is
+  hired**, because with no vendors there are no terms to have agreed.
+- **"Up next" answers "what do I have to do"; every other section answers "what do I
+  have".** `UpNextStrip` sits at the top of all three role dashboards, built by
+  `src/lib/events/upNextData.ts`. Its thread-shaped items come from `summarizeTurn()` —
+  the same function behind the thread header and the inbox filter — rather than a second
+  set of rules, so the three surfaces can't disagree about what's waiting on you. Items
+  are ordered by `UP_NEXT_PRIORITY` bands (someone blocked > terms > reply > housekeeping),
+  de-duplicated by href, and capped at five. It **renders when empty** ("You're all caught
+  up") on purpose: a section that disappears teaches people to stop looking at it.
+- **A card that navigates is clickable all over.** `UpcomingEventCard` used to link only
+  its thumbnail, so the title and date — the parts anyone aims at — did nothing. It now
+  uses the overlay-link pattern (`absolute inset-0` + a `relative z-10` trailing slot),
+  the same one `GigCard` and `VendorProfileCard` use, because the trailing slot carries
+  its own buttons and nesting interactive elements is invalid.
 - None of this is real. Before a real launch, all of it needs: a real Supabase project,
   the `docs/DATABASE.md` schema (extended with space type/amenities/rules/photos columns
   and real Storage-backed uploads — see `docs/ROUTES.md`), RLS policies per

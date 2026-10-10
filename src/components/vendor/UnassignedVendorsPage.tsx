@@ -247,7 +247,16 @@ export default function UnassignedVendorsPage({
         {needs.length === 0 ? (
           <EmptyState
             title="No open requests"
-            description="Post a vendor request above and bids will show up here."
+            description="Post what you need and bids will show up here — no venue required."
+            action={
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(true)}
+                className="rounded-full bg-wine px-5 py-2.5 text-sm font-semibold text-paper transition-colors hover:bg-wine-soft"
+              >
+                Hire a vendor
+              </button>
+            }
           />
         ) : (
           <ul className="mt-3 space-y-3">
